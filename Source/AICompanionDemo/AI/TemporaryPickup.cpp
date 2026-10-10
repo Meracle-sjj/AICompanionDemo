@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 TemporaryPickup.h 的组件契约、Engine 的 StaticMesh/MaterialInstanceDynamic（/Engine 基础几何 + "Color" 参数染色）、DrawDebugString（拾取飘字）、EngineUtils（TActorIterator 效果征集）、Kismet 的 GetPlayerPawn、本模块 XpPickup/CompanionAIController/CompanionCharacter/HealthComponent（三效果征集目标+台词出口）、本模块 Audio/SFXLibrary（Pickup_Rush 事件音效）
- * [OUTPUT]: 磁吸三段式与三效果分派；三系收集台词气泡直接展示，语音在SFXLibrary与其他拾取共用5秒CD；效果和事件音效不受语音冷却影响；碰撞全关，45s无人拾取自毁
+ * [OUTPUT]: 磁吸三段式与三效果分派；三系真实收集台词同步气泡与RunEventLog，语音在SFXLibrary与其他拾取共用5秒CD；效果和事件音效不受语音冷却影响；碰撞全关，45s无人拾取自毁
  * [POS]: AI/ 的暂态刺激节拍实现；掉落方 EnemyGrunt 只管生成与随机定型，效果各自直达作用面——生成与效果职责分离（XpPickup 同款哲学）
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -18,6 +18,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Events/RunEventLog.h"
 #include "GameFramework/Pawn.h"
 #include "Health/HealthComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -218,6 +219,7 @@ void ATemporaryPickup::Collect()
 		for (TActorIterator<ACompanionCharacter> It(World); It; ++It)
 		{
 			It->ShowSpeechBubble(Line);
+			URunEventLog::Publish(World, TEXT("队友"), Line, TEXT("Pickup"));
 			break;
 		}
 	};

@@ -1,6 +1,8 @@
 # Source/AICompanionDemo/
 > L2 | 父级: /AGENTS.md
 
+2026-10-10 1.1事件记录补验：TemporaryPickup的实际Collect直接显示气泡，不经过Controller::Bark；三系收集现在在同一真实气泡出口写RunEventLog（Pickup）。圣盾、狂怒、磁吸各收集一次各入一行，不受共享语音CD影响；不生成预填对话。该补修先在issue#1发表预期，Editor构建8.89s/exit0后在PIE生成实际Actor由下一帧距离Tick收集，GC仍保留记录，回主菜单新世界清空。
+
 2026-10-09晚蠕虫声音/残火：BossImpact同源由4.5s三爆裁为1.8s首爆，原v1保留；破土/入土仍各一次原事件，不用新增状态锁掩盖素材问题。BossWurmHazards将火区FireBP换为Boss自有固定世界位置FireMid Niagara，落地爆闪独立回传组件0.4s硬截止，3s火区/14上限/死亡/EndPlay统一停发和销毁。Effects管理破土1.2s、入地0.7s、尸头0.8s爆闪，不依赖AutoDestroy；DeactivateImmediate可同步销毁，须缓存指针并重验后清理。用户确认声音/残火正常后，焦痕不可见改用自有M_Wurm_Scorch原生UV炭黑软边材质，摆脱Cave9将DecalColor.B当世界地面Z的Niagara约定；6s/末2s按ScorchOpacity渐淡/最多4件，无伤害/发光，不设置Owner销毁定时器。TickDive范围伤害返回后重验存活/Segments再读Head，避免反伤同栈清数组。当前焦痕专项实现/真实画面及边界见指挥部docs/wurm-scorch-visibility-20261009.md与STATUS；旧声音/残火记录保留。
 
 2026-10-09晚现役召唤师火球：Barrage固定单发，常态0.6秒/1600cm/s、眩晕1.2秒/800cm/s不变；从真实枪口三维瞄准固定直线。BossOrb可见35cm橙核/同心外围火焰，连续球扫实际玩家胶囊，与BlockPawn地形/实体按Hit.Time排序、同距地形优先；不用旧XY100cm或Visibility玩家命中。6秒/暂停/玩家死亡/宿主死亡与反伤同栈防护保持；友方LaunchFriendly仍用原火焰外观与独立伤害路径。下方旧火球历次描述只作历史，当前验证见指挥部docs/boss-orb-alignment-20261009.md与STATUS。
