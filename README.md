@@ -1,94 +1,70 @@
 # AI队友协作生存原型 · AICompanionDemo
 
-玩家与一名AI队友在沙丘战场中作战，通过站位、护卫／歼灭切换、局内构筑、资源消费与Boss挑战改变战局。这是一份面向**系统策划岗位**的个人可玩作品，使用 Unreal Engine 5.6.1 与 C++，运行时采用离线 FSM／Utility AI。
+一份面向**系统策划岗位**的个人可玩作品。玩家与 AI 队友在沙丘战场中协作，通过站位、护卫／歼灭切换、局内构筑、资源消费与 Boss 挑战改变战局。使用 **Unreal Engine 5.6.1、C++、离线 FSM／Utility AI**，游戏运行不调用大模型。
 
-**[下载 Windows 1.1 试玩包（1.19 GB）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/AICompanionDemo-Win64-v1.1.zip) · [1.1 Release、源码与校验文件](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)**
+**当前已发布：1.1（已知严重可玩性故障）· 下一修复版本：1.1.1（待实施、未发布）**
 
-**[下载上一版 Windows 1.0 试玩包（1.19 GB）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip) · [1.0 Release 与校验文件](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)**
+作者实测反馈：AI 队友在正常与测试模式均无法移动；显示设置会误拖拽菜单，测试 UI 存在异常换行。下一轮还将美化测试面板，并为免费初始箱增加金色火焰提示。修复目标与验收条件见 [v1.1.1 预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/2)。
 
-**[试玩与操作](PLAYER_GUIDE.md) · [下载与发布记录](Docs/RELEASE.md) · [系统设计说明](Docs/SYSTEM_DESIGN.md) · [规则与迭代证据](Docs/EVIDENCE.md)**
+[现有 Windows 1.1 包（约 1.19 GB，含上述已知问题）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/AICompanionDemo-Win64-v1.1.zip) · [源码包与 SHA-256 校验](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)
 
-**本文与玩家指南对应已发布的1.1。**首版发布时，本机独立启动到开始界面，进一步输入被Windows网络权限弹窗阻塞；之后作者在实验室Windows机器安装运行库，确认进入1.0正常／测试模式且运行流畅。这些记录不等同于1.1完整通关、长期性能或多设备验收。首版记录保留在[1.0发布归档](Docs/RELEASE_1.0.md)，本轮远端附件与验证见[发布记录](Docs/RELEASE.md)。演示视频待补，已备[110秒录制分镜](Docs/VIDEO_SCRIPT.md)。开发自2026年8月起持续迭代；下文规则快照为2026-10-10的当前源码，新功能以版本标注区分。
+**开发周期：国庆节整个假期＋后续 3 天，约 10 天；非假期利用空闲时间开发。**
 
-## 根据试玩反馈持续迭代
+[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [1.1 更新摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
 
-本轮反馈与设计预期先发表到[GitHub #1](https://github.com/Meracle-sjj/AICompanionDemo/issues/1)，再实施代码。[先行预期](Docs/ITERATION_1.1.md)保持原记录，[版本日志](CHANGELOG.md)追加实现与验证状态。审计发现拾取台词绕过事件记录后，又先追加公开预期再修复。**最终Editor构建8.89s、最新BuildCookRun 58.80s退出0；完整首轮225.27s属于修复前候选，不能当最终包。独立首次1280×720窗口开始页已有证据；1.1三附件已公开，远端大小／SHA及匿名下载核对通过，核心物理键鼠仍待异机复验。**
+![1.1 实际游戏开始页](Docs/screenshots/1.1-package-menu.png)
 
-| 1.0反馈 | 1.1改动与实际证据 | 剩余边界 |
-| --- | --- | --- |
-| 全屏与测试入口不便 | 独立首次窗口1280×720；PIE设置处理保存并重开回读；面板收起／展开／返回清局，27条可见文字几何无不足 | 独立全屏与真实点击、重启、第二窗口的中文下缘 |
-| 缺少暂停与事件回看 | 暂停／恢复保留奖励队列；跨Lv.6门槛的实际Tick一次解锁／4.44s语音回读；三类拾取记录与GC后保留、返回清局已测 | 物理ESC／AltTab、主观听音、自然12分钟及死亡／终局输入 |
-| 开局压力高 | 免费箱同回调远距拒绝、近距成功、重复拒绝，账本与下箱价不变；标准杂兵450→405cm/s已接入 | 自然局难度与存活体验，不以免费箱测试宣称改善幅度 |
-| 队友移动顿步 | 当前路径段与请求去重；坡地PFC Moving状态221样本平均477.64cm/s（含一次零速），停步末秒零速／请求稳定 | 急反向碰撞后停留；完整转向、追击、人眼动画及全地形未验 |
-| 猎印重复与后期分工不清 | 正式授予桥猎印3→6层、大师保6；真实XP多级排队，Lv.9 Flip后仍续Lv.10 AI；速射／疾行收益上限回读 | 自然随机池、真实敌人全部叠层消费、候选不足与玩家速度钳制 |
+## 自动战斗中的玩家决策
 
-[详细验证记录](Docs/RELEASE_VALIDATION.md)区分PIE处理入口、真实独立启动和待操作项，保留编译／不支持分辨率的失败及既有日志错误。
+玩家前期依赖队友火力，Lv.6 解锁自身自动射击；操作重点落在站位、模式、选卡、探索和应战时机。系统围绕保护与追击的取舍、成长供给、资源机会成本和 Boss 威胁的可读性展开。
 
-![1.1反馈迭代、奖励分工与公开记录](Docs/diagrams/04-iteration-1-1.png)
-
-Windows发布者签名仍未解决：1.0两份exe实测为`NotSigned`，本轮尚未取得可用可信签名凭证。素材取得与输出分发凭证缺口继续见[第三方说明](Docs/THIRD_PARTY.md)；本轮不以编译通过代替这些条件。
-
-## 作品希望证明什么
-
-自动战斗怎样保留玩家决策，是这个原型的核心问题。玩家前期依赖队友火力，Lv.6解锁自身自动射击；操作重点落在站位、模式、选卡、探索和应战时机。系统设计围绕保护与追击的取舍、成长供给质量、资源机会成本以及Boss威胁的可读性展开。
-
-| 设计问题 | 当前落地 |
+| 设计问题 | 当前实现 |
 | --- | --- |
-| 队友怎样符合护主预期 | 视觉与受击来源共建候选，按距离／威胁／残血评分，切换与视线惩罚控制转火 |
-| 自动输出怎样形成协作 | Q切换保护／追击；近距治疗、玩家状态制造与队友结算影响站位和构筑 |
-| 每次成长怎样有意义 | 三选一／六选二、前置、互斥、叠加与融合；1.1等级奖励保存发生等级，Lv.9起玩家／AI交替 |
-| 探索怎样接回战斗 | 递增价宝箱、风险祭坛、免费信标、钥匙锁箱形成不同资源出口 |
-| Boss怎样考不同能力 | 召唤师清杂破盾、巨像空间预警、蠕虫火区与入地／破土；各提供专属遗物三选一 |
+| 队友怎样符合护主预期 | 感知与受击来源共同提供候选，按距离、威胁、残血评分，切换惩罚控制转火 |
+| 自动输出怎样形成协作 | Q 切换护卫／歼灭；治疗、状态制造与队友结算影响站位和构筑 |
+| 每次成长怎样有意义 | 前置、互斥、叠加与融合；Lv.9 起玩家／AI 等级奖励交替 |
+| 探索怎样接回战斗 | 递增价宝箱、风险祭坛、免费信标与钥匙锁箱提供不同资源出口 |
+| Boss 怎样考不同能力 | 召唤师清杂破盾、巨像空间预警、蠕虫火区与入地／破土；各有专属遗物三选一 |
 
-现有内容包括4类常规敌人、3个Boss和九种Boss遗物。1.0保留29个升级显示ID；1.1追加本体速射、陪伴疾行和Flip，共32个升级／操作显示ID。目录仍含金币填位、旧高爆兼容和不授予技能的Flip；连同九遗物的41项展示条目不能称为41种技能或成熟流派。
+目前包含 4 类常规敌人、3 个 Boss、九种 Boss 遗物，以及 32 个升级／操作显示条目；其中含金币填位和 Flip 操作，不将显示条目数等同于技能数。
 
-## 从生存到构筑，再到挑战
+## 核心循环与成长
 
 ![核心循环与资源出口](Docs/diagrams/01-core-loop.png)
 
-经验升级三选一；普通宝箱价格随已开箱数递增；锁箱给15金和六选二；8金风险祭坛提高后续敌人生命与XP收益。1.1正常局出生点旁增加金色闪光的免费初始箱，只领取一次，不扣金币、不推高付费箱价格；测试局不自动送箱。
+正常局出生点旁提供一次免费初始箱，不扣金币、不影响付费箱价格。经验升级三选一；付费宝箱价格递增；锁箱提供 15 金和六选二；8 金风险祭坛提高后续敌人生命与经验收益。
 
-1.1从升到Lv.9的等级奖励起按玩家→AI交替，Lv.9／11／13为玩家池，Lv.10／12／14为AI池；宝箱和Boss奖励不参与轮换。玩家等级奖励的第三槽固定为Flip，另两槽是玩家候选；Flip仅把这一次改抽AI池，随后仍需选卡，不授予技能或改变下次归属。
+Lv.9／11／13 等级奖励来自玩家池，Lv.10／12／14 来自 AI 池；宝箱与 Boss 奖励独立。玩家等级奖励第三槽为 Flip，仅把当前奖励改抽 AI 池，之后仍需选卡，下次奖励归属不变。
 
-3／6／9分钟出现Boss祭坛，接近后应战；12分钟开启狂暴压力。击败蠕虫后生成归途门，先完成奖励领取，再近门松E、重新按E进入感谢页；死亡则结算重开。当前没有十分钟自动胜利。
+3／6／9 分钟出现 Boss 祭坛，12 分钟开启狂暴压力。击败蠕虫后生成归途门，领取奖励后近门重新按 E 进入结束页；死亡可重开。
 
-## AI设计怎样落到可解释规则
+## 可解释的协作 AI
 
-![协作AI信息与行动链](Docs/diagrams/02-companion-ai.png)
+![协作 AI 的信息与行动链](Docs/diagrams/02-companion-ai.png)
 
-队友复用 AI Perception、NavMesh 与 MoveTo，Follow／Engage状态与Utility选敌分别负责行为状态和处理对象。护卫跟随玩家、玩家收到治疗增加10%；歼灭追击评分最优敌人、队友伤害增加10%。两模式共享评分与火力，倍率在统一Health入口结算。
+AI Perception 提供感知，Follow／Engage 状态决定行为，Utility 评分决定目标，NavMesh 与 MoveTo 执行移动。护卫跟随玩家，使玩家收到的治疗增加 10%；歼灭追击目标，使队友伤害增加 10%。玩家受击来源进入候选，让队友能回应尚未直接感知到的威胁；感电和猎印将双方协作延伸到伤害结算。
 
-玩家受击来源进入候选，解决「评分器无法保护自己没感知到的威胁」；威胁分主导、残血分低配和切换惩罚约束锁目标与横跳。评分板默认关闭，可显式开启分析，日志保留选择原因。玩家感电与猎印再把协作接到伤害层：前者由AI命中两个带电普通敌人触发，后者支持普通敌人及Boss的叠层／消费。
-
-## 根据实际反馈改规则与表达
+## 试玩反馈如何改变设计
 
 ![火球公平性迭代案例](Docs/diagrams/03-feedback-iteration.png)
 
-作者反馈火球飞过头顶仍扣血。旧版PIE复现球心高出胶囊顶部310cm却扣12血，定位到XY判定忽略高度和地形。修订把可见核心与连续球扫统一为35cm、三维瞄准、首次接触结算及地形同距优先，随后取得自然单发与地形销毁日志，作者确认正常工作。
+作者试玩发现火球飞过头顶仍扣血，定位到碰撞仅判断水平距离。修订将可见核心和连续球扫统一为 35 cm，使用三维胶囊判定、首次接触结算与地形优先阻挡，改善攻击表达与实际判定的一致性。
 
-其他迭代包括补护主候选信息、调整早期强化节拍、使巨像预警与落点同构、统一稀有度与HUD图标，以及将回响过程改为0.1秒1伤、保持名义10DPS并核对低帧补拍半径。详细取舍与已验范围见[系统设计说明](Docs/SYSTEM_DESIGN.md)和[证据索引](Docs/EVIDENCE.md)。
+1.1 还加入显示设置、ESC／失焦暂停、事件回看，调整开局供给、队友路径请求、重复猎印说明和后期奖励分工。具体变化见[更新摘要](CHANGELOG.md)。
 
-1.1把作者异机反馈继续接到可观察的规则：猎印卡面与HUD悬停读当前上限和每层伤害，普通重复卡仍提供上限+1；金色猎杀大师保留已有更高上限。连续经验试验按发生等级保留奖励队列，Lv.9的Flip只改当前奖励、Lv.10仍归AI；事件记录和真实语音播放也取得局部回读。测试使用正式处理入口，但不等于自然随机成长或独立键鼠验收，没有据此声称存活率、卡池满意度或移动性能改善。
+## 本人职责与代码入口
 
-## 本人职责与AI辅助制作
+作者一人主导体验目标、系统规则、视觉／声音方向、试玩反馈、范围管理和最终验收；AI agent 辅助设计细化、代码、工具和资产制作。贡献定位为**个人项目主导／系统设计与体验验收，AI 辅助实现**。素材包含复用资源与生成资产，来源见[素材说明](Docs/THIRD_PARTY.md)。
 
-作者一人主导体验目标、系统关系与规则裁决、视觉／声音方向、实际试玩反馈、范围管理和最终验收。AI agent辅助设计细化、代码、工具、资产生成接入、日志分析与文档。本人贡献定位为**个人项目主导／系统设计与体验验收，AI辅助实现**。
-
-运行时游戏AI采用确定性规则；事件台词是固定文本与预合成语音。素材复用Epic模板、Paragon及其他资源，并包含生成插图、封面、音频与程序几何，来源及公开边界见[第三方资源说明](Docs/THIRD_PARTY.md)。本仓库源码与Cook试玩包具有不同分发范围；不能把素材复用写成全部原创制作。
-
-## 可核对的实现与当前边界
-
-| 阅读入口 | 系统职责 |
+| 实现入口 | 职责 |
 | --- | --- |
-| [CompanionAIController](Source/AICompanionDemo/AI/CompanionAIController.cpp) | 感知候选、Utility、FSM与移动策略 |
-| [WaveDirector](Source/AICompanionDemo/AI/WaveDirector.cpp) | 时间压力、经验／金币、成长供给与挑战调度 |
-| [BossRelicComponent](Source/AICompanionDemo/Relics/BossRelicComponent.cpp) | 九遗物的本局状态、效果参数与结算 |
-| [GameMode](Source/AICompanionDemo/AICompanionDemoGameMode.cpp) | 开始／死亡／归途门／感谢页与暂停／设置的统一流转 |
-| [UI](Source/AICompanionDemo/UI/AGENTS.md) | 图文选择、技能账本、小地图、Boss血条和可操作菜单 |
-| [RunEventLog](Source/AICompanionDemo/Events/RunEventLog.cpp) | 本局最近100条真实文本记录；UI只读显示 |
+| [CompanionAIController](Source/AICompanionDemo/AI/CompanionAIController.cpp) | 感知、Utility、FSM 与移动策略 |
+| [WaveDirector](Source/AICompanionDemo/AI/WaveDirector.cpp) | 时间压力、资源、成长供给与挑战调度 |
+| [BossRelicComponent](Source/AICompanionDemo/Relics/BossRelicComponent.cpp) | 九遗物状态与效果结算 |
+| [GameMode](Source/AICompanionDemo/AICompanionDemoGameMode.cpp) | 开始、暂停、设置、死亡与结束流程 |
+| [CompanionHud](Source/AICompanionDemo/UI/CompanionHud.cpp) | 选卡、技能账本、小地图与 Boss 血条 |
+| [RunEventLog](Source/AICompanionDemo/Events/RunEventLog.cpp) | 本局事件记录 |
 
-当前已有作者试玩、历史规则专项与GC证据；1.1新增实现通过完整Editor及BuildCookRun，独立候选开始页与首开窗口已实测，PIE专项结果见[验证记录](Docs/RELEASE_VALIDATION.md)。独立核心键鼠、自然整局、全部构筑、多分辨率和长期性能未形成完整验收；没有规模化外部测试、留存或A/B数据。首版启动与素材限制保留在[1.0归档](Docs/RELEASE_1.0.md)，本轮进度见[版本日志](CHANGELOG.md)。
+1.1 已完成 Windows 打包并发布，但作者后续实测报告队友无法移动等严重故障，构建与 ZIP 完整性通过不能代表可玩性。1.1.1 尚未实现或发布，修复后须验证最终独立包的实际输入、移动与菜单流程；自然整局、全部构筑和长期性能仍需补充测试。程序尚未签名，Windows 可能显示未知发布者提示。
 
-引擎与构建环境为UE5.6.1、VS2022、MSVC14.44、Win64；源码入口是 [AICompanionDemo.uproject](AICompanionDemo.uproject)。公开源码的资产依赖、恢复与构建范围请先读[仓库说明](Docs/REPOSITORY.md)，试玩者按[操作指南](PLAYER_GUIDE.md)运行完整Cook包。
-
-图解为原创规则示意，SVG与生成源见[图源目录](Docs/diagrams/README.md)。
+公开源码供设计与代码评审，**不含 Content 资产，无法单独完整复建**。试玩请下载完整 Windows 包；机制图的 PNG／SVG 位于 [Docs/diagrams](Docs/diagrams)。

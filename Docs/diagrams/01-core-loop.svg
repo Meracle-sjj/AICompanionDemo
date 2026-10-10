@@ -53,10 +53,10 @@
 <rect x="570" y="488" width="460" height="354" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
 <text x="592" y="525" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">供给约束</text>
 <text x="592" y="568" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">保护选择质量</text>
-<text x="592" y="610" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">普通升级：三选一</text>
-<text x="592" y="644" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">一次性卡离池，可叠加卡保留</text>
-<text x="592" y="678" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Lv.6前排除玩家武器相关卡</text>
-<text x="592" y="712" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">融合：满足前置后入池</text>
+<text x="592" y="610" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">开局免费箱：一次，不涨付费价</text>
+<text x="592" y="644" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Lv.6前排除玩家武器相关卡</text>
+<text x="592" y="678" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Lv.9起等级奖励：玩家/AI交替</text>
+<text x="592" y="712" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Flip：仅当前玩家奖励改抽AI</text>
 <text x="592" y="746" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">稀有度相对权重：1 / 0.75 / 0.45</text>
 <text x="592" y="780" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Boss遗物：每Boss固定三选一</text>
 <rect x="1080" y="488" width="460" height="354" rx="16" fill="#1c2429" stroke="#dc958c" stroke-width="2"/>
@@ -69,6 +69,6 @@
 <text x="1102" y="746" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">先领奖，再近门松E、重新按E</text>
 <text x="1102" y="780" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">死亡结算 / 入门感谢页</text>
 <polyline points="60,890 1540,890" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
-<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">现役规则：WaveDirector.cpp/.h · WaveDirectorRelics.cpp · GameMode.cpp · EndingPortal.cpp</text>
-<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">2026-10-10规则快照 · 示意图不代表固定出卡概率、完整组合平衡或运行性能；证据入口见 Docs/EVIDENCE.md</text>
+<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">实现：AI/WaveDirector.cpp/.h · AI/WaveDirectorRelics.cpp · AICompanionDemoGameMode.cpp</text>
+<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">1.1规则示意 · 不代表固定出卡概率、完整组合平衡或运行性能；系统说明见 Docs/SYSTEM_DESIGN.md</text>
 </svg>

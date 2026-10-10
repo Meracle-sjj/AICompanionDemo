@@ -1,7 +1,6 @@
 # AICompanionDemo .gitignore
-# 底本：github/gitignore 官方 UnrealEngine.gitignore（docs/ref-UnrealEngine.gitignore 存档核对）
+# 底本：github/gitignore 官方 UnrealEngine.gitignore
 # 增补：Builds/、调试日志/符号、个人配置和本地交付目录；资产范围由发布脚本白名单决定。
-# [PROTOCOL]: 变更时同步检查 A:\craziestIdea\docs\ref-UnrealEngine.gitignore
 
 # Visual Studio 2015 user specific files
 .vs/

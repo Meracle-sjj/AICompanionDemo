@@ -46,6 +46,6 @@
 <text x="1103" y="736" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#90c9b4">作者2026-10-09晚确认正常</text>
 <text x="1103" y="772" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">未宣称全地形/全角度覆盖</text>
 <polyline points="60,890 1540,890" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
-<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">现役规则：AI/BossOrb.cpp/.h · AI/BossSummonerBarrage.cpp；历史复现与作者验收摘要见 Docs/EVIDENCE.md</text>
-<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">失败复现、实现事实、作者体验验收分别记录；这个案例不替代完整可分发包、自然整局平衡或长期性能验证。</text>
+<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">实现：AI/BossOrb.cpp/.h · AI/BossSummonerBarrage.cpp；设计案例见 Docs/SYSTEM_DESIGN.md</text>
+<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">作者试玩反馈驱动碰撞修订；这个案例不代表全地形、全角度覆盖或自然整局平衡。</text>
 </svg>
