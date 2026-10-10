@@ -1,6 +1,6 @@
 /**
- * [INPUT]: UUserWidget/Slate、UGameUserSettings真实窗口/分辨率/保存API、Kismet系统可用分辨率查询；宿主关闭设置入口
- * [OUTPUT]: UDisplaySettingsMenu——窗口/无边框/全屏与分辨率选择、应用并保存、返回；打开读取已有设置，未应用的选择不写配置
+ * [INPUT]: UUserWidget/Slate普通按钮与内嵌滚动列表、UGameUserSettings窗口/分辨率/保存API、Kismet设备分辨率查询、宿主关闭设置入口
+ * [OUTPUT]: UDisplaySettingsMenu——同层三显示模式、分辨率单选列表、应用/返回；无弹窗或右拖列表，打开只读已有设置、未应用选择不保存
  * [POS]: UI/显示设置层；宿主保活与输入/暂停仲裁，不强制重置用户Saved配置、不持有玩法状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
  */
@@ -13,7 +13,8 @@
 #include "DisplaySettingsMenu.generated.h"
 
 class AAICompanionDemoGameMode;
-template<typename OptionType> class SComboBox;
+class SButton;
+class SScrollBox;
 
 UCLASS()
 class AICOMPANIONDEMO_API UDisplaySettingsMenu : public UUserWidget
@@ -33,25 +34,25 @@ public:
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
 private:
 	void BuildResolutionOptions();
+	void RefreshChoiceStyles();
+	FReply OnModeClicked(EWindowMode::Type Mode);
+	FReply OnResolutionClicked(FIntPoint Resolution);
 	FReply OnApplyClicked();
 	FReply OnBackClicked();
 	TWeakObjectPtr<AAICompanionDemoGameMode> Host;
-	TArray<TSharedPtr<FString>> ModeOptions;
-	TArray<TSharedPtr<FString>> ResolutionOptions;
 	TArray<FIntPoint> AvailableResolutions;
-	TSharedPtr<SComboBox<TSharedPtr<FString>>> ModeCombo;
-	TSharedPtr<SComboBox<TSharedPtr<FString>>> ResolutionCombo;
-	TSharedPtr<FString> SelectedMode;
-	TSharedPtr<FString> SelectedResolution;
+	TArray<TSharedPtr<SButton>> ModeButtons;
+	TArray<TSharedPtr<SButton>> ResolutionButtons;
+	TSharedPtr<SScrollBox> ResolutionList;
 	FIntPoint PendingResolution = FIntPoint(1280, 720);
 	EWindowMode::Type PendingMode = EWindowMode::Windowed;
 	FButtonStyle ButtonStyle;
-	FComboBoxStyle ComboStyle;
-	FTableRowStyle OptionRowStyle;
+	FButtonStyle SelectedChoiceStyle;
 	FString Status;
 	bool bStylesReady = false;
-	bool bRefreshingOptions = false;
 };

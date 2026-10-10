@@ -1,6 +1,6 @@
 /**
- * [INPUT]: DisplaySettingsMenu契约、UE5.6 UGameUserSettings/Kismet分辨率查询、纯Slate按钮/下拉列表
- * [OUTPUT]: 实际窗口与分辨率应用/确认/保存；按当前设备生成选项，显示配置值与真实viewport回读；单次ESC/返回只关闭设置、消费ESC重复事件
+ * [INPUT]: DisplaySettingsMenu契约、UE5.6 UGameUserSettings/Kismet分辨率查询、同层Slate按钮/滚动列表
+ * [OUTPUT]: 三模式按钮与内嵌分辨率单选；取消Popup/SListView右键拖拽支路，背景鼠标不冒泡；设备选项/应用确认保存/ESC返回保持原契约
  * [POS]: UI/显示设置实现；不修改GamePaused/dilation、不重载用户配置或全局写默认值
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
  */
@@ -16,10 +16,10 @@
 #include "Styling/CoreStyle.h"
 #include "UnrealClient.h"
 #include "Widgets/Input/SButton.h"
-#include "Widgets/Input/SComboBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScaleBox.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
@@ -27,6 +27,7 @@
 namespace
 {
 	const EWindowMode::Type DisplayModes[] = {EWindowMode::Windowed, EWindowMode::WindowedFullscreen, EWindowMode::Fullscreen};
+	const TCHAR* const DisplayModeLabels[] = {TEXT("窗口"), TEXT("无边框全屏"), TEXT("全屏")};
 	FString FormatResolution(FIntPoint Resolution)
 	{
 		return FString::Printf(TEXT("%d × %d"), Resolution.X, Resolution.Y);
@@ -46,27 +47,18 @@ void UDisplaySettingsMenu::BindHost(AAICompanionDemoGameMode* InHost)
 
 void UDisplaySettingsMenu::RefreshFromUserSettings()
 {
-	TGuardValue<bool> Guard(bRefreshingOptions, true);
 	Status.Empty();
 	if (const UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings())
 	{
 		PendingMode = Settings->GetFullscreenMode();
 		PendingResolution = Settings->GetScreenResolution();
 	}
-	ModeOptions = {MakeShared<FString>(TEXT("窗口")), MakeShared<FString>(TEXT("无边框全屏")), MakeShared<FString>(TEXT("全屏"))};
-	int32 ModeIndex = 0;
-	for (int32 Index = 0; Index < UE_ARRAY_COUNT(DisplayModes); ++Index)
-	{
-		if (DisplayModes[Index] == PendingMode) { ModeIndex = Index; break; }
-	}
-	SelectedMode = ModeOptions[ModeIndex];
 	BuildResolutionOptions();
-	if (ModeCombo) { ModeCombo->RefreshOptions(); ModeCombo->SetSelectedItem(SelectedMode); }
+	RefreshChoiceStyles();
 }
 
 void UDisplaySettingsMenu::BuildResolutionOptions()
 {
-	TGuardValue<bool> Guard(bRefreshingOptions, true);
 	AvailableResolutions.Reset();
 	FIntPoint Desktop = FIntPoint::ZeroValue;
 	if (const UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings()) { Desktop = Settings->GetDesktopResolution(); }
@@ -99,20 +91,76 @@ void UDisplaySettingsMenu::BuildResolutionOptions()
 	{
 		PendingResolution = AvailableResolutions.Contains(Desktop) ? Desktop : AvailableResolutions[0];
 	}
-	ResolutionOptions.Reset();
-	SelectedResolution.Reset();
+	ResolutionButtons.Reset();
+	if (!ResolutionList) { return; }
+	ResolutionList->ClearChildren();
 	for (const FIntPoint Size : AvailableResolutions)
 	{
-		TSharedPtr<FString> Option = MakeShared<FString>(FormatResolution(Size));
-		ResolutionOptions.Add(Option);
-		if (Size == PendingResolution) { SelectedResolution = Option; }
+		TSharedPtr<SButton> Choice;
+		ResolutionList->AddSlot().Padding(0.f, 2.f)
+		[
+			SNew(SBox).MinDesiredHeight(36.f)
+			[
+				SAssignNew(Choice, SButton).ButtonStyle(Size == PendingResolution ? &SelectedChoiceStyle : &ButtonStyle)
+				.ContentPadding(FMargin(12.f, 7.f)).HAlign(HAlign_Left).VAlign(VAlign_Center)
+				.OnClicked_Lambda([this, Size]() { return OnResolutionClicked(Size); })
+				[
+					SNew(STextBlock).Text(FText::FromString(FormatResolution(Size)))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 15))
+					.ColorAndOpacity(FLinearColor(0.91f, 0.96f, 0.98f)).AutoWrapText(false)
+				]
+			]
+		];
+		ResolutionButtons.Add(Choice);
 	}
-	if (ResolutionCombo) { ResolutionCombo->RefreshOptions(); ResolutionCombo->SetSelectedItem(SelectedResolution); }
+	const int32 SelectedIndex = AvailableResolutions.IndexOfByKey(PendingResolution);
+	if (ResolutionButtons.IsValidIndex(SelectedIndex))
+	{
+		ResolutionList->ScrollDescendantIntoView(ResolutionButtons[SelectedIndex], false);
+	}
+}
+
+void UDisplaySettingsMenu::RefreshChoiceStyles()
+{
+	if (!bStylesReady) { return; }
+	for (int32 Index = 0; Index < ModeButtons.Num(); ++Index)
+	{
+		if (ModeButtons[Index] && Index < UE_ARRAY_COUNT(DisplayModes))
+		{
+			ModeButtons[Index]->SetButtonStyle(DisplayModes[Index] == PendingMode ? &SelectedChoiceStyle : &ButtonStyle);
+		}
+	}
+	for (int32 Index = 0; Index < ResolutionButtons.Num(); ++Index)
+	{
+		if (ResolutionButtons[Index] && AvailableResolutions.IsValidIndex(Index))
+		{
+			ResolutionButtons[Index]->SetButtonStyle(AvailableResolutions[Index] == PendingResolution ? &SelectedChoiceStyle : &ButtonStyle);
+		}
+	}
+}
+
+FReply UDisplaySettingsMenu::OnModeClicked(EWindowMode::Type Mode)
+{
+	PendingMode = Mode;
+	Status.Empty();
+	BuildResolutionOptions();
+	RefreshChoiceStyles();
+	return FReply::Handled();
+}
+
+FReply UDisplaySettingsMenu::OnResolutionClicked(FIntPoint Resolution)
+{
+	if (PendingMode != EWindowMode::WindowedFullscreen && AvailableResolutions.Contains(Resolution))
+	{
+		PendingResolution = Resolution;
+		Status.Empty();
+		RefreshChoiceStyles();
+	}
+	return FReply::Handled();
 }
 
 TSharedRef<SWidget> UDisplaySettingsMenu::RebuildWidget()
 {
-	RefreshFromUserSettings();
 	if (!bStylesReady)
 	{
 		ButtonStyle.SetNormal(FSlateColorBrush(FLinearColor(0.045f, 0.11f, 0.14f)))
@@ -120,28 +168,20 @@ TSharedRef<SWidget> UDisplaySettingsMenu::RebuildWidget()
 			.SetPressed(FSlateColorBrush(FLinearColor(0.045f, 0.18f, 0.23f)))
 			.SetDisabled(FSlateColorBrush(FLinearColor(0.04f, 0.05f, 0.06f)))
 			.SetNormalPadding(FMargin(0.f)).SetPressedPadding(FMargin(0.f));
-		ComboStyle = FCoreStyle::Get().GetWidgetStyle<FComboBoxStyle>(TEXT("ComboBox"));
-		ComboStyle.ComboButtonStyle.SetMenuBorderBrush(FSlateColorBrush(FLinearColor(0.035f, 0.075f, 0.10f, 1.f)))
-			.SetMenuBorderPadding(FMargin(4.f));
-		OptionRowStyle = FCoreStyle::Get().GetWidgetStyle<FTableRowStyle>(TEXT("ComboBox.Row"));
-		const FSlateColorBrush Clear(FLinearColor::Transparent);
-		const FSlateColorBrush Hover(FLinearColor(0.09f, 0.21f, 0.26f));
-		const FSlateColorBrush Selected(FLinearColor(0.12f, 0.35f, 0.40f));
-		OptionRowStyle.SetEvenRowBackgroundBrush(Clear).SetOddRowBackgroundBrush(Clear)
-			.SetEvenRowBackgroundHoveredBrush(Hover).SetOddRowBackgroundHoveredBrush(Hover)
-			.SetActiveBrush(Selected).SetActiveHoveredBrush(Selected)
-			.SetInactiveBrush(Selected).SetInactiveHoveredBrush(Selected);
+		SelectedChoiceStyle = ButtonStyle;
+		SelectedChoiceStyle.SetNormal(FSlateColorBrush(FLinearColor(0.09f, 0.28f, 0.33f)))
+			.SetHovered(FSlateColorBrush(FLinearColor(0.13f, 0.36f, 0.41f)))
+			.SetPressed(FSlateColorBrush(FLinearColor(0.06f, 0.22f, 0.27f)));
 		bStylesReady = true;
 	}
+	RefreshFromUserSettings();
+	ModeButtons.Reset();
+	ResolutionButtons.Reset();
 	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 	auto Text = [](const FString& Label, int32 Size = 16) -> TSharedRef<SWidget>
 	{
 		return SNew(STextBlock).Text(FText::FromString(Label)).Font(FCoreStyle::GetDefaultFontStyle("Regular", Size))
 			.ColorAndOpacity(FLinearColor(0.91f, 0.96f, 0.98f));
-	};
-	auto OptionWidget = [Text](TSharedPtr<FString> Option) -> TSharedRef<SWidget>
-	{
-		return SNew(SBox).MinDesiredHeight(34.f).Padding(FMargin(8.f, 5.f))[Text(Option ? *Option : FString())];
 	};
 	auto Button = [this, Text](const TCHAR* Label, FOnClicked Click) -> TSharedRef<SWidget>
 	{
@@ -151,7 +191,24 @@ TSharedRef<SWidget> UDisplaySettingsMenu::RebuildWidget()
 			.HAlign(HAlign_Center).VAlign(VAlign_Center).OnClicked(Click)[Text(Label)]
 		];
 	};
-	return SNew(SOverlay)
+	TSharedRef<SHorizontalBox> ModeChoices = SNew(SHorizontalBox);
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(DisplayModes); ++Index)
+	{
+		const EWindowMode::Type Mode = DisplayModes[Index];
+		TSharedPtr<SButton> Choice;
+		ModeChoices->AddSlot().FillWidth(1.f).Padding(Index == 0 ? 0.f : 4.f, 0.f, Index == 2 ? 0.f : 4.f, 0.f)
+		[
+			SNew(SBox).MinDesiredHeight(44.f)
+			[
+				SAssignNew(Choice, SButton).ButtonStyle(Mode == PendingMode ? &SelectedChoiceStyle : &ButtonStyle)
+				.ContentPadding(FMargin(8.f, 10.f)).HAlign(HAlign_Center).VAlign(VAlign_Center)
+				.OnClicked_Lambda([this, Mode]() { return OnModeClicked(Mode); })
+				[ Text(DisplayModeLabels[Index], 14) ]
+			]
+		];
+		ModeButtons.Add(Choice);
+	}
+	TSharedRef<SWidget> Root = SNew(SOverlay).Cursor(EMouseCursor::Default)
 		+ SOverlay::Slot()
 		[
 			SNew(SBorder).BorderImage(WhiteBrush).Padding(0.f)
@@ -176,55 +233,24 @@ TSharedRef<SWidget> UDisplaySettingsMenu::RebuildWidget()
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[Text(TEXT("显示方式"), 14)]
 						+ SVerticalBox::Slot().AutoHeight()
 						[
-							SAssignNew(ModeCombo, SComboBox<TSharedPtr<FString>>).OptionsSource(&ModeOptions)
-							.ComboBoxStyle(&ComboStyle).ButtonStyle(&ButtonStyle).ItemStyle(&OptionRowStyle).HasDownArrow(false)
-							.ContentPadding(FMargin(12.f, 10.f)).ForegroundColor(FLinearColor::White)
-							.InitiallySelectedItem(SelectedMode).OnGenerateWidget_Lambda(OptionWidget)
-							.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Choice, ESelectInfo::Type)
-							{
-								if (bRefreshingOptions || !Choice) { return; }
-								const int32 Index = ModeOptions.IndexOfByKey(Choice);
-								if (Index >= 0 && Index < UE_ARRAY_COUNT(DisplayModes))
-								{
-									SelectedMode = Choice;
-									PendingMode = DisplayModes[Index];
-									Status.Empty();
-									BuildResolutionOptions();
-								}
-							})
-							[
-								SNew(STextBlock).Text_Lambda([this]() { return FText::FromString((SelectedMode ? *SelectedMode : FString()) + TEXT("  ▾")); })
-								.Font(FCoreStyle::GetDefaultFontStyle("Regular", 16)).ColorAndOpacity(FLinearColor::White)
-							]
+							ModeChoices
 						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 16.f, 0.f, 6.f)[Text(TEXT("分辨率"), 14)]
 						+ SVerticalBox::Slot().AutoHeight()
 						[
-							SAssignNew(ResolutionCombo, SComboBox<TSharedPtr<FString>>).OptionsSource(&ResolutionOptions)
-							.ComboBoxStyle(&ComboStyle).ButtonStyle(&ButtonStyle).ItemStyle(&OptionRowStyle).HasDownArrow(false)
-							.ContentPadding(FMargin(12.f, 10.f)).ForegroundColor(FLinearColor::White)
-							.IsEnabled_Lambda([this]() { return PendingMode != EWindowMode::WindowedFullscreen; })
-							.InitiallySelectedItem(SelectedResolution).OnGenerateWidget_Lambda(OptionWidget)
-							.OnSelectionChanged_Lambda([this](TSharedPtr<FString> Choice, ESelectInfo::Type)
-							{
-								if (bRefreshingOptions || !Choice) { return; }
-								const int32 Index = ResolutionOptions.IndexOfByKey(Choice);
-								if (AvailableResolutions.IsValidIndex(Index))
-								{
-									SelectedResolution = Choice;
-									PendingResolution = AvailableResolutions[Index];
-									Status.Empty();
-								}
-							})
+							SNew(SBox).HeightOverride(162.f)
 							[
-								SNew(STextBlock).Text_Lambda([this]() { return FText::FromString((SelectedResolution ? *SelectedResolution : FString()) + TEXT("  ▾")); })
-								.Font(FCoreStyle::GetDefaultFontStyle("Regular", 16)).ColorAndOpacity(FLinearColor::White)
+								SAssignNew(ResolutionList, SScrollBox).ScrollBarAlwaysVisible(true)
+								.ScrollBarThickness(FVector2D(5.f, 5.f)).ScrollBarPadding(FMargin(6.f, 0.f, 0.f, 0.f))
+								.AllowOverscroll(EAllowOverscroll::No).EnableTouchScrolling(false)
+								.IsEnabled_Lambda([this]() { return PendingMode != EWindowMode::WindowedFullscreen; })
 							]
 						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 18.f)
 						[
 							SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(PendingMode == EWindowMode::WindowedFullscreen
-								? TEXT("无边框全屏使用桌面分辨率。") : TEXT("设置保存在本机，下次启动继续使用。")); })
+								? FString::Printf(TEXT("无边框全屏使用桌面分辨率：%s。"), *FormatResolution(PendingResolution))
+								: FString::Printf(TEXT("当前选择：%s · 滚轮浏览，单击选择。"), *FormatResolution(PendingResolution))); })
 							.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13)).ColorAndOpacity(FLinearColor(0.65f, 0.74f, 0.78f))
 						]
 						+ SVerticalBox::Slot().AutoHeight()
@@ -245,6 +271,10 @@ TSharedRef<SWidget> UDisplaySettingsMenu::RebuildWidget()
 				]
 			]
 		];
+	ResolutionList->SetScrollBarRightClickDragAllowed(false);
+	BuildResolutionOptions();
+	RefreshChoiceStyles();
+	return Root;
 }
 
 FReply UDisplaySettingsMenu::OnApplyClicked()
@@ -280,12 +310,24 @@ FReply UDisplaySettingsMenu::NativeOnKeyDown(const FGeometry& InGeometry, const 
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
+FReply UDisplaySettingsMenu::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// 子按钮/滚动条先处理其左键；剩余背景或右键不冒泡到原生窗口、不进入拖拽捕获。
+	return FReply::Handled().ReleaseMouseCapture();
+}
+
+FReply UDisplaySettingsMenu::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	return FReply::Handled().ReleaseMouseCapture();
+}
+
 void UDisplaySettingsMenu::ReleaseSlateResources(bool bReleaseChildren)
 {
 	Super::ReleaseSlateResources(bReleaseChildren);
-	ModeCombo.Reset();
-	ResolutionCombo.Reset();
-	// style/options为成员：旧Slate树可能仍持有其地址，不在此提前清空。
+	ModeButtons.Reset();
+	ResolutionButtons.Reset();
+	ResolutionList.Reset();
+	// style为成员：旧Slate树可能仍持有其地址，不在此提前清空。
 }
 
 FString UDisplaySettingsMenu::DebugDisplaySettingsState() const
@@ -301,31 +343,21 @@ FString UDisplaySettingsMenu::DebugDisplaySettingsState() const
 	}
 	FString Options;
 	for (const FIntPoint Size : AvailableResolutions) { Options += FString::Printf(TEXT("%dx%d;"), Size.X, Size.Y); }
-	return FString::Printf(TEXT("inViewport=%d focusable=%d pendingMode=%d pending=%dx%d configuredMode=%d configured=%dx%d viewportMode=%d viewport=%dx%d options=%s status=%s"),
+	return FString::Printf(TEXT("inViewport=%d focusable=%d pendingMode=%d pending=%dx%d configuredMode=%d configured=%dx%d viewportMode=%d viewport=%dx%d options=%s status=%s picker=inline modeButtons=%d resolutionRows=%d"),
 		IsInViewport(), IsFocusable(), static_cast<int32>(PendingMode), PendingResolution.X, PendingResolution.Y,
 		Settings ? static_cast<int32>(Settings->GetFullscreenMode()) : -1, Configured.X, Configured.Y,
-		ActualMode, Actual.X, Actual.Y, *Options, *Status);
+		ActualMode, Actual.X, Actual.Y, *Options, *Status, ModeButtons.Num(), ResolutionButtons.Num());
 }
 
 bool UDisplaySettingsMenu::DebugSelectDisplaySettings(int32 Width, int32 Height, int32 FullscreenMode)
 {
 #if WITH_EDITOR
 	if (!IsInViewport() || FullscreenMode < 0 || FullscreenMode > 2) { return false; }
-	PendingMode = EWindowMode::ConvertIntToWindowMode(FullscreenMode);
-	for (int32 Index = 0; Index < UE_ARRAY_COUNT(DisplayModes); ++Index)
-	{
-		if (DisplayModes[Index] == PendingMode)
-		{
-			SelectedMode = ModeOptions[Index];
-			if (ModeCombo) { TGuardValue<bool> Guard(bRefreshingOptions, true); ModeCombo->SetSelectedItem(SelectedMode); }
-		}
-	}
-	BuildResolutionOptions();
+	OnModeClicked(EWindowMode::ConvertIntToWindowMode(FullscreenMode));
 	const int32 ResolutionIndex = AvailableResolutions.IndexOfByKey(FIntPoint(Width, Height));
 	if (!AvailableResolutions.IsValidIndex(ResolutionIndex)) { return false; }
 	PendingResolution = AvailableResolutions[ResolutionIndex];
-	SelectedResolution = ResolutionOptions[ResolutionIndex];
-	if (ResolutionCombo) { TGuardValue<bool> Guard(bRefreshingOptions, true); ResolutionCombo->SetSelectedItem(SelectedResolution); }
+	RefreshChoiceStyles();
 	return true;
 #else
 	return false;

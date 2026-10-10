@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 DebugPanel.h 的面板契约、Slate 的 SOverlay/SScrollBox/SVerticalBox/SHorizontalBox/SButton/STextBlock/SBorder/SBox、FCoreStyle 默认字体、本模块 AICompanionDemoGameMode 的调试转发组
- * [OUTPUT]: 固定顶部返回/收起、内部展开入口和四节滚动列；取消34px强制行高，按实际中文字体高度+内容padding留足空间，回读实际文字几何
+ * [INPUT]: DebugPanel契约、Slate分区/滚动/按钮与真实字体Measure，GameMode测试转发、导演当前升级名称
+ * [OUTPUT]: 青蓝深色测试控制台；固定操作/提示与四分区滚动；短标签单行、长名明确换行与自然高度；测试按钮不争抢游戏键盘焦点
  * [POS]: UI/ 界面层实现件：仅测试模式挂载（正常模式零痕迹）——验收提速专用面板
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -30,15 +30,15 @@ void UDebugPanel::BindHost(AAICompanionDemoGameMode* InHost)
 void UDebugPanel::PrepareButtonStyle()
 {
 	if (bStylesReady) { return; }
-	ButtonStyle.SetNormal(FSlateColorBrush(FLinearColor(0.05f, 0.07f, 0.12f, 0.96f)))
-		.SetHovered(FSlateColorBrush(FLinearColor(0.11f, 0.22f, 0.29f, 1.f)))
-		.SetPressed(FSlateColorBrush(FLinearColor(0.05f, 0.16f, 0.23f, 1.f)))
-		.SetDisabled(FSlateColorBrush(FLinearColor(0.04f, 0.05f, 0.08f, 0.8f)))
+	ButtonStyle.SetNormal(FSlateColorBrush(FLinearColor(0.035f, 0.075f, 0.10f, 1.f)))
+		.SetHovered(FSlateColorBrush(FLinearColor(0.065f, 0.19f, 0.24f, 1.f)))
+		.SetPressed(FSlateColorBrush(FLinearColor(0.03f, 0.13f, 0.17f, 1.f)))
+		.SetDisabled(FSlateColorBrush(FLinearColor(0.025f, 0.04f, 0.05f, 0.8f)))
 		.SetNormalPadding(FMargin(0.f)).SetPressedPadding(FMargin(0.f));
 	bStylesReady = true;
 }
 
-TSharedRef<SWidget> UDebugPanel::MakeDebugButton(const FString& Label, const TFunction<void()>& OnClick)
+TSharedRef<SWidget> UDebugPanel::MakeDebugButton(const FString& Label, const TFunction<void()>& OnClick, float WrapWidth)
 {
 	const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", 13);
 	const FText Text = FText::FromString(Label);
@@ -52,7 +52,9 @@ TSharedRef<SWidget> UDebugPanel::MakeDebugButton(const FString& Label, const TFu
 	[
 	SNew(SButton)
 		.ButtonStyle(&ButtonStyle)
+		.IsFocusable(false)
 		.ContentPadding(FMargin(10.f, 7.f))
+		.ToolTipText(Text)
 		.HAlign(HAlign_Left).VAlign(VAlign_Center)
 		.OnClicked_Lambda([OnClick]()
 		{
@@ -61,8 +63,8 @@ TSharedRef<SWidget> UDebugPanel::MakeDebugButton(const FString& Label, const TFu
 		})
 		[
 			SAssignNew(LabelWidget, STextBlock).Font(Font)
-				.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.9f, 1.f)))
-				.Text(Text).AutoWrapText(true)
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.86f, 0.93f, 0.96f)))
+				.Text(Text).AutoWrapText(false).WrapTextAt(WrapWidth)
 		]
 	];
 	LabelWidgets.Add(LabelWidget);
@@ -74,20 +76,54 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 	PrepareButtonStyle();
 	LabelWidgets.Reset();
 	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
-	// 节头
-	auto SectionTitle = [](const FString& Title) -> TSharedRef<SWidget>
-	{
-		return SNew(STextBlock)
-			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
-			.ColorAndOpacity(FSlateColor(FLinearColor(1.f, 0.8f, 0.3f)))
-			.Text(FText::FromString(Title));
-	};
-
-	// 单按钮行
 	auto Row = [this](const FString& Label, const TFunction<void()>& OnClick) -> TSharedRef<SWidget>
 	{
 		return MakeDebugButton(Label, OnClick);
 	};
+	auto Section = [WhiteBrush](const TCHAR* Title, const TCHAR* Subtitle, TSharedRef<SWidget> Content) -> TSharedRef<SWidget>
+	{
+		return SNew(SBorder).BorderImage(WhiteBrush).Padding(10.f)
+			.BorderBackgroundColor(FLinearColor(0.017f, 0.037f, 0.052f, 1.f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(Title))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+					.ColorAndOpacity(FLinearColor(0.34f, 0.83f, 0.88f)).AutoWrapText(false)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 8.f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Subtitle))
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+					.ColorAndOpacity(FLinearColor(0.52f, 0.66f, 0.72f)).AutoWrapText(false).WrapTextAt(280.f)
+				]
+				+ SVerticalBox::Slot().AutoHeight()[Content]
+			];
+	};
+	TSharedRef<SVerticalBox> BossButtons = SNew(SVerticalBox);
+	BossButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("召唤师"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnBoss(0); } }) ];
+	BossButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("裂地巨像"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnBoss(1); } }) ];
+	BossButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("沙狱蠕虫"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnBoss(2); } }) ];
+	TSharedRef<SVerticalBox> EnemyButtons = SNew(SVerticalBox);
+	EnemyButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("生成 5 只杂兵"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnEnemies(5); } }) ];
+	EnemyButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("生成 15 只杂兵"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnEnemies(15); } }) ];
+	EnemyButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("清空全场怪物"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugClearEnemies(); } }) ];
+	TSharedRef<SVerticalBox> PlayerButtons = SNew(SVerticalBox);
+	PlayerButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("金币 +100"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugAddGold(100); } }) ];
+	PlayerButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("等级 +1 · 生命回满"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugAddLevel(); } }) ];
+	PlayerButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("切换无敌"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugToggleGod(); } }) ];
+	PlayerButtons->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[ Row(TEXT("召唤师伤害诊断"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugLogBossSummoner(); } }) ];
 	TSharedRef<SVerticalBox> UpgradeButtons = SNew(SVerticalBox);
 	RenderedUpgradeCount = 0;
 	if (AAICompanionDemoGameMode* GM = Host.Get())
@@ -104,74 +140,71 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 		}
 	}
 
-	return SNew(SOverlay)
+	return SNew(SOverlay).Visibility(EVisibility::SelfHitTestInvisible)
 		+ SOverlay::Slot()
 		.HAlign(HAlign_Right)
 		.VAlign(VAlign_Fill)
-		.Padding(0.f, 0.f, 8.f, 8.f)
+		.Padding(0.f, 12.f, 12.f, 12.f)
 		[
 			SNew(SBox)
 			.Visibility_Lambda([this]() { return bCollapsed ? EVisibility::Collapsed : EVisibility::Visible; })
-			.WidthOverride(340.f)
+			.WidthOverride(344.f)
 			[
 				SAssignNew(ExpandedPanel, SBorder)
 				.BorderImage(WhiteBrush)
 				.Visibility(bCollapsed ? EVisibility::Collapsed : EVisibility::Visible)
-				.Padding(FMargin(6.f))
-				.BorderBackgroundColor(FSlateColor(FLinearColor(0.02f, 0.02f, 0.06f, 0.55f)))
+				.Padding(FMargin(12.f))
+				.BorderBackgroundColor(FSlateColor(FLinearColor(0.009f, 0.022f, 0.035f, 0.97f)))
 				[
 					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight().Padding(2.f, 2.f, 2.f, 6.f)
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("测试控制台")))
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 20))
+						.ColorAndOpacity(FLinearColor(0.88f, 0.97f, 1.f)).AutoWrapText(false)
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 12.f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("自由组合技能，快速体验战斗。")))
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+						.ColorAndOpacity(FLinearColor(0.52f, 0.66f, 0.72f)).AutoWrapText(false)
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)
 					[
 						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 4.f, 0.f)
-						[ MakeDebugButton(TEXT("返回主菜单"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->ReturnToMainMenu(); } }) ]
-						+ SHorizontalBox::Slot().AutoWidth()
-						[ MakeDebugButton(TEXT("收起面板"), [this]() { SetCollapsed(true); }) ]
+						+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 6.f, 0.f)
+						[ MakeDebugButton(TEXT("返回主菜单"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->ReturnToMainMenu(); } }, 0.f) ]
+						+ SHorizontalBox::Slot().FillWidth(1.f)
+						[ MakeDebugButton(TEXT("收起面板"), [this]() { SetCollapsed(true); }, 0.f) ]
 					]
 					+ SVerticalBox::Slot().FillHeight(1.f)
 					[
-					SNew(SScrollBox)
-					+ SScrollBox::Slot().Padding(2.f)
-					[
-						SNew(STextBlock)
-						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 17))
-						.ColorAndOpacity(FSlateColor(FLinearColor(1.f, 0.35f, 0.3f)))
-						.Text(FText::FromString(TEXT("测 试 模 式")))
+						SNew(SScrollBox).ScrollBarAlwaysVisible(true).ScrollBarThickness(FVector2D(5.f, 5.f))
+						.ScrollBarPadding(FMargin(5.f, 0.f, 0.f, 0.f)).AllowOverscroll(EAllowOverscroll::No)
+						+ SScrollBox::Slot().Padding(0.f, 0.f, 0.f, 8.f)
+						[ Section(TEXT("首领战"), TEXT("选择首领，立即开始战斗。"), BossButtons) ]
+						+ SScrollBox::Slot().Padding(0.f, 0.f, 0.f, 8.f)
+						[ Section(TEXT("敌人"), TEXT("调整战场密度或清空当前敌人。"), EnemyButtons) ]
+						+ SScrollBox::Slot().Padding(0.f, 0.f, 0.f, 8.f)
+						[ Section(TEXT("玩家"), TEXT("补给、成长与战斗诊断。"), PlayerButtons) ]
+						+ SScrollBox::Slot()
+						[ Section(TEXT("升级测试"), TEXT("点击添加升级；Flip用于转换当前等级奖励。"), UpgradeButtons) ]
 					]
-
-					// ---------- BOSS ----------
-					+ SScrollBox::Slot().Padding(2.f) [ SectionTitle(TEXT("— BOSS —")) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("召唤 召唤师"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnBoss(0); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("召唤 裂地巨像"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnBoss(1); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("召唤 沙狱蠕虫"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnBoss(2); } }) ]
-
-					// ---------- 怪物 ----------
-					+ SScrollBox::Slot().Padding(2.f) [ SectionTitle(TEXT("— 怪物 —")) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("刷 5 只杂兵"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnEnemies(5); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("刷 15 只杂兵"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugSpawnEnemies(15); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("清空全场怪"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugClearEnemies(); } }) ]
-
-					// ---------- 玩家 ----------
-					+ SScrollBox::Slot().Padding(2.f) [ SectionTitle(TEXT("— 玩家 —")) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("金币 +100"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugAddGold(100); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("等级 +1（回满）"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugAddLevel(); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("无敌 开/关"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugToggleGod(); } }) ]
-					+ SScrollBox::Slot().Padding(2.f) [ Row(TEXT("召唤师掉血诊断"), [this]() { if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->DebugLogBossSummoner(); } }) ]
-
-					// 数量与名称来自导演；Flip只转换当前合法玩家等级奖励，不授予角色技能。
-					+ SScrollBox::Slot().Padding(2.f) [ SectionTitle(TEXT("— 升级 / 当前奖励操作 —")) ]
-					+ SScrollBox::Slot().Padding(2.f) [ UpgradeButtons ]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 0.f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("滚轮浏览 · 收起面板可查看完整战场")))
+						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+						.ColorAndOpacity(FLinearColor(0.52f, 0.66f, 0.72f)).AutoWrapText(false)
 					]
 				]
 			]
 		]
-		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(8.f)
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(12.f)
 		[
 			SAssignNew(CollapsedBar, SBorder).BorderImage(WhiteBrush).Padding(4.f)
-				.BorderBackgroundColor(FLinearColor(0.02f, 0.04f, 0.08f, 0.9f))
+				.BorderBackgroundColor(FLinearColor(0.009f, 0.022f, 0.035f, 0.97f))
 				.Visibility(bCollapsed ? EVisibility::Visible : EVisibility::Collapsed)
-			[ MakeDebugButton(TEXT("展开测试面板  ›"), [this]() { SetCollapsed(false); }) ]
+			[ MakeDebugButton(TEXT("展开测试面板  ›"), [this]() { SetCollapsed(false); }, 0.f) ]
 		];
 }
 
@@ -200,14 +233,17 @@ FString UDebugPanel::DebugPanelState() const
 	{
 		if (const TSharedPtr<STextBlock> Label = WeakLabel.Pin())
 		{
-			const float Desired = Label->GetDesiredSize().Y;
-			const float Allotted = Label->GetCachedGeometry().GetLocalSize().Y;
+			const FVector2D DesiredSize = Label->GetDesiredSize();
+			const FVector2D AllottedSize = Label->GetCachedGeometry().GetLocalSize();
+			const float Desired = DesiredSize.Y;
+			const float Allotted = AllottedSize.Y;
 			if (Allotted > 0.f)
 			{
 				++Measured;
 				if (Allotted + 0.5f < Desired) { ++Undersized; }
 			}
-			Rows += FString::Printf(TEXT("%s desired=%.2f allotted=%.2f; "), *Label->GetText().ToString(), Desired, Allotted);
+			Rows += FString::Printf(TEXT("%s desired=%.2f allotted=%.2f desiredWidth=%.2f allottedWidth=%.2f; "),
+				*Label->GetText().ToString(), Desired, Allotted, DesiredSize.X, AllottedSize.X);
 		}
 	}
 	return FString::Printf(TEXT("collapsed=%d inViewport=%d measured=%d undersized=%d labels=%d upgradeButtons=%d | %s"),
