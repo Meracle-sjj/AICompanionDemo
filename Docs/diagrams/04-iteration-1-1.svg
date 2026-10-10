@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+<title id="title">1.1 反馈迭代：规则、验收与公开记录</title><desc id="desc">原创机制图。上部依次展示反馈与先行预期、设计判断、真实验收、GitHub追加记录，后续反馈返回下一轮公开预期。下部展示奖励保存Source、EarnedLevel和BossIndex，并按顺序领取。仅经验等级奖励从Lv.9玩家池、Lv.10 AI池交替。Flip只替换当前玩家等级奖励为AI候选，不领取下一次奖励。1.1专项验收进行中；可信数字签名证书尚未具备。此图不是运行截图，不代表全部功能已通过验收。</desc>
+<rect x="0" y="0" width="1600" height="1000" rx="0" fill="#14191d" stroke="none" stroke-width="2"/>
+<text x="60" y="94" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="46" font-weight="700" fill="#f5eddd">1.1 反馈迭代：规则、验收与公开记录</text>
+<text x="60" y="143" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">异机试玩触发改动；先公开预期，后追加实现与证据。成长队列保留每次奖励的来源与发生等级。</text>
+<polyline points="60,174 1540,174" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round"/>
+<rect x="60" y="220" width="340" height="190" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="82" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">01 反馈与先行预期</text>
+<text x="82" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">异机首次试玩</text>
+<text x="82" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">11项观察 → 验收条件</text>
+<text x="82" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">先公开 GitHub issue #1</text>
+<rect x="440" y="220" width="340" height="190" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="462" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">02 设计判断</text>
+<text x="462" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">把问题转成规则</text>
+<text x="462" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">实读源码，记录取舍</text>
+<text x="462" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">方案变化先追加公开预期</text>
+<rect x="820" y="220" width="340" height="190" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="842" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">03 真实验收</text>
+<text x="842" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">构建与运行取证</text>
+<text x="842" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">日志 / 截图核对实际行为</text>
+<text x="842" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">1.1 专项验收进行中</text>
+<rect x="1200" y="220" width="340" height="190" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="1222" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">04 GitHub保留记录</text>
+<text x="1222" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">追加结果与边界</text>
+<text x="1222" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">模块提交关联 issue #1</text>
+<text x="1222" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">保留1.0与原始反馈</text>
+<polyline points="400,315 440,315" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="440.00,315.00 427.00,309.00 427.00,321.00" fill="#dfbc77"/>
+<polyline points="780,315 820,315" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="820.00,315.00 807.00,309.00 807.00,321.00" fill="#dfbc77"/>
+<polyline points="1160,315 1200,315" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1200.00,315.00 1187.00,309.00 1187.00,321.00" fill="#dfbc77"/>
+<polyline points="1370,410 1370,455 230,455 230,410" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round" stroke-dasharray="9 7"/>
+<polygon points="230.00,410.00 224.00,423.00 236.00,423.00" fill="#dfbc77"/>
+<rect x="573" y="434" width="454" height="41" rx="0" fill="#14191d" stroke="none" stroke-width="2"/>
+<text x="602" y="464" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#dfbc77">后续反馈 → 下一轮公开预期</text>
+<rect x="60" y="500" width="450" height="348" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="82" y="537" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">R11 · 奖励入队</text>
+<text x="82" y="580" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">来源随奖励保存</text>
+<text x="82" y="623" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">经验升级：保存发生等级</text>
+<text x="82" y="661" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">普通箱 / 初始箱 / 锁箱 / Boss遗物</text>
+<rect x="82" y="681" width="406" height="52" rx="10" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="99" y="716" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#dfbc77">Source · EarnedLevel · BossIndex</text>
+<text x="82" y="776" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">顺序领取，依据奖励的发生等级分池</text>
+<text x="82" y="816" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">宝箱与遗物保持各自领取规则</text>
+<polyline points="510,675 570,675" fill="none" stroke="#86bfdb" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="570.00,675.00 557.00,669.00 557.00,681.00" fill="#86bfdb"/>
+<rect x="570" y="500" width="500" height="348" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="592" y="537" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">R11 · 领取时归属</text>
+<text x="592" y="580" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">Lv.9 起，玩家与AI交替</text>
+<text x="592" y="622" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">仅 Source = LevelUp 参与轮换</text>
+<rect x="592" y="642" width="205" height="58" rx="12" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="610" y="681" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#86bfdb">Lv.9 · 玩家池</text>
+<rect x="839" y="642" width="209" height="58" rx="12" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="857" y="681" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#dfbc77">Lv.10 · AI池</text>
+<polyline points="797,671 839,671" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="839.00,671.00 826.00,665.00 826.00,677.00" fill="#dfbc77"/>
+<rect x="592" y="715" width="205" height="58" rx="12" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="610" y="754" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#86bfdb">Lv.11 · 玩家池</text>
+<rect x="839" y="715" width="209" height="58" rx="12" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="857" y="754" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#dfbc77">Lv.12 · AI池</text>
+<polyline points="797,744 839,744" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="839.00,744.00 826.00,738.00 826.00,750.00" fill="#dfbc77"/>
+<text x="592" y="813" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#86bfdb">Flip：当前玩家候选 → AI三选一</text>
+<text x="592" y="840" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="400" fill="#b1b9bb">每次奖励限一次；后续队列与等级归属不变</text>
+<rect x="1120" y="500" width="420" height="348" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="1142" y="537" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">当前状态 · 保留边界</text>
+<text x="1142" y="580" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">验收不等于发布</text>
+<text x="1142" y="624" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="24" font-weight="700" fill="#dfbc77">1.1 专项验收进行中</text>
+<text x="1142" y="660" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">接线 / 编译不代表全部体验通过</text>
+<text x="1142" y="696" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">证据按实际覆盖范围追加</text>
+<polyline points="1142,717 1518,717" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
+<text x="1142" y="755" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">数字签名：可信证书尚未具备</text>
+<text x="1142" y="793" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">发布者告警保留为外部限制</text>
+<text x="1142" y="831" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">不以自签名冒充可信发布者</text>
+<polyline points="60,890 1540,890" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
+<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">规则来源：Docs/ITERATION_1.1.md · AI/WaveDirector.h/.cpp · AI/WaveDirectorRelics.cpp；公开记录：GitHub issue #1</text>
+<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">2026-10-10规则快照 · 原创可维护示意；验收仍在进行，发布状态以实际版本记录与可下载附件为准。</text>
+</svg>
