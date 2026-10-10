@@ -1,5 +1,5 @@
 /**
- * [INPUT]: TreasureChest.h、FireMid及现役MI_EnrageFlame的仅R火焰遮罩/EnrageTint、Niagara安全深复制、Health/导演终局查询；Engine BasicShapeMaterial参数Color及原开箱音效。
+ * [INPUT]: TreasureChest.h、预Cook的NS_ColoredFireMid/User.Flame_Material及MI_EnrageFlame仅R遮罩/EnrageTint、Health/导演终局查询；原开箱音效。
  * [OUTPUT]: 普通箱动态收费；初始箱自有低位金焰/MID与免费提示，原Fab/源Niagara不改。领取/玩家死亡/终局/EndPlay显式销毁、暂停冻结；TryGrantStarterUpgrade免费三选一不计收费箱。
  * [POS]: AI/ 的道具交互代表件实现；交互输入在玩家 Character（E 键边沿），开箱账本在 WaveDirector，本类只管"门面与状态"——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
@@ -76,8 +76,8 @@ ATreasureChest::ATreasureChest()
 	}
 	LidMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 复用合法火焰与项目已验证的纯遮罩材质；染金只改自有运行时MID/系统副本。
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FireFinder(TEXT("/Game/Fire_EXP_Vol01_Free/Niagara/Fire/Loop/NS_Sub_FireMid_Loop_001.NS_Sub_FireMid_Loop_001"));
+	// 专用系统在编辑器制作并Cook；运行期仅设置组件用户材质，不复制Cook后的Renderer。
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FireFinder(TEXT("/Game/VFX/Enrage/NS_ColoredFireMid.NS_ColoredFireMid"));
 	if (FireFinder.Succeeded()) { StarterSourceSystem = FireFinder.Object; }
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FlameMaterialFinder(TEXT("/Game/VFX/Enrage/MI_EnrageFlame.MI_EnrageFlame"));
 	if (FlameMaterialFinder.Succeeded()) { StarterFlameBaseMaterial = FlameMaterialFinder.Object; }
@@ -108,38 +108,17 @@ bool ATreasureChest::BuildStarterFlames()
 		UE_LOG(LogAICompanionDemo, Error, TEXT("[StarterChest] 火焰材质缺EnrageTint，拒绝使用橙火冒充金焰"));
 		return false;
 	}
+	const FName MaterialName(TEXT("User.Flame_Material"));
+	if (StarterSourceSystem->GetExposedParameters().IndexOf(
+		FNiagaraVariable(FNiagaraTypeDefinition::GetUMaterialDef(), MaterialName)) == INDEX_NONE)
+	{
+		UE_LOG(LogAICompanionDemo, Error, TEXT("[StarterChest] 专用火焰缺User.Flame_Material，拒绝显示错误颜色"));
+		return false;
+	}
 	StarterFlameMaterial = UMaterialInstanceDynamic::Create(StarterFlameBaseMaterial, this);
+	if (!StarterFlameMaterial) { return false; }
 	StarterFlameMaterial->SetVectorParameterValue(TEXT("EnrageTint"), kStarterFlameTint);
-	StarterFlameSystem = DuplicateObject<UNiagaraSystem>(StarterSourceSystem, this);
-	if (!StarterFlameSystem) { ClearStarterFlames(); return false; }
-	StarterFlameSystem->ClearFlags(RF_Public | RF_Standalone);
-	StarterFlameSystem->SetFlags(RF_Transient);
-	// 首先验证完整副本归属，不能修改外部共享的素材包Emitter/Renderer。
-	for (FNiagaraEmitterHandle& Handle : StarterFlameSystem->GetEmitterHandles())
-	{
-		const FVersionedNiagaraEmitter Instance = Handle.GetInstance();
-		FVersionedNiagaraEmitterData* Data = Instance.GetEmitterData();
-		if (!Instance.Emitter || !Instance.Emitter->IsIn(StarterFlameSystem) || !Data) { ClearStarterFlames(); return false; }
-		for (UNiagaraRendererProperties* Renderer : Data->GetRenderers())
-			if (!Renderer || !Renderer->IsIn(StarterFlameSystem)) { ClearStarterFlames(); return false; }
-	}
-	int32 Replaced = 0;
-	for (FNiagaraEmitterHandle& Handle : StarterFlameSystem->GetEmitterHandles())
-	{
-		for (UNiagaraRendererProperties* Renderer : Handle.GetInstance().GetEmitterData()->GetRenderers())
-		{
-			UNiagaraSpriteRendererProperties* Sprite = Cast<UNiagaraSpriteRendererProperties>(Renderer);
-			if (!Sprite || !Sprite->Material || !Sprite->Material->GetPathName().Contains(TEXT("MI_FireMid_Loop_01_Flame"))) { continue; }
-			Sprite->MaterialUserParamBinding.Parameter.SetName(NAME_None);
-			Sprite->Material = StarterFlameMaterial;
-#if WITH_EDITORONLY_DATA
-			Sprite->MICMaterial = nullptr;
-#endif
-			++Replaced;
-		}
-	}
-	if (!Replaced) { ClearStarterFlames(); return false; }
-	StarterFlameSystem->CacheFromCompiledData();
+	StarterFlameSystem = StarterSourceSystem;
 	const FNiagaraParameterStore& Parameters = StarterFlameSystem->GetExposedParameters();
 	const FVector Positions[] = { FVector(-28.f, -12.f, -24.f), FVector(28.f, 12.f, -24.f) };
 	for (const FVector& Position : Positions)
@@ -149,6 +128,7 @@ bool ATreasureChest::BuildStarterFlames()
 		Flame->SetAutoActivate(false);
 		Flame->SetAutoDestroy(false);
 		Flame->SetAsset(StarterFlameSystem);
+		Flame->SetVariableMaterial(MaterialName, StarterFlameMaterial);
 		Flame->SetupAttachment(RootComponent);
 		Flame->SetAbsolute(false, false, true);
 		Flame->SetRelativeLocation(Position);
@@ -167,8 +147,51 @@ bool ATreasureChest::BuildStarterFlames()
 		StarterFlames.Add(Flame);
 		Flame->Activate(true);
 	}
-	UE_LOG(LogAICompanionDemo, Log, TEXT("[StarterChest] 自有金焰已创建：%d组件/%d材质替换，源资产未修改"), StarterFlames.Num(), Replaced);
+	UE_LOG(LogAICompanionDemo, Log, TEXT("[StarterChest] 金焰已创建：%d组件，预Cook系统/组件用户材质，源资产未修改"), StarterFlames.Num());
 	return StarterFlames.Num() == 2;
+}
+
+bool ATreasureChest::DebugConfigureColoredFlameAsset(UNiagaraSystem* System)
+{
+#if WITH_EDITOR
+	// 仅离线制作固定专用资产；PIE/Runtime与第三方源路径均不可写。
+	if (!System || System->GetPathName() != TEXT("/Game/VFX/Enrage/NS_ColoredFireMid.NS_ColoredFireMid")
+		|| (GetWorld() && GetWorld()->IsGameWorld()) || !StarterFlameBaseMaterial) { return false; }
+	for (FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	{
+		const FVersionedNiagaraEmitter Instance = Handle.GetInstance();
+		const FVersionedNiagaraEmitterData* Data = Instance.GetEmitterData();
+		if (!Instance.Emitter || !Instance.Emitter->IsIn(System) || !Data) { return false; }
+		for (const UNiagaraRendererProperties* Renderer : Data->GetRenderers())
+			if (!Renderer || !Renderer->IsIn(System)) { return false; }
+	}
+	System->Modify();
+	const FNiagaraVariable MaterialParameter(FNiagaraTypeDefinition::GetUMaterialDef(), TEXT("User.Flame_Material"));
+	System->GetExposedParameters().AddParameter(MaterialParameter);
+	System->GetExposedParameters().SetUObject(StarterFlameBaseMaterial, MaterialParameter);
+	int32 Bound = 0;
+	for (FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+	{
+		for (UNiagaraRendererProperties* Renderer : Handle.GetInstance().GetEmitterData()->GetRenderers())
+		{
+			UNiagaraSpriteRendererProperties* Sprite = Cast<UNiagaraSpriteRendererProperties>(Renderer);
+			if (!Sprite || !Sprite->Material || !Sprite->Material->GetPathName().Contains(TEXT("MI_FireMid_Loop_01_Flame"))) { continue; }
+			Sprite->Modify();
+			Sprite->MaterialUserParamBinding.Parameter = MaterialParameter;
+			Sprite->Material = StarterFlameBaseMaterial;
+			Sprite->MICMaterial = nullptr;
+			++Bound;
+		}
+	}
+	if (Bound != 1) { return false; }
+	System->RequestCompile(false);
+	System->WaitForCompilationComplete();
+	System->CacheFromCompiledData();
+	UE_LOG(LogAICompanionDemo, Log, TEXT("[ColoredFlameAsset] 专用系统已绑定%d火焰Renderer，等待工具保存"), Bound);
+	return true;
+#else
+	return false;
+#endif
 }
 
 void ATreasureChest::ClearStarterFlames()

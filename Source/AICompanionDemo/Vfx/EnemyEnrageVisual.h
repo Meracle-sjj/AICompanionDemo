@@ -1,6 +1,6 @@
 /**
- * [INPUT]: EnemyGrunt生命周期与真实Niagara FireMid的暴露颜色参数。
- * [OUTPUT]: 两处贴身紫红火焰覆盖下身/上身；参数类型核实后激活；死亡/关闭/EndPlay销毁，暂停冻结模拟。
+ * [INPUT]: EnemyGrunt生命周期、预Cook的NS_ColoredFireMid及其用户材质/颜色参数，紫红MI_EnrageFlame。
+ * [OUTPUT]: 两处贴身紫红火焰覆盖下身/上身；仅实例参数赋材质，禁止运行时系统深复制/Renderer改写；死亡/关闭/EndPlay销毁，暂停冻结。
  * [POS]: Vfx/敌人狂暴纯显示层，不拥有狂暴数值或敌人伤害。
  * [PROTOCOL]: 变更时更新此头部；成员地图由主agent统一维护。
  */
@@ -28,6 +28,7 @@ public:
 	UPROPERTY(EditAnywhere, Category="Enemy|Enrage", meta=(ClampMin="0.1")) float FlameScale = .8f;
 
 private:
+	// 两引用均指向已Cook资产；组件拥有实例参数，不拥有系统副本。
 	UPROPERTY(Transient) TObjectPtr<UNiagaraSystem> FlameSystem;
 	UPROPERTY(Transient) TObjectPtr<UNiagaraSystem> SourceFlameSystem;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> EnrageMaterial;

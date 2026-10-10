@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Engine 的 AActor/UStaticMeshComponent（/Engine 基础立方体）与 Tick、Kismet 的 GetPlayerPawn/GetGameMode（金币钱包与升级中枢查询）、本模块 WaveDirector（TrySpendGoldForUpgrade——开箱进三选一暂停）、DrawDebugString（交互提示）
- * [OUTPUT]: ATreasureChest普通收费箱及ConfigureStarterChest初始免费箱；免费箱两侧自有金色火焰/灯光，不修改原材质与Niagara。领取/玩家死亡/终局/EndPlay清理，暂停冻结。两类均经导演三选一，已开不可重复；初始箱不改变金币/收费计数。DebugChestState只读身份/钱包/实际火焰状态。
+ * [OUTPUT]: 普通收费箱及初始免费箱；预Cook专用火焰系统+组件金色MID，禁止运行期深复制/改写共享Renderer。领取/死亡/终局/EndPlay清理，暂停冻结；免费箱不改变钱包/收费计数。编辑器制作桥仅绑定固定项目衍生资产，不保存源包。
  * [POS]: AI/ 的道具交互代表件（宝箱经济的消费终端）；被 GameMode BeginPlay 代码生成于固定点（D6 范式），交互输入在玩家侧（Character Tick E 键边沿），开箱账本在 WaveDirector——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
  */
@@ -51,6 +51,9 @@ public:
 	/** 编辑器验收桥：复验玩家距离，之后调用正式TryOpen；非编辑器不执行。 */
 	UFUNCTION(BlueprintCallable, Category = "Debug|Chest")
 	bool DebugTryOpen();
+	/** 离线资产制作桥：仅编辑器固定专用系统路径可用，正式Runtime返回false。 */
+	UFUNCTION(BlueprintCallable, Category = "Debug|Chest")
+	bool DebugConfigureColoredFlameAsset(UNiagaraSystem* System);
 
 	// ---------- 外观换装（Fab 素材，2026-09-18；语义见 XpPickup 同名块） ----------
 
