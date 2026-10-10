@@ -1,11 +1,12 @@
 /**
  * [INPUT]: WaveDirector choice queue, BossRelicComponent persistent effects, shared card presentation.
- * [OUTPUT]: Boss-specific rewards, serialized pauses; HUD relic snapshot with component cooldown and actual frenzy timer seconds; editor audit JSON.
+ * [OUTPUT]: Source/earned-level preserving reward queue; Boss-specific rewards and serialized pauses; component-owned relic descriptions/cooldowns in HUD; completed choices restore input through GameMode arbitration; editor audit JSON.
  * [POS]: AI/WaveDirector reward lifecycle; uses the existing viewport/texture GC ownership.
  * [PROTOCOL]: Update module/UI AGENTS when the reward contract changes.
  */
 #include "AI/WaveDirector.h"
 #include "AICompanionDemo.h"
+#include "AICompanionDemoGameMode.h"
 #include "AICompanionDemoCharacter.h"
 #include "Audio/SFXLibrary.h"
 #include "Engine/Engine.h"
@@ -28,6 +29,7 @@ void AWaveDirector::AppendRelicHudCards(FEndlessHudSnapshot& Snapshot) const
 		FHudUpgradeCard& Card = Snapshot.UpgradeCards.AddDefaulted_GetRef();
 		Card.UpgradeId = RelicIdName(Id);
 		if (const auto* Meta = UpgradeCardPresentation::FindCardMetadata(Card.UpgradeId)) Card.Name = Meta->Title;
+		Card.Description = Relics->DescribeRelic(Id);
 		Card.Rarity = EUpgradeCardRarity::UniqueRelic;
 		if (Id == EBossRelicId::SpiritFrenzy)
 		{
@@ -46,10 +48,10 @@ void AWaveDirector::ProcessNextChoice()
 	{ PendingChoices.Reset(); return; }
 	while (!bUpgradePending && !PendingChoices.IsEmpty())
 	{
-		const int32 Token = PendingChoices[0];
+		const FRewardChoice Reward = PendingChoices[0];
 		PendingChoices.RemoveAt(0);
-		if (Token >= 2) { ShowRelicChoice(Token-1); }
-		else { EnterUpgradePause(Token == 1); }
+		if (Reward.Source == ERewardSource::BossRelic) { ShowRelicChoice(Reward.BossIndex); }
+		else { StartUpgradeReward(Reward); }
 	}
 }
 
@@ -62,8 +64,29 @@ void AWaveDirector::CompleteChoice()
 	bUpgradePending = false;
 	bRelicPending = false;
 	RelicChoiceBoss = 0;
+	ActiveReward = FRewardChoice();
+	ActiveRewardPool = ERewardPool::Mixed;
+	bRewardFlipped = false;
+	OfferFallbackNote.Reset();
 	ProcessNextChoice();
 	if (!bUpgradePending) { UGameplayStatics::SetGlobalTimeDilation(this, 1.f); }
+	if (AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr)
+	{
+		GM->RestoreRunInput();
+	}
+	else if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		const bool bNeedsUI = bTestMode || bUpgradePending;
+		PC->bShowMouseCursor = bNeedsUI;
+		if (bNeedsUI)
+		{
+			FInputModeGameAndUI Mode;
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Mode.SetHideCursorDuringCapture(false);
+			PC->SetInputMode(Mode);
+		}
+		else { PC->SetInputMode(FInputModeGameOnly()); }
+	}
 }
 
 void AWaveDirector::ShowRelicChoice(int32 BossIndex)
@@ -80,6 +103,10 @@ void AWaveDirector::ShowRelicChoice(int32 BossIndex)
 	}
 	if (bAllOwned) { return; }
 	RelicChoiceBoss = BossIndex;
+	ActiveReward = { ERewardSource::BossRelic, 0, BossIndex };
+	ActiveRewardPool = ERewardPool::Mixed;
+	bRewardFlipped = false;
+	OfferFallbackNote.Reset();
 	bUpgradePending = true;
 	bRelicPending = true;
 	bChestDoublePick = false;

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Engine 的 USoundBase（TSoftObjectPtr 软引用槽位——素材由用户从 Epic/Fab 官方渠道导入，代码零内容耦合）与 UWorld、Kismet 的 SpawnSound2D（2D 全局播放——演示玩法无空间化需求）
- * [OUTPUT]: EGameSFX事件槽、USFXLibrary(Config=Game)与PlaySFX/PlayVoice；药剂/钥匙/首次信标拾取语音共用每世界5秒CD，冷却内跳过不排队；BossImpact独立真实爆炸槽与音量，其他事件音效/语音不占拾取CD；空槽静默返回
+ * [OUTPUT]: EGameSFX事件槽、USFXLibrary(Config=Game)与PlaySFX/PlayVoice/TryPlayVoice；药剂/钥匙/首次信标拾取语音共用每世界5秒CD；TryPlayVoice只在成功创建播放组件时返回true，玩家攻击解锁使用独立语音槽；空槽静默返回
  *  信标首次解锁/成功召回沿用现役两条资源路径，v2声源为冷峻自然女声；台词分别为“我一直在你身边。”“我从未离开过你”。
  * [POS]: Audio/ 的音效基建唯一文件；全部游戏事件经 PlaySFX 收口发声——事件方不知道音效是否存在，素材到位与否只改 ini、代码零改动
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -81,6 +81,7 @@ enum class EGameSFX : uint8
 	Voice_BeaconActivate, // 我一直在你身边。（首次拾取信标）
 	Voice_BeaconRecall,   // 我从未离开过你（成功召回）
 	BossImpact,          // 虫钻地/破土与巨像敲地：独立真实爆炸采样，不共用溅射音量
+	Voice_PlayerAttackUnlock, // 玩家首次找回自动攻击能力；独立固定台词，不占拾取语音CD
 	None                 // 哨兵：无语音（Bark 默认值——PlaySFX 对它静默）
 };
 
@@ -100,6 +101,9 @@ public:
 	/** 空间化语音入口（09-27 用户定调"音箱放到 AI 身上"）：3D 定位于 Location——远处队友的喊话
 	 *  距离衰减至听不清（400cm 内全响，线性衰减 4000cm 静默，运行时构造衰减零资产）；槽空静默 */
 	static void PlayVoice(UWorld* World, EGameSFX Event, const FVector& Location);
+
+	/** Returns true only after a real 3D AudioComponent is created; false includes cooldown/empty slot/load failure. */
+	static bool TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Location);
 
 	/** 拾取语音共享冷却剩余秒数；跟随当前世界游戏时间，新世界自然重置。 */
 	UFUNCTION(BlueprintPure, Category = "SFX|Pickup", meta = (WorldContext = "WorldContextObject"))
@@ -409,6 +413,12 @@ public:
 	TSoftObjectPtr<USoundBase> Voice_BeaconRecall;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice")
 	float Voice_BeaconRecallVolume = 1.f;
+
+	/** 玩家真正首次解锁自动攻击时的队友语音；制作源与授权缺口单独留档。 */
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice")
+	TSoftObjectPtr<USoundBase> Voice_PlayerAttackUnlock;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float Voice_PlayerAttackUnlock_Volume = 1.f;
 	// ---------- BGM（09-26）：循环常驻，点"开始游戏"起播 ----------
 
 	/** BGM 曲目（SoundWave 需 Looping=true——导入脚本已设） */

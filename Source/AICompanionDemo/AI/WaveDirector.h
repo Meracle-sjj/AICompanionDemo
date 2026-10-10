@@ -1,6 +1,7 @@
 /**
  * [INPUT]: 依赖 Engine 的 AActor/TimerManager/SpawnActor（0.5s 节拍与环形刷怪）、Kismet 的 GetPlayerPawn（刷怪圆心与玩家死亡监听）、本模块 EnemyGrunt（变体注入 ApplyVariant 与刷怪队列枚举）、本模块 Combatant 接口与 HealthComponent（敌人 OnDeath 绑定→全灭检测/击杀计数；玩家 OnDeath→终局）；UI/UpgradeCardView（GC保护的图文视图，视口树先于视图释放）
  * [OUTPUT]: 对外提供 AWaveDirector——L4D 导演式节奏中枢（M3.75 B2）：波次表驱动的 Break→Spawning→WaveActive→…→Finished/Failed 相位机（环形刷怪、同屏上限节流补刷、全灭晋级）+ VS 成长账本（AddXp 收集口/等级曲线，普通横排三选一/锁箱2×3六选二的图文面板接入）+ 屏幕 HUD 行（key=4：波数/活敌/击杀/等级）与事件横幅（key=5：开波/升级/胜负）+ **妖术师饱和换算（10-07 用户裁决：CountAliveWarlocks 存活计数 ≥WarlockAliveLimit(5) 时，妖术师配额整批换算为随机杂兵批次 猎犬×8/标准兵×5/蛮兵×3——后期堆积死局治理）**；升级图文卡面的候选/选择槽位/暂停状态与编辑器验收口
+ *  1.1成长契约：奖励队列保存来源/发生等级；Lv.9起玩家与AI池交替，Flip只转换当前玩家奖励；开局免费三选一独立于收费账本，猎印上限/收益从真实状态描述。原升级ID不变，新ID只追加。DebugGrowthState回读实际队列/收益/调度状态，DebugAdvanceScheduleTime仅编辑器人工时钟fixture复用正式事件路径。
  *  同批契约：64²连续探索场/33²真实地形显示；Boss死亡加入串行选择队列，九遗物由Relics组件结算；辉耀5/0.5s、每张+10，过载翻倍已有伤害；HUD稳定ID追加独特遗物与真实周期/狂暴剩余秒数。
  *  活蠕虫期间共享世界杂兵限额10/妖术师3，导演及召唤师逐只准入；超员直接退场无死亡/掉落/反馈伤害，导演自有活敌账本由OnDestroyed校正。
  * [POS]: AI/ 的玩法节奏中枢；被 GameMode 代码生成，敌人类经 SetEnemyClass 注入；升级账本按稳定枚举ID计数，显式映射UI稀有度/融合标志与HUD图标快照，不让UI解析玩法描述。
@@ -118,6 +119,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Endless")
 	void GrantFreeUpgrade();
 
+	/** 初始箱仅领取一次：免费普通三选一，不改变金币/收费箱次数/后期等级轮换。 */
+	UFUNCTION(BlueprintCallable, Category = "Endless")
+	bool TryGrantStarterUpgrade();
+
 	/** 宝箱开箱口（TreasureChest::TryOpen 经组合根调用，E3）：钱够即扣费并进三选一暂停，返回是否成功 */
 	bool TrySpendGoldForUpgrade(int32 Cost);
 
@@ -153,6 +158,7 @@ public:
 	{
 		FName UpgradeId;
 		FString Name;
+		FString Description;   /**< 已获效果真实说明；玩法层生成，HUD仅展示。 */
 		int32 Count = 1;
 		EUpgradeCardRarity Rarity = EUpgradeCardRarity::Common;
 		float CooldownRemaining = 0.f;
@@ -238,7 +244,10 @@ private:
 		PlayerScatter,     /**< 玩家散射：三向弹道 ±15° */
 		PlayerPierce,      /**< 玩家穿透：射线贯穿走廊全伤 */
 		PlayerPrism,       /**< 玩家折射：命中弹射 8m 内最近敌 70% */
-		GoldPouch          /**< 金币袋（09-30 锁箱干涸保底）：直接 +15 金——池浅时六选二的厚礼填位，无限供给 */
+		GoldPouch,         /**< 金币袋（09-30 锁箱干涸保底）：直接 +15 金 */
+		PlayerRapidFire,   /**< 1.1追加：玩家射击间隔成长 */
+		CompanionSwiftMove,/**< 1.1追加：队友最高步速成长，最多三次且不超过玩家 */
+		Flip               /**< 1.1追加：当前玩家等级奖励转换为AI奖励，不授予技能 */
 		/* DoubleJump 已摘除（09-18 用户裁决：v15 大陆无高台，卡位空出待配合类卡） */
 	};
 
@@ -252,8 +261,23 @@ private:
 		ECardRarity Rarity = ECardRarity::Common;   /**< 稀有度（09-25 用户定调"强化先分稀有度"）：决定卡面色与抽取权重乘子 */
 	};
 
-	/** 升级暂停：冻结世界 + 抽三张（锁箱=六张）+ Slate 卡面；bChestPool=锁箱大奖池（爆炸卡保底+六选二） */
-	void EnterUpgradePause(bool bChestPool = false);
+	enum class ERewardSource : uint8 { LevelUp, NormalChest, StarterChest, LockedChest, BossRelic, DebugPreview };
+	enum class ERewardPool : uint8 { Mixed, Player, AI };
+	struct FRewardChoice
+	{
+		ERewardSource Source = ERewardSource::NormalChest;
+		int32 EarnedLevel = 0;
+		int32 BossIndex = 0;
+	};
+
+	/** 入队即保留来源和发生等级，只有经验等级奖励参与后期轮换。 */
+	void EnterUpgradePause(bool bChestPool = false, ERewardSource Source = ERewardSource::NormalChest, int32 RewardLevel = 0);
+	void StartUpgradeReward(const FRewardChoice& Reward);
+	void FlipCurrentReward();
+	bool HasPlayerAttackSpeedBenefit() const;
+	bool HasCompanionMoveSpeedBenefit() const;
+	FString AcquiredCardDescription(EUpgradeId Id) const;
+	static bool IsPlayerPoolCard(EUpgradeId Id);
 
 	/** 按权重抽三张不重复（协议组同屏至多一张；通用池摘除爆炸卡——09-27 迁移锁箱） */
 	void RollOffers(bool bChestPool = false);
@@ -278,7 +302,12 @@ private:
 	void ShowRelicChoice(int32 BossIndex);
 	void SelectRelicOffer(int32 Slot);
 	void AppendRelicHudCards(FEndlessHudSnapshot& Snapshot) const;
-	TArray<int32> PendingChoices; // 0=upgrade, 1=chest, 2..4=three boss relic pools
+	TArray<FRewardChoice> PendingChoices;
+	FRewardChoice ActiveReward;
+	ERewardPool ActiveRewardPool = ERewardPool::Mixed;
+	bool bRewardFlipped = false;
+	bool bStarterUpgradeClaimed = false;
+	FString OfferFallbackNote;
 	bool bRelicPending = false;
 	EBossRelicId RelicOffers[3];
 	int32 RelicChoiceBoss = 0;
@@ -417,6 +446,20 @@ public:
 	/** 编辑器验收只读状态JSON，记录实际暂停/剩余领取/已选槽位/金币；Shipping返回空对象 */
 	UFUNCTION(BlueprintPure, Category = "Debug|UpgradeCards")
 	FString DebugUpgradeCardState() const;
+
+	/** 编辑器验收：通过正式等级奖励入口创建/排队，不改角色当前等级。 */
+	UFUNCTION(BlueprintCallable, Category = "Debug|UpgradeCards")
+	void DebugQueueLevelReward(int32 RewardLevel);
+	UFUNCTION(BlueprintPure, Category = "Debug|UpgradeCards")
+	FString DebugGrowthState() const;
+	/** 编辑器调度fixture：只推进导演调度时间并复用正式祭坛/狂暴口，不推进刷怪预算。 */
+	UFUNCTION(BlueprintCallable, Category = "Debug|Endless")
+	bool DebugAdvanceScheduleTime(float DeltaSeconds);
+	/** 包含Flip操作卡的展示ID数量；旧29个ID顺序保持不变。 */
+	UFUNCTION(BlueprintPure, Category = "Debug|UpgradeCards")
+	int32 DebugUpgradeCardCount() const { return static_cast<int32>(EUpgradeId::Flip) + 1; }
+	UFUNCTION(BlueprintPure, Category = "Debug|UpgradeCards")
+	FString DebugUpgradeCardLabel(int32 UpgradeIndex) const;
 	UFUNCTION(BlueprintPure, Category = "Debug|Relics")
 	FString DebugRelicState() const;
 	UFUNCTION(BlueprintCallable, Category = "Debug|Relics")
@@ -465,6 +508,7 @@ public:
 
 	/** 已存活分钟数（成长因子的指数底） */
 	float GetElapsedMinutes() const { return ElapsedSeconds / 60.f; }
+	void ProcessScheduledEvents();
 
 	/** 进入波间喘息：倒计时 InterWaveBreakSeconds 后开下一波 */
 	void EnterBreak();

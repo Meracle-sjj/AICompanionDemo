@@ -554,6 +554,7 @@ void UCompanionHud::RefreshValues()
 		FHudCardDisplay Display;
 		Display.UpgradeId = Card.UpgradeId;
 		Display.Name = Card.Name;
+		Display.Description = Card.Description;
 		Display.Count = Card.Count;
 		Display.Rarity = Card.Rarity;
 		Cards.Add(MoveTemp(Display));
@@ -572,8 +573,8 @@ void UCompanionHud::RefreshValues()
 			const FLinearColor RarityColor = UpgradeCardPresentation::GetRarityColor(Card.Rarity);
 			TSharedPtr<SHudSkillIcon> CardIcon;
 			TSharedRef<SOverlay> Tile = SNew(SOverlay)
-				.ToolTipText(FText::FromString(FString::Printf(TEXT("%s ×%d · %s"), *Card.Name,
-					Card.Count, UpgradeCardPresentation::GetRarityLabel(Card.Rarity))))
+				.ToolTipText(FText::FromString(FString::Printf(TEXT("%s ×%d · %s\n%s"), *Card.Name,
+					Card.Count, UpgradeCardPresentation::GetRarityLabel(Card.Rarity), *Card.Description)))
 				+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
 				[
 					SAssignNew(CardIcon, SHudSkillIcon)
@@ -730,9 +731,9 @@ FString UCompanionHud::DebugSkillIconState() const
 		const FLinearColor Ring = UpgradeCardPresentation::GetRarityColor(Card.Rarity);
 		const TObjectPtr<UTexture2D>* Texture = IconTextures.Find(Card.UpgradeId);
 		Cards += FString::Printf(TEXT("{\"id\":%s,\"name\":%s,\"count\":%d,\"rarity\":%d,"
-			"\"ring_rgba\":[%.4f,%.4f,%.4f,%.4f],\"texture_alive\":%s}"),
+			"\"description\":%s,\"ring_rgba\":[%.4f,%.4f,%.4f,%.4f],\"texture_alive\":%s}"),
 			*JsonString(Card.UpgradeId.ToString()), *JsonString(Card.Name), Card.Count,
-			static_cast<int32>(Card.Rarity), Ring.R, Ring.G, Ring.B, Ring.A,
+			static_cast<int32>(Card.Rarity), *JsonString(Card.Description), Ring.R, Ring.G, Ring.B, Ring.A,
 			Texture && IsValid(Texture->Get()) ? TEXT("true") : TEXT("false"));
 	}
 	Cards += TEXT("]");

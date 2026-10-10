@@ -113,3 +113,5 @@ Audio/（音效基建，2026-09-25 起）：
 - Audio/SFXLibrary的BossImpact独立CC0真实爆炸槽/default1.0音量，虫入土破土与巨像敲地调用；Config显式AlwaysCook新Content/SFX/Boss。Ending稳定资源路径重导入v3（去飘带/佩剑、空手战损），源版本与提示词全保留。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+
+2026-10-10 1.1新成员（实施中，验证另留证）：Events/RunEventLog.h/.cpp为每世界100条真实字幕/事件的UWorldSubsystem，细约定见Events/AGENTS.md；UI/RunEventPanel展示同源记录。GameMode/PlayerController统一暂停和显示设置，ApplicationActivation事件EndPlay注销；暂停不解除奖励零流速。AI移动读取PFC当前目标，不扫描已走路点。Build.cs新增Json用于记录UI的实际状态回读；Audio新增Lv6独立空间语音与成功返回口，固定语音离线制作而非实时LLM调用。

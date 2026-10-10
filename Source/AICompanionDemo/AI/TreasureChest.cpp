@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 TreasureChest.h 的组件契约、Engine 的 StaticMesh/MaterialInstanceDynamic（/Engine 基础立方体 + BasicShapeMaterial 染色，参数真名 "Color"——09-12 实证）、DrawDebugHelpers（提示与爆闪）、Kismet 的 GetPlayerPawn/GetGameMode（玩家距离与组合根）、本模块 Audio/SFXLibrary（ChestOpen 事件音效）
- * [OUTPUT]: 对外提供 ATreasureChest 的实现——接近提示（250cm 内头顶"按 E 开箱（N 金）"）→ TryOpen：经 GameMode→WaveDirector::TrySpendGoldForUpgrade 扣费并进入三选一暂停 → 开箱表现（染灰/盖抬/爆闪）；碰撞全关（纯距离判定，拾取物同族哲学）
+ * [OUTPUT]: 普通箱动态收费；初始箱自有金色闪光/MID与免费提示，TryGrantStarterUpgrade免费三选一不计收费箱。E交互/已开门控/开箱反馈共用，原Fab材质与资源不改。
  * [POS]: AI/ 的道具交互代表件实现；交互输入在玩家 Character（E 键边沿），开箱账本在 WaveDirector，本类只管"门面与状态"——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,6 +12,7 @@
 #include "AICompanionDemoGameMode.h"
 #include "Audio/SFXLibrary.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -64,6 +65,63 @@ ATreasureChest::ATreasureChest()
 		LidMesh->SetMaterial(0, BasicMatFinder.Object);
 	}
 	LidMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 免费箱独立表现组件，BasicShapeMaterial/MID归本Actor；原Fab箱材质不覆写。
+	StarterGlowMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StarterGlowMesh"));
+	StarterGlowMesh->SetupAttachment(RootComponent);
+	StarterGlowMesh->SetRelativeLocation(FVector(0.f, 0.f, 110.f));
+	StarterGlowMesh->SetRelativeScale3D(FVector(0.16f));
+	StarterGlowMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereFinder(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereFinder.Succeeded()) { StarterGlowMesh->SetStaticMesh(SphereFinder.Object); }
+	if (BasicMatFinder.Succeeded()) { StarterGlowMesh->SetMaterial(0, BasicMatFinder.Object); }
+	StarterGlowMesh->SetVisibility(false);
+	StarterLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("StarterLight"));
+	StarterLight->SetupAttachment(RootComponent);
+	StarterLight->SetRelativeLocation(FVector(0.f, 0.f, 120.f));
+	StarterLight->SetLightColor(FLinearColor(1.f, 0.78f, 0.15f));
+	StarterLight->SetIntensity(1000.f);
+	StarterLight->SetAttenuationRadius(550.f);
+	StarterLight->SetCastShadows(false);
+	StarterLight->SetVisibility(false);
+}
+
+void ATreasureChest::ConfigureStarterChest()
+{
+	if (bOpened) { return; }
+	bStarterChest = true;
+	StarterGlowMesh->SetVisibility(true);
+	StarterLight->SetVisibility(true);
+	StarterGlowMaterial = StarterGlowMesh->CreateAndSetMaterialInstanceDynamic(0);
+	if (StarterGlowMaterial) { StarterGlowMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.f, 0.78f, 0.15f)); }
+}
+
+FString ATreasureChest::DebugChestState() const
+{
+#if WITH_EDITOR
+	const AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr;
+	const AWaveDirector* Director = GM ? GM->GetWaveDirector() : nullptr;
+	const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
+	const bool bNearby = Hero && FVector::DistSquared(Hero->GetActorLocation(), GetActorLocation()) <= FMath::Square(InteractRadius);
+	return FString::Printf(TEXT("{\"starter\":%s,\"opened\":%s,\"price\":%d,\"gold\":%d,\"paidChestCount\":%d,\"glow\":%s,\"nearby\":%s,\"interactRadius\":%.3f}"),
+		bStarterChest ? TEXT("true") : TEXT("false"), bOpened ? TEXT("true") : TEXT("false"),
+		bStarterChest ? 0 : (Director ? Director->GetNextChestCost() : OpenCost), Director ? Director->GetGold() : -1,
+		Director ? Director->ChestOpenCount : -1, StarterGlowMesh && StarterGlowMesh->IsVisible() ? TEXT("true") : TEXT("false"),
+		bNearby ? TEXT("true") : TEXT("false"), InteractRadius);
+#else
+	return TEXT("{}");
+#endif
+}
+
+bool ATreasureChest::DebugTryOpen()
+{
+#if WITH_EDITOR
+	const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!Hero || FVector::DistSquared(Hero->GetActorLocation(), GetActorLocation()) > FMath::Square(InteractRadius)) { return false; }
+	return TryOpen();
+#else
+	return false;
+#endif
 }
 
 bool ATreasureChest::ApplyMeshOverride()
@@ -145,6 +203,13 @@ void ATreasureChest::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	if (bStarterChest)
+	{
+		StarterGlowPhase += DeltaSeconds * 3.f;
+		const float Pulse = 0.75f + 0.25f * FMath::Sin(StarterGlowPhase);
+		StarterLight->SetIntensity(1000.f * Pulse);
+		if (StarterGlowMaterial) { StarterGlowMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(Pulse, Pulse * 0.78f, 0.15f)); }
+	}
 
 	// 接近提示：头顶浮"按 E 开箱（N 金）"——交互邀请的可视语言
 	const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
@@ -157,9 +222,9 @@ void ATreasureChest::Tick(float DeltaSeconds)
 		// 09-25 动态价（用户定调"开得越多越贵"对冲金币常规化）：显示与扣费同源——导演的下一口价格
 		const AAICompanionDemoGameMode* GameModeHint = Cast<AAICompanionDemoGameMode>(UGameplayStatics::GetGameMode(this));
 		const AWaveDirector* DirectorHint = GameModeHint ? GameModeHint->GetWaveDirector() : nullptr;
-		const int32 Price = DirectorHint ? DirectorHint->GetNextChestCost() : OpenCost;
+		const int32 Price = bStarterChest ? 0 : (DirectorHint ? DirectorHint->GetNextChestCost() : OpenCost);
 		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 60.f),
-			FString::Printf(TEXT("按 E 开箱（%d 金）"), Price),
+			bStarterChest ? TEXT("按 E 领取初始补给（免费 · 仅一次）") : FString::Printf(TEXT("按 E 开箱（%d 金）"), Price),
 			this, FColor::Yellow, 0.f, /*bDrawShadow*/ false, /*FontScale*/ 1.1f);
 	}
 }
@@ -182,9 +247,11 @@ bool ATreasureChest::TryOpen()
 	APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
 
 	// 09-25 动态价：全局递增（首箱 3 金，每开一口 +2）——金币常规化后的经济对冲（MegaBonk 参考曲线，社区共识"越开越贵"）
-	const int32 Price = Director->GetNextChestCost();
-	if (!Director->TrySpendGoldForUpgrade(Price))
+	const int32 Price = bStarterChest ? 0 : Director->GetNextChestCost();
+	const bool bGranted = bStarterChest ? Director->TryGrantStarterUpgrade() : Director->TrySpendGoldForUpgrade(Price);
+	if (!bGranted)
 	{
+		if (bStarterChest) { return false; }
 		// 钱不够：头顶飘差额——"攒钱再来"的经济张力
 		if (PlayerPawn)
 		{
@@ -197,12 +264,14 @@ bool ATreasureChest::TryOpen()
 	}
 
 	bOpened = true;
+	StarterGlowMesh->SetVisibility(false);
+	StarterLight->SetVisibility(false);
 	PlayOpenFx();
 	USFXLibrary::PlaySFX(GetWorld(), EGameSFX::ChestOpen);   // [SFX] 开箱成功（扣费后才响——钱不够不出声）
 	// 09-25 用户裁决：开箱后宝箱直接消失——原地留一具"开过的箱子"让玩家迷惑能不能再开；
 	// 延迟 0.9s 销毁让爆闪（0.5s）演完再走
 	SetLifeSpan(0.9f);
-	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Chest] 开箱！消耗 %d 金，进入三选一（0.9s 后消失）"), OpenCost);
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Chest] %s开箱！消耗 %d 金，进入三选一（0.9s 后消失）"), bStarterChest ? TEXT("初始免费箱") : TEXT("普通箱"), Price);
 	return true;
 }
 

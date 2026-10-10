@@ -1,5 +1,5 @@
 /**
- * [INPUT]: UpgradeCardView.h 展示契约、UpgradeCardPresentation 的38项元数据/纹理与四类调色、Slate 图文布局和原生几何绘制、运行时 WhiteBrush
+ * [INPUT]: UpgradeCardView.h 展示契约、UpgradeCardPresentation 的41项元数据/既有纹理与四类调色、Slate图文布局/原生几何、宿主真实动态描述
  * [OUTPUT]: 蓝/紫/金升级卡与金边深红独特遗物卡；融合传说右上金红大拇指；无字图与文案分离；普通304×488/图272，锁箱304×410/图220；ScaleToFit/DownOnly、领取禁用、工具提示与缺图告警
  * [POS]: UI/ 纯展示实现；Build 只消费 FUpgradeCardOption，OnClicked 只执行 OnSelected。UObject/纹理/brush/style 的生命周期由持有此视图的宿主保证
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
@@ -30,6 +30,33 @@ namespace
 	{
 		return static_cast<int32>(Rarity);
 	}
+
+	/** Flip只是宿主提供的操作卡，视图仅绘制双向箭头，不持有转换/奖励状态。 */
+	class SRewardPoolSwitchSymbol : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SRewardPoolSwitchSymbol) {}
+		SLATE_END_ARGS()
+		void Construct(const FArguments&) { SetCanTick(false); }
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(256.f, 256.f); }
+		virtual int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FSlateRect&,
+			FSlateWindowElementList& Elements, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const FVector2f Scale = FVector2f(Geometry.GetLocalSize()) / 64.f;
+			const ESlateDrawEffect Effects = ShouldBeEnabled(bParentEnabled) ? ESlateDrawEffect::None : ESlateDrawEffect::DisabledEffect;
+			auto DrawStroke = [&](TArray<FVector2f> Points, const FLinearColor& Color)
+			{
+				for (FVector2f& Point : Points) { Point = Point * Scale; }
+				FSlateDrawElement::MakeLines(Elements, Layer, Geometry.ToPaintGeometry(), MoveTemp(Points),
+					Effects, Color * Style.GetColorAndOpacityTint(), true, 5.f);
+			};
+			DrawStroke({ {12.f,24.f}, {49.f,24.f}, {40.f,15.f} }, FLinearColor(0.24f,0.75f,1.f));
+			DrawStroke({ {49.f,24.f}, {40.f,33.f} }, FLinearColor(0.24f,0.75f,1.f));
+			DrawStroke({ {52.f,43.f}, {15.f,43.f}, {24.f,52.f} }, FLinearColor(0.78f,0.45f,1.f));
+			DrawStroke({ {15.f,43.f}, {24.f,34.f} }, FLinearColor(0.78f,0.45f,1.f));
+			return Layer;
+		}
+	};
 
 	/** 原生几何印记；不依赖 emoji 字体/外部贴图，也不接收点击。 */
 	class SFusionRecommendationSeal : public SLeafWidget
@@ -162,7 +189,10 @@ TSharedRef<SWidget> UUpgradeCardView::MakeCard(const FUpgradeCardOption& Option,
 	const FString Description = !Option.ShortDescriptionOverride.IsEmpty() ? Option.ShortDescriptionOverride
 		: (Metadata ? FString(Metadata->ShortDescription) : Option.FullDescription);
 	const float ArtSize = bChest ? 220.f : 272.f;
-	const FSlateBrush* ArtBrush = ResolveBrush(Option.UpgradeId);
+	const bool bFlipArt = Option.UpgradeId == FName(TEXT("Flip"));
+	const FSlateBrush* ArtBrush = bFlipArt ? nullptr : ResolveBrush(Option.UpgradeId);
+	TSharedRef<SWidget> Artwork = SNew(SImage).Image(ArtBrush);
+	if (bFlipArt) { Artwork = SNew(SRewardPoolSwitchSymbol); }
 	const FSimpleDelegate OnSelected = Option.OnSelected;
 	const FLinearColor RarityColor = UpgradeCardPresentation::GetRarityColor(Option.Rarity);
 	const FLinearColor BorderColor = RarityColor * (Option.bTaken ? 0.28f : 0.90f);
@@ -188,7 +218,7 @@ TSharedRef<SWidget> UUpgradeCardView::MakeCard(const FUpgradeCardOption& Option,
 						[
 							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::Both)
 							[
-								SNew(SImage).Image(ArtBrush)
+								Artwork
 							]
 						]
 					]

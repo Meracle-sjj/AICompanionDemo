@@ -1,6 +1,6 @@
 ﻿/**
- * [INPUT]: UpgradeCardPresentation.h、29升级/9遗物的独立标题/短说明；UpgradeCards/BossRelics纹理路径
- * [OUTPUT]: 蓝/紫/金与独特金红统一调色与标签；选择页/HUD共用38项稳定ID；感电20/40下限、玩家穿透折射协同与闪现继承状态同步玩法默认
+ * [INPUT]: UpgradeCardPresentation.h、32成长展示ID/9遗物的独立标题/短说明；已有UpgradeCards/BossRelics纹理路径；Flip无外部纹理
+ * [OUTPUT]: 选择页/HUD共用41项稳定ID，原29升级ID保留；新增本体速射/陪伴疾行，Flip明确本次转换；猎印真实动态说明由宿主覆盖静态短句
  * [POS]: UI/ 无状态展示资料实现；不加载 UObject，不决定卡池稀有度或融合资格
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
  */
@@ -34,12 +34,16 @@ namespace
 		{ TEXT("ShockShot"), TEXT("感电弹"), TEXT("元素"), TEXT("每个主命中赠70%分叉\n两端传导至少20伤或本弹30%。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_ShockShot_v1.T_Upgrade_ShockShot_v1") },
 		{ TEXT("HuntMark"), TEXT("猎杀印记"), TEXT("元素"), TEXT("你的命中叠加印记\n队友命中引爆额外伤害。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_HuntMark_v1.T_Upgrade_HuntMark_v1") },
 		{ TEXT("ShockOverload"), TEXT("感电过载"), TEXT("深化"), TEXT("两端基础传导提升至40\n或本弹55%伤害，取高。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_ShockOverload_v1.T_Upgrade_ShockOverload_v1") },
-		{ TEXT("MarkMaster"), TEXT("猎杀大师"), TEXT("深化"), TEXT("印记上限设为 5 层\n每层处决造成 22 伤害。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_MarkMaster_v1.T_Upgrade_MarkMaster_v1") },
+		{ TEXT("MarkMaster"), TEXT("猎杀大师"), TEXT("深化"), TEXT("印记上限至少 5 层\n保留成长，每层处决22伤。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_MarkMaster_v1.T_Upgrade_MarkMaster_v1") },
 		{ TEXT("FrostDeep"), TEXT("深度冻结"), TEXT("深化"), TEXT("你的冰弹减速 60%\n持续 4s。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_FrostDeep_v1.T_Upgrade_FrostDeep_v1") },
 		{ TEXT("PlayerScatter"), TEXT("玩家散射"), TEXT("弹道"), TEXT("你的射击分裂三向\n侧弹造成 70% 伤害。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_PlayerScatter_v1.T_Upgrade_PlayerScatter_v1") },
 		{ TEXT("PlayerPierce"), TEXT("玩家穿透"), TEXT("弹道"), TEXT("贯穿敌群保留全额伤害\n可与玩家折射共同强化。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_PlayerPierce_v1.T_Upgrade_PlayerPierce_v1") },
 		{ TEXT("PlayerPrism"), TEXT("玩家折射"), TEXT("弹道"), TEXT("每个贯穿命中单跳70%\n全弹目标去重，分支不递归。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_PlayerPrism_v2.T_Upgrade_PlayerPrism_v2") },
 		{ TEXT("GoldPouch"), TEXT("金币袋"), TEXT("厚礼"), TEXT("立即获得 15 金币\n锁箱卡池干涸时填位。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_GoldPouch_v1.T_Upgrade_GoldPouch_v1") },
+		// 1.1追加展示；复用既有插图，不新增或改写Content素材。Flip使用视图自有双箭头几何。
+		{ TEXT("PlayerRapidFire"), TEXT("本体速射"), TEXT("玩家成长"), TEXT("你的射击间隔 ×0.85\n最低0.15秒，到限离池。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_RapidFire_v1.T_Upgrade_RapidFire_v1") },
+		{ TEXT("CompanionSwiftMove"), TEXT("陪伴疾行"), TEXT("玩家成长·协作"), TEXT("队友移速提升10%\n最多3次，不快于玩家。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_SwiftMove_v1.T_Upgrade_SwiftMove_v1") },
+		{ TEXT("Flip"), TEXT("Flip · 转交队友"), TEXT("本次操作"), TEXT("改抽本次AI升级池\n不领取、不改变下次归属。"), nullptr },
 		{ TEXT("BloodLink"), TEXT("血誓共鸣"), TEXT("召唤师遗物"), TEXT("距队友8m内，弹道实际伤害\n的25%转化为你的生命。"), TEXT("/Game/UI/BossRelics/T_Relic_BloodLink_v1.T_Relic_BloodLink_v1") },
 		{ TEXT("SpiritFrenzy"), TEXT("不灭执念"), TEXT("召唤师遗物"), TEXT("队友每20s狂暴5s\n狂暴药剂持续时间+50%。"), TEXT("/Game/UI/BossRelics/T_Relic_SpiritFrenzy_v1.T_Relic_SpiritFrenzy_v1") },
 		{ TEXT("MovingFireball"), TEXT("逐焰灵核"), TEXT("召唤师遗物"), TEXT("累计步行15m射出火球\n命中爆炸：3m内30伤。"), TEXT("/Game/UI/BossRelics/T_Relic_MovingFireball_v1.T_Relic_MovingFireball_v1") },

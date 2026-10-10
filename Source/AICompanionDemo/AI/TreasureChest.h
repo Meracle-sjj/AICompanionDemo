@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Engine 的 AActor/UStaticMeshComponent（/Engine 基础立方体）与 Tick、Kismet 的 GetPlayerPawn/GetGameMode（金币钱包与升级中枢查询）、本模块 WaveDirector（TrySpendGoldForUpgrade——开箱进三选一暂停）、DrawDebugString（交互提示）
- * [OUTPUT]: 对外提供 ATreasureChest——宝箱（M3.75 E3，用户 2026-09-13 提案）：场景固定摆件，玩家走近提示、按 E 消耗金币开启 → 经 WaveDirector 进入三选一升级暂停；开箱后箱体变暗+盖条抬起，不可重复
+ * [OUTPUT]: ATreasureChest普通收费箱及ConfigureStarterChest初始免费箱；免费提示/自有金光球与灯光闪烁，不修改原材质。两类均经导演三选一，已开不可重复；初始箱不改变金币/收费计数。编辑器DebugTryOpen复验实际距离后调用正式TryOpen，DebugChestState只读身份/钱包/附近状态。
  * [POS]: AI/ 的道具交互代表件（宝箱经济的消费终端）；被 GameMode BeginPlay 代码生成于固定点（D6 范式），交互输入在玩家侧（Character Tick E 键边沿），开箱账本在 WaveDirector——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,8 @@
 
 class UStaticMeshComponent;
 class AWaveDirector;
+class UPointLightComponent;
+class UMaterialInstanceDynamic;
 
 UCLASS(Config = Game)
 class AICOMPANIONDEMO_API ATreasureChest : public AActor
@@ -37,6 +39,15 @@ public:
 
 	/** 是否已被打开 */
 	bool IsOpened() const { return bOpened; }
+
+	/** 组合根正常局装配口，可在SpawnActor之后调用；只改变此箱的奖励身份与自有表现。 */
+	UFUNCTION(BlueprintCallable, Category = "Chest")
+	void ConfigureStarterChest();
+	UFUNCTION(BlueprintPure, Category = "Debug|Chest")
+	FString DebugChestState() const;
+	/** 编辑器验收桥：复验玩家距离，之后调用正式TryOpen；非编辑器不执行。 */
+	UFUNCTION(BlueprintCallable, Category = "Debug|Chest")
+	bool DebugTryOpen();
 
 	// ---------- 外观换装（Fab 素材，2026-09-18；语义见 XpPickup 同名块） ----------
 
@@ -63,6 +74,15 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UStaticMeshComponent> LidMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "Chest")
+	TObjectPtr<UStaticMeshComponent> StarterGlowMesh;
+	UPROPERTY(VisibleAnywhere, Category = "Chest")
+	TObjectPtr<UPointLightComponent> StarterLight;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> StarterGlowMaterial;
+	bool bStarterChest = false;
+	float StarterGlowPhase = 0.f;
 
 	/** 已开：不可重复交互 */
 	bool bOpened = false;

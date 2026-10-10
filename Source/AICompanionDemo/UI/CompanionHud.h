@@ -82,12 +82,13 @@ private:
 	{
 		FName UpgradeId;
 		FString Name;
+		FString Description;
 		int32 Count = 1;
 		EUpgradeCardRarity Rarity = EUpgradeCardRarity::Common;
 		bool operator==(const FHudCardDisplay& Other) const
 		{
 			return UpgradeId == Other.UpgradeId && Name == Other.Name &&
-				Count == Other.Count && Rarity == Other.Rarity;
+				Count == Other.Count && Rarity == Other.Rarity && Description == Other.Description;
 		}
 	};
 

@@ -1,12 +1,13 @@
 /**
  * [INPUT]: 依赖 AIModule 的 MoveToActor/PathFollowingComponent/AIPerceptionComponent/AISenseConfig_Sight/AISense_Sight、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息/DrawDebugLine/LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、本模块 HealthComponent（玩家血量行与残血分）、本模块 Audio/SFXLibrary（Shot_Companion/Hit_Enemy/Explosion 事件音效）
- * [OUTPUT]: 对外提供 M3 行为实现——UpdateBrain 决策体（状态迁移 + ENTER/SWITCH 审计日志 + 走射行动：FireTimer 与寻路并行，站桩已废）、EvaluateTargets 三维评分器（威胁 = 距离近似 + 咬人仇恨覆盖，修复贴脸混战时距离分满格失明的退化）、DrawScoreboard 屏幕评分板、HandlePerceptionUpdated 感知回调、FireAtTarget 射击节拍、FeedMovementInput 步态馈送（D7 路点版 + A4 方向平滑）；M3.75 增补 Bark 台词播报（六类事件钩点——09-27 换目标播报退役，击杀播报挂连杀闸 5s/10 杀；全局+分类双冷却；09-26 换装头顶 3D 气泡、09-27 配音经 PlayVoice 空间化在队友身上）；E5 增补 ActivateFrenzy/RestoreFireRate（暂态狂怒攻速：开火间隔系数槽 + 弹道紫，定时自恢复——TemporaryPickup 触发）；**火力结算层候选集一律 CollectAliveCombatants 契约收集**（走廊命中/溅射/折射弹跳——09-30 召唤师案定罪 TActorIterator<AEnemyGrunt> 类型扫描把 ABossBase 排除在命中集外=弹道穿体不掉血；冰/电残留仍限定EnemyGrunt；猎印按ICombatant叠层/消费，覆盖Boss家族）
+ * [OUTPUT]: 对外提供 M3 行为实现——UpdateBrain 决策体（状态迁移 + ENTER/SWITCH 审计日志 + 走射行动：FireTimer 与寻路并行，站桩已废）、EvaluateTargets 三维评分器（威胁 = 距离近似 + 咬人仇恨覆盖，修复贴脸混战时距离分满格失明的退化）、DrawScoreboard 屏幕评分板、HandlePerceptionUpdated 感知回调、FireAtTarget 射击节拍、FeedMovementInput当前路径段馈送与同目标MoveTo去重（1.1）；M3.75 增补 Bark 台词播报（六类事件钩点——09-27 换目标播报退役，击杀播报挂连杀闸 5s/10 杀；全局+分类双冷却；09-26 换装头顶 3D 气泡、09-27 配音经 PlayVoice 空间化在队友身上）；E5 增补 ActivateFrenzy/RestoreFireRate（暂态狂怒攻速：开火间隔系数槽 + 弹道紫，定时自恢复——TemporaryPickup 触发）；**火力结算层候选集一律 CollectAliveCombatants 契约收集**（走廊命中/溅射/折射弹跳——09-30 召唤师案定罪 TActorIterator<AEnemyGrunt> 类型扫描把 ABossBase 排除在命中集外=弹道穿体不掉血；冰/电残留仍限定EnemyGrunt；猎印按ICombatant叠层/消费，覆盖Boss家族）
  *  火力/感电配对已抽到CompanionCombatShots；本文件保留Q护卫/歼灭切换与决策。伤害/治疗加成由Health唯一入口消费helper，弹路不重复乘算。
  * [POS]: Source/AICompanionDemo/AI 的决策核心实现；驱动CompanionCharacter、经ICombatant感知与攻击；2026-10-08移除常驻AI目标/状态调试行，真实决策日志与默认关闭的评分板保留为调试证据。
  * [PROTOCOL]: 变更时更新此头部，然后检查../AGENTS.md
  */
 
 #include "CompanionAIController.h"
+#include "Events/RunEventLog.h"
 #include "Relics/BossRelicComponent.h"
 
 #include "AICompanionDemo.h"
@@ -37,10 +38,6 @@
 
 namespace
 {
-	// 路点切换阈值：路径点按起点→终点有序排列，距队友小于此值的视为"身后已通过"路点，
-	// 喂输入取第一个前方路点——沿路走（绕障）而非抄直线（D7 代价修复）
-	constexpr float kWaypointSwitchDist = 80.f;
-
 	// 视线起点在胶囊上的抬升：接近"眼高"，避免地面杂物干扰 Visibility 通道
 	constexpr float kEyeHeightOffset = 80.f;
 
@@ -380,13 +377,13 @@ void ACompanionAIController::UpdateBrain()
 	if (CurrentMode == ECompanionMode::Berserk && Target && PlayerPawn)
 	{
 		// 歼灭：评分最优目标就是目的地——走射逼近（2026-09-05 用户定调：狂人是取舍不是错误）
-		MoveToActor(Target, 250.f, /*bStopOnOverlap*/ true, /*bUsePathfinding*/ true, /*bProjectDestinationToNavigation*/ true);
+		EnsureMoveRequest(Target, EngageApproachDist);
 	}
 	else if (PlayerPawn)
 	{
 		// 护卫（默认）：移动层永远归玩家——与玩家同步移动，火力交 FireTimer 在射程内自动输出；
 		// 敌人的猎手模型（追玩家）把它们自己送进火力圈，护卫无需追击（2026-09-05 "守护优先"定调）
-		MoveToActor(PlayerPawn, FollowAcceptanceRadius, /*bStopOnOverlap*/ true, /*bUsePathfinding*/ true, /*bProjectDestinationToNavigation*/ true);
+		EnsureMoveRequest(PlayerPawn, FollowAcceptanceRadius);
 	}
 
 	// A1 台词：玩家低血量边沿（跌破 30% 播一次，回升重置）——护伙伴人格的"撑住"时刻
@@ -579,83 +576,57 @@ void ACompanionAIController::FireAtTarget()
 	}
 }
 
+void ACompanionAIController::EnsureMoveRequest(AActor* Goal, float Acceptance)
+{
+	UPathFollowingComponent* Path = GetPathFollowingComponent();
+	if (!Goal || !Path) { return; }
+	const EPathFollowingStatus::Type Status = Path->GetStatus();
+	if (RequestedMoveGoal == Goal && FMath::IsNearlyEqual(RequestedAcceptance, Acceptance)
+		&& (Status == EPathFollowingStatus::Moving || Status == EPathFollowingStatus::Waiting)) { return; }
+	if (Path->HasReached(*Goal, EPathFollowingReachMode::OverlapAgentAndGoal, Acceptance))
+	{
+		if (Status != EPathFollowingStatus::Idle) { StopMovement(); }
+		return;
+	}
+	RequestedMoveGoal = Goal;
+	RequestedAcceptance = Acceptance;
+	++MovementRequestCount;
+	MoveToActor(Goal, Acceptance, true, true, true); // 第五参为CanStrafe；移动Actor路径由PFC观察并更新。
+}
+
 void ACompanionAIController::FeedMovementInput(float DeltaSeconds)
 {
 	APawn* MyPawn = GetPawn();
-	if (!MyPawn)
-	{
-		return;
-	}
-
-	// 步态目的地按模式分派：狂人+有目标=当前目标（停喂线=狂人逼近线）；护卫/无目标=玩家（停喂线=接受半径）
-	const AActor* Goal = nullptr;
-	float StopDist = FollowAcceptanceRadius;
-	if (CurrentMode == ECompanionMode::Berserk && CurrentState == ECompanionState::Engage)
-	{
-		if (const AActor* Enemy = EngageTarget.Get())
-		{
-			const ICombatant* Combatant = Cast<ICombatant>(Enemy);
-			if (Combatant && !Combatant->IsDead())
-			{
-				Goal = Enemy;
-				StopDist = EngageApproachDist;
-			}
-		}
-	}
-	if (!Goal)
-	{
-		Goal = UGameplayStatics::GetPlayerPawn(this, 0);
-	}
-	if (!Goal)
-	{
-		return;
-	}
-
-	const FVector ToGoal = Goal->GetActorLocation() - MyPawn->GetActorLocation();
-	if (ToGoal.Size2D() <= StopDist)
-	{
-		return;  // 到位：停喂，加速度归零，ABP 自然回 Idle
-	}
-
-	// 喂的方向：优先寻路路径的下一个前方路点（绕障），无路径兜底直线朝目标
-	FVector FeedTarget = Goal->GetActorLocation();
-	if (const UPathFollowingComponent* PathFollowing = GetPathFollowingComponent())
-	{
-		const FNavigationPath* NavPath = PathFollowing->GetPath().Get();
-		if (NavPath && PathFollowing->GetStatus() == EPathFollowingStatus::Moving && NavPath->GetPathPoints().Num() > 0)
-		{
-			const TArray<FNavPathPoint>& Points = NavPath->GetPathPoints();
-			FVector NextPoint = Points.Last().Location;
-			for (const FNavPathPoint& Point : Points)
-			{
-				if (FVector::DistSquared2D(Point.Location, MyPawn->GetActorLocation()) > FMath::Square(kWaypointSwitchDist))
-				{
-					NextPoint = Point.Location;
-					break;
-				}
-			}
-			FeedTarget = NextPoint;
-		}
-	}
-
-	// A4 方向平滑：目标方向（直线或路点）经指数插值再喂入——路点/目标切换的方向瞬变
-	// 被磨平为连续转向，跟随不再"一顿一顿"（STATUS 已知待办①清账，FeedDirTurnSpeed 可调）
-	const FVector DesiredDir = (FeedTarget - MyPawn->GetActorLocation()).GetSafeNormal2D();
+	const UPathFollowingComponent* Path = GetPathFollowingComponent();
+	if (!MyPawn || !Path || Path->GetStatus() != EPathFollowingStatus::Moving) { return; }
+	// 当前目标由PFC推进，绝不从路径起点重扫；无有效路径时不以直线输入绕过导航失败。
+	const FVector DesiredDir = (Path->GetCurrentTargetLocation() - MyPawn->GetActorLocation()).GetSafeNormal2D();
+	if (DesiredDir.IsNearlyZero()) { return; }
 	SmoothedFeedDir = FMath::VInterpTo(SmoothedFeedDir, DesiredDir, DeltaSeconds, FeedDirTurnSpeed);
 	FVector FeedDir = SmoothedFeedDir.GetSafeNormal2D();
-	if (FeedDir.IsNearlyZero())
-	{
-		FeedDir = DesiredDir;  // 极端反向插值过零：直接对齐，不空转一帧
-	}
-
-	// D7：满额输入点亮 ABP 步态（与玩家同管线），速度受 MaxWalkSpeed 钳制
+	if (FeedDir.IsNearlyZero()) { FeedDir = DesiredDir; }
 	MyPawn->AddMovementInput(FeedDir, 1.f);
+}
+
+FString ACompanionAIController::DebugMovementState() const
+{
+	const UPathFollowingComponent* Path = GetPathFollowingComponent();
+	const ACharacter* ControlledCharacter = Cast<ACharacter>(GetPawn());
+	const UCharacterMovementComponent* CMC = ControlledCharacter ? ControlledCharacter->GetCharacterMovement() : nullptr;
+	const FVector Position = ControlledCharacter ? ControlledCharacter->GetActorLocation() : FVector::ZeroVector;
+	const FVector Velocity = ControlledCharacter ? ControlledCharacter->GetVelocity() : FVector::ZeroVector;
+	const FVector Target = Path ? Path->GetCurrentTargetLocation() : FVector::ZeroVector;
+	return FString::Printf(TEXT("{\"requests\":%d,\"pathStatus\":%d,\"segment\":%d,\"nextSegment\":%d,\"position\":[%.3f,%.3f,%.3f],\"velocity\":[%.3f,%.3f,%.3f],\"speed\":%.3f,\"accel\":%.3f,\"maxSpeed\":%.3f,\"target\":[%.3f,%.3f,%.3f]}"),
+		MovementRequestCount, Path?int32(Path->GetStatus()):0, Path?Path->GetCurrentPathIndex():-1, Path?Path->GetNextPathIndex():-1,
+		Position.X, Position.Y, Position.Z, Velocity.X, Velocity.Y, Velocity.Z, Velocity.Size2D(), CMC?CMC->GetCurrentAcceleration().Size():0.f, CMC?CMC->MaxWalkSpeed:0.f,
+		Target.X, Target.Y, Target.Z);
 }
 
 void ACompanionAIController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	if (!GetWorld() || GetWorld()->IsPaused() || UGameplayStatics::GetGlobalTimeDilation(this) < .01f) { return; }
 	FeedMovementInput(DeltaSeconds);
 
 	// Q 键边沿检测切换模式（零资产依赖：IsInputKeyDown 直读玩家输入，demo 单键的最小实现；
@@ -723,5 +694,6 @@ void ACompanionAIController::Bark(const FString& Line, const FName Category, con
 			USFXLibrary::PlayVoice(GetWorld(), Voice, VoicedPawn->GetActorLocation() + FVector(0.f, 0.f, 60.f));
 		}
 	}
+	URunEventLog::Publish(GetWorld(), TEXT("队友"), Line, Category);
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Companion][Bark] %s"), *Line);
 }

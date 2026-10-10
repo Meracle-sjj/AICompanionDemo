@@ -1,6 +1,6 @@
 /**
- * [INPUT]: StartMenu.h 的纹理/brush/style 生命周期、无字合作封面、Slate 叶控件绘制/渐变/等比布局与官方默认复合字体；GameMode 的三个既有回调契约
- * [OUTPUT]: 1920×1080设计画布等比适配的封面页；图片不裁切，左侧渐变保证标题/引导/双入口可读；独立2027届秋招作品与制作周期标注，缺图保留菜单；移除旧自动截图
+ * [INPUT]: StartMenu纹理/brush/style生命周期、无字合作封面、Slate等比布局与复合字体；GameMode开始/测试/显示设置接口
+ * [OUTPUT]: 可焦点1920×1080等比封面页；左侧开始/测试入口，下方同排显示设置与退出，保留作品/制作周期标注与缺图菜单
  * [POS]: UI/ 开场展示实现。SStartMenuBackdrop只绘制背景，冻结/输入/测试模式仍由GameMode管理；所有文字均为Slate控件，封面不烘焙文字
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
  */
@@ -87,6 +87,11 @@ namespace
 	private:
 		const FSlateBrush* ArtBrush = nullptr;
 	};
+}
+
+UStartMenu::UStartMenu(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
+{
+	SetIsFocusable(true);
 }
 
 void UStartMenu::BindHost(AAICompanionDemoGameMode* InHost)
@@ -247,11 +252,24 @@ TSharedRef<SWidget> UStartMenu::RebuildWidget()
 							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0.f, 14.f, 0.f, 0.f)
 							[
-								SNew(SButton).ButtonStyle(&TextButtonStyle).ContentPadding(FMargin(3.f, 7.f))
-								.OnClicked(FOnClicked::CreateUObject(this, &UStartMenu::OnQuitClicked))
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 22.f, 0.f)
 								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("退出游戏"))).Font(MenuFont(14.f))
-									.ColorAndOpacity(Muted)
+									SNew(SButton).ButtonStyle(&TextButtonStyle).ContentPadding(FMargin(3.f, 7.f))
+									.OnClicked(FOnClicked::CreateUObject(this, &UStartMenu::OnSettingsClicked))
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("显示设置"))).Font(MenuFont(14.f))
+										.ColorAndOpacity(Cyan)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth()
+								[
+									SNew(SButton).ButtonStyle(&TextButtonStyle).ContentPadding(FMargin(3.f, 7.f))
+									.OnClicked(FOnClicked::CreateUObject(this, &UStartMenu::OnQuitClicked))
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("退出游戏"))).Font(MenuFont(14.f))
+										.ColorAndOpacity(Muted)
+									]
 								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 21.f, 0.f, 0.f)
@@ -310,6 +328,12 @@ FReply UStartMenu::OnQuitClicked()
 	return FReply::Handled();
 }
 
+FReply UStartMenu::OnSettingsClicked()
+{
+	if (AAICompanionDemoGameMode* GM = Host.Get()) { GM->ShowDisplaySettings(); }
+	return FReply::Handled();
+}
+
 void UStartMenu::DebugActivateMenuAction(FName Action)
 {
 #if WITH_EDITOR
@@ -319,5 +343,6 @@ void UStartMenu::DebugActivateMenuAction(FName Action)
 	}
 	if (Action == TEXT("start")) { OnStartClicked(); }
 	else if (Action == TEXT("test")) { OnTestClicked(); }
+	else if (Action == TEXT("settings")) { OnSettingsClicked(); }
 #endif
 }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SFXLibrary.h 的槽位契约、Kismet/GameplayStatics 的 SpawnSound2D/SpawnSoundAtLocation、Engine/World、Engine/SoundAttenuation（运行时构造衰减——空间化语音零资产）
- * [OUTPUT]: PlaySFX/PlayVoice共用槽位解析与拾取语音5秒冷却；弱世界键隔离不同局，仅成功创建播放组件才占CD；BossImpact按独立Config采样和音量播放，普通爆炸槽保持；提供冷却只读出口
+ * [OUTPUT]: PlaySFX/PlayVoice/TryPlayVoice共用槽位解析与拾取语音5秒冷却；TryPlayVoice真实创建组件才返回true，旧void入口兼容；玩家攻击解锁有独立槽，弱世界键隔离不同局
  * [POS]: Audio/ 的音效基建实现文件，与 SFXLibrary.h 一体两面；业务文件只认两个静态入口，不感知本文件存在
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -53,6 +53,7 @@ namespace
 		{
 		case EGameSFX::Voice_BeaconActivate: Sound = Slots->Voice_BeaconActivate; Volume = Slots->Voice_BeaconActivateVolume; break;
 		case EGameSFX::Voice_BeaconRecall: Sound = Slots->Voice_BeaconRecall; Volume = Slots->Voice_BeaconRecallVolume; break;
+		case EGameSFX::Voice_PlayerAttackUnlock: Sound = Slots->Voice_PlayerAttackUnlock; Volume = Slots->Voice_PlayerAttackUnlock_Volume; break;
 		case EGameSFX::Shot_Companion:   Sound = Slots->Shot_Companion;      Volume = Slots->Shot_CompanionVolume;    break;
 		case EGameSFX::Hit_Enemy:        Sound = Slots->Hit_Enemy;           Volume = Slots->Hit_EnemyVolume;         break;
 		case EGameSFX::EnemyDie:         Sound = Slots->EnemyDie;            Volume = Slots->EnemyDieVolume;          break;
@@ -159,9 +160,14 @@ void USFXLibrary::PlaySFX(UWorld* World, EGameSFX Event)
 
 void USFXLibrary::PlayVoice(UWorld* World, EGameSFX Event, const FVector& Location)
 {
+	TryPlayVoice(World, Event, Location);
+}
+
+bool USFXLibrary::TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Location)
+{
 	if (!World || (IsPickupVoice(Event) && PickupVoiceRemaining(World) > 0.f))
 	{
-		return;
+		return false;
 	}
 
 	static const USFXLibrary* Slots = GetDefault<USFXLibrary>();
@@ -169,7 +175,7 @@ void USFXLibrary::PlayVoice(UWorld* World, EGameSFX Event, const FVector& Locati
 	float Volume = 1.f;
 	if (!ResolveSlot(Slots, Event, Sound, Volume))
 	{
-		return;
+		return false;
 	}
 
 	if (USoundBase* Loaded = Sound.LoadSynchronous())
@@ -178,8 +184,10 @@ void USFXLibrary::PlayVoice(UWorld* World, EGameSFX Event, const FVector& Locati
 			Volume, 1.f, 0.f, VoiceAttenuation(), nullptr, true))
 		{
 			CommitPickupVoice(World, Event);
+			return true;
 		}
 	}
+	return false;
 }
 
 float USFXLibrary::GetPickupVoiceCooldownRemaining(const UObject* WorldContextObject)

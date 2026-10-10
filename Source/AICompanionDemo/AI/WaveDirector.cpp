@@ -1,6 +1,7 @@
 /**
  * [INPUT]: 依赖 WaveDirector.h 的相位机契约、AI/EnemyGrunt 的 ApplyVariant 变体注入、AI/Combatant 的 ICombatant（GetHealthComponent 绑死亡）、Engine 的 TimerManager/SpawnActor/DrawDebugString/GEngine 屏幕消息、HealthComponent 的 OnDeath 多播、Kismet 的 GetPlayerPawn、本模块 Audio/SFXLibrary（UpgradeChoice 事件音效）；UI/UpgradeCardView（无字纹理、独立短文案与纯Slate展示）
  * [OUTPUT]: 实现AWaveDirector的波次/Endless节奏、三闸环形刷怪、XP/金币账本、领域与治疗节拍；升级冻结世界后按权重供给候选，显式提供展示稀有度与四融合标志，UpgradeCardView渲染三选一/六选二；鼠标与数字键共用槽位校验，ApplyUpgrade统一应用效果与恢复流速；按稳定升级ID记录次数并输出排序后的HUD图标快照。EndPlay先拆视口树再释放视图与纹理。
+ *  1.1奖励保存来源/发生等级，Lv.9起玩家/AI交替；Flip仅转换当前玩家奖励；初始箱免费三选一不改收费账本。猎印卡面/HUD说明来自真实次数与上限，大师不降上限。Boss祭坛成功生成及真实狂暴接入世界事件记录。
  *  选择出口串行续接；玩家穿透与折射可同持、散射仍互斥；AI穿透折射互斥。感电基础20/过载40下限与比例取高，Nova状态文案同步；虫战/遗物HUD局部实现各持真源。
  * [POS]: AI/ 的玩法节奏中枢实现；GameMode 组合根负责生成它并注入敌人类——"何时何地谁入场"从 GameMode 迁入此处，GameMode 只保留配置与装配职责
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
@@ -23,6 +24,7 @@
 #include "Audio/SFXLibrary.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Events/RunEventLog.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
@@ -42,10 +44,25 @@ namespace
 	// 屏幕消息 key 池：4=旧波次HUD行、5=事件横幅；队友评分板20+默认关闭。
 	constexpr int32 kHudKey = 4;
 	constexpr int32 kBannerKey = 5;
+	// 已先公开的1.1参数：实际收益为零时离池；队友速度不超玩家，最多三次。
+	constexpr float kPlayerAttackIntervalFactor = 0.85f;
+	constexpr float kPlayerAttackIntervalFloor = 0.15f;
+	constexpr float kCompanionMoveFactor = 1.10f;
+	constexpr int32 kCompanionMoveMaxPicks = 3;
+	FString GrowthJsonString(FString Value)
+	{
+		Value.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
+		Value.ReplaceInline(TEXT("\""), TEXT("\\\""));
+		Value.ReplaceInline(TEXT("\r"), TEXT("\\r"));
+		Value.ReplaceInline(TEXT("\n"), TEXT("\\n"));
+		Value.ReplaceInline(TEXT("\t"), TEXT("\\t"));
+		return TEXT("\"") + Value + TEXT("\"");
+	}
 }
 
 AWaveDirector::AWaveDirector()
 {
+	static_assert(static_cast<int32>(EUpgradeId::GoldPouch) == 28, "Legacy upgrade IDs must stay stable");
 	// 三 Boss 终局默认值（09-30 用户定案：召唤师→裂地巨像→沙狱蠕虫）；Boss 三子类接线（白模占位案根治）
 	BossAltarTimes = { 180.f, 360.f, 540.f };
 	BossNames = { TEXT("召唤师"), TEXT("裂地巨像"), TEXT("沙狱蠕虫") };
@@ -152,52 +169,7 @@ void AWaveDirector::UpdateEndless()
 		return;
 	}
 
-	// ---------- 三 Boss 终局（09-30 用户定案）：时间过档即冒祭坛（玩家选择应战时机） ----------
-	if (BossAltarTimes.Num() > 0 && BossAltarSpawned.Num() != BossAltarTimes.Num())
-	{
-		BossAltarSpawned.Init(false, BossAltarTimes.Num());
-	}
-	for (int32 i = 0; i < BossAltarTimes.Num(); ++i)
-	{
-		if (!BossAltarSpawned[i] && ElapsedSeconds >= BossAltarTimes[i])
-		{
-			BossAltarSpawned[i] = true;
-			if (const APawn* P = UGameplayStatics::GetPlayerPawn(this, 0))
-			{
-				// 祭坛落点：玩家周围 60-80m 随机角（足够近有威胁、足够远有反应时间）
-				const float Angle = FMath::FRandRange(0.f, 2.f * PI);
-				const float Dist = FMath::FRandRange(6000.f, 8000.f);
-				const FVector Loc(P->GetActorLocation().X + FMath::Cos(Angle) * Dist,
-					P->GetActorLocation().Y + FMath::Sin(Angle) * Dist, P->GetActorLocation().Z);
-				if (ABossAltar* Altar = GetWorld()->SpawnActor<ABossAltar>(Loc, FRotator::ZeroRotator))
-				{
-					const TSubclassOf<ABossBase> SlotClass = BossClasses.IsValidIndex(i) ? BossClasses[i] : BossClasses[0];
-					Altar->SetBossInfo(SlotClass,
-						BossNames.IsValidIndex(i) ? BossNames[i] : FString::Printf(TEXT("BOSS %d"), i + 1), i + 1);
-					USFXLibrary::PlaySFX(GetWorld(), EGameSFX::BossWarn);   // [SFX] 祭坛警报（危机降临的"咚"——09-30 用户点名）
-					if (GEngine)
-					{
-						GEngine->AddOnScreenDebugMessage(kBannerKey, 6.f, FColor::Red,
-							FString::Printf(TEXT("☠ %s 的祭坛已出现——循红色光柱前往！"),
-								BossNames.IsValidIndex(i) ? *BossNames[i] : TEXT("BOSS")));
-					}
-					UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] %d 号祭坛冒出 @ %s"), i + 1,
-						*Loc.ToCompactString());
-				}
-			}
-		}
-	}
-
-	// 狂暴态（09-30 用户裁决 v2：12min 起 MegaBonk 式 insane——速度/血量换挡不封顶，死亡即结算）
-	if (!bEnraged && ElapsedSeconds >= 720.f)
-	{
-		SetEnraged(true);
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(kBannerKey, 8.f, FColor::Red, TEXT("☠ 狂 暴 开 始 —— 逃 是 逃 不 掉 的"));
-		}
-		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 狂暴态开启——怪物曲线换挡不封顶"));
-	}
+	ProcessScheduledEvents();
 
 	// （v2 终局：无"存活 600s 胜利"——生存是无尽的，Boss 征服与狂暴生存时长=新成绩维度；死亡=结算）
 
@@ -643,7 +615,7 @@ void AWaveDirector::AddXp(const int32 Amount)
 
 		// 升级 = 进三选一暂停（C1 落地：世界冻结抽卡，数字键选取）
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 升级 Lv.%d（下级需 %d XP）——进入三选一"), Level, XpToNextLevel);
-		EnterUpgradePause();
+		EnterUpgradePause(false, ERewardSource::LevelUp, Level);
 	}
 }
 
@@ -678,12 +650,31 @@ void AWaveDirector::Tick(float DeltaSeconds)
 	}
 }
 
-void AWaveDirector::EnterUpgradePause(const bool bChestPool)
+void AWaveDirector::EnterUpgradePause(const bool bChestPool, const ERewardSource Source, const int32 RewardLevel)
 {
 	if (IsRunTerminated()) { return; }
-	if (bUpgradePending) { PendingChoices.Add(bChestPool ? 1 : 0); return; }
+	const FRewardChoice Reward { bChestPool ? ERewardSource::LockedChest : Source, RewardLevel, 0 };
+	if (bUpgradePending) { PendingChoices.Add(Reward); return; }
+	StartUpgradeReward(Reward);
+}
+
+void AWaveDirector::StartUpgradeReward(const FRewardChoice& Reward)
+{
+	if (IsRunTerminated()) { return; }
+	ActiveReward = Reward;
+	bRewardFlipped = false;
+	ActiveRewardPool = ERewardPool::Mixed;
+	if (Reward.Source == ERewardSource::LevelUp && Reward.EarnedLevel >= 9)
+	{
+		ActiveRewardPool = ((Reward.EarnedLevel - 9) % 2 == 0) ? ERewardPool::Player : ERewardPool::AI;
+	}
+	const bool bChestPool = Reward.Source == ERewardSource::LockedChest;
 	UGameplayStatics::SetGlobalTimeDilation(this, 0.f);
 	bUpgradePending = true;
+	bRelicPending = false;
+	bChestDoublePick = false;
+	ChestPicksRemaining = 0;
+	ChestTakenSlots.Reset();
 	RollOffers(bChestPool);
 	if (bChestPool)
 	{
@@ -704,6 +695,23 @@ void AWaveDirector::EnterUpgradePause(const bool bChestPool)
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 三选一：[%s] [%s] [%s]"),
 			*DescribeCard(Offers[0]), *DescribeCard(Offers[1]), *DescribeCard(Offers[2]));
 	}
+}
+
+void AWaveDirector::FlipCurrentReward()
+{
+	if (IsRunTerminated() || !bUpgradePending || bRelicPending || bChestDoublePick
+		|| ActiveReward.Source != ERewardSource::LevelUp || ActiveRewardPool != ERewardPool::Player || bRewardFlipped) { return; }
+	bRewardFlipped = true;
+	ActiveRewardPool = ERewardPool::AI;
+	if (UpgradeOverlay.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(UpgradeOverlay.ToSharedRef());
+	}
+	UpgradeOverlay.Reset();
+	++ChoiceGeneration;
+	RollOffers(false);
+	ShowUpgradeOverlay(false);
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Growth] Lv.%d 本次玩家奖励Flip为AI奖励，排队奖励不变"), ActiveReward.EarnedLevel);
 }
 
 void AWaveDirector::ShowUpgradeOverlay(const bool bChest)
@@ -741,9 +749,20 @@ void AWaveDirector::ShowUpgradeOverlay(const bool bChest)
 		Option.OnSelected = FSimpleDelegate::CreateWeakLambda(this, [this, Slot, Generation]()
 		{ if (Generation == ChoiceGeneration) { SelectUpgradeOffer(Slot); } });
 	}
-	const FString Heading = bChest ? TEXT("锁箱大奖 · 六选二") : FString::Printf(TEXT("升级 · Lv.%d"), Level);
-	const FString Hint = bChest ? FString::Printf(TEXT("还可领取 %d 张 · 点击卡片或按 1–6"), ChestPicksRemaining)
+	FString Heading;
+	if (bChest) { Heading = TEXT("锁箱大奖 · 六选二"); }
+	else if (ActiveReward.Source == ERewardSource::StarterChest) { Heading = TEXT("初始补给 · 免费三选一"); }
+	else if (ActiveReward.Source == ERewardSource::NormalChest) { Heading = TEXT("宝箱补给 · 三选一"); }
+	else
+	{
+		const int32 RewardLevel = ActiveReward.EarnedLevel > 0 ? ActiveReward.EarnedLevel : Level;
+		const TCHAR* PoolLabel = ActiveRewardPool == ERewardPool::Player ? TEXT("玩家成长")
+			: ActiveRewardPool == ERewardPool::AI ? TEXT("AI成长") : TEXT("混合成长");
+		Heading = FString::Printf(TEXT("升级 · Lv.%d · %s%s"), RewardLevel, PoolLabel, bRewardFlipped ? TEXT("（Flip）") : TEXT(""));
+	}
+	FString Hint = bChest ? FString::Printf(TEXT("还可领取 %d 张 · 点击卡片或按 1–6"), ChestPicksRemaining)
 		: TEXT("选择一项强化 · 点击卡片或按 1 / 2 / 3");
+	if (!OfferFallbackNote.IsEmpty()) { Hint += TEXT("\n") + OfferFallbackNote; }
 	UpgradeOverlay = UpgradeCardView->Build(Options, Heading, Hint, bChest);
 	GEngine->GameViewport->AddViewportWidgetContent(UpgradeOverlay.ToSharedRef(), 100);
 }
@@ -762,7 +781,9 @@ void AWaveDirector::SelectUpgradeOffer(const int32 Slot)
 	{
 		ChestTakenSlots.Add(Slot);
 	}
-	ApplyUpgrade(bChestDoublePick ? ChestOffers[Slot] : Offers[Slot]);
+	const EUpgradeId Id = bChestDoublePick ? ChestOffers[Slot] : Offers[Slot];
+	if (Id == EUpgradeId::Flip) { FlipCurrentReward(); return; }
+	ApplyUpgrade(Id);
 }
 
 void AWaveDirector::HideUpgradeOverlay()
@@ -772,21 +793,12 @@ void AWaveDirector::HideUpgradeOverlay()
 		GEngine->GameViewport->RemoveViewportWidgetContent(UpgradeOverlay.ToSharedRef());
 	}
 	UpgradeOverlay.Reset();
-
-	// 恢复游戏输入模式（与 09-26 输入三态机的游戏态对齐：鼠标隐藏+GameOnly）
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->SetInputMode(FInputModeGameOnly());
-	}
-
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = false;
-	}
+	// 这里只拆视口树；奖励队列完成状态后由组合根统一仲裁输入，EndPlay不抢焦点。
 }
 
 void AWaveDirector::RollOffers(const bool bChestPool)
 {
+	OfferFallbackNote.Reset();
 	// 卡池 v2（用户 09-12 二次定调：火力特化+感知优先；协议卡下架——评分板权重对玩家不可感知）
 	// v3 追加（用户 2026-09-13）：折射（与穿透互斥入池）/ 疾行（移速可叠）/ 二段跳
 	// 稀有度显示使用普通蓝/稀有紫/传说金；抽取权重乘子保持原值。
@@ -815,6 +827,14 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 		{ EUpgradeId::PlayerPierce,  TEXT("PlayerFire"), 0.8f, TEXT("PlayerPierce"),  ECardRarity::Rare },
 		{ EUpgradeId::PlayerPrism,   TEXT("PlayerFire"), 0.8f, TEXT("PlayerPrism"),   ECardRarity::Rare },
 	};
+	if (HasPlayerAttackSpeedBenefit())
+	{
+		Pool.Add({ EUpgradeId::PlayerRapidFire, TEXT("PlayerAttackRate"), 0.8f, NAME_None, ECardRarity::Common });
+	}
+	if (HasCompanionMoveSpeedBenefit())
+	{
+		Pool.Add({ EUpgradeId::CompanionSwiftMove, TEXT("CompanionMove"), 0.7f, NAME_None, ECardRarity::Common });
+	}
 	// 元素三卡前置（09-30 用户裁决"Lv.6 解锁主动攻击之前别出本体攻击天赋"）：玩家没枪时
 	// 元素弹头/玩家弹道全是废卡，白占三选一位还劝退前期——射击未解锁前整组离池
 	if (const APawn* RollPawn = UGameplayStatics::GetPlayerPawn(this, 0))
@@ -920,11 +940,17 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 		});
 	}
 
+	if (!bChestPool && ActiveRewardPool != ERewardPool::Mixed)
+	{
+		const bool bPlayerPool = ActiveRewardPool == ERewardPool::Player;
+		Pool.RemoveAll([bPlayerPool](const FUpgradeCardDef& C) { return IsPlayerPoolCard(C.Id) != bPlayerPool; });
+	}
 	// 池况留痕（09-24 崩溃案取证）：离池条件多（OneShot/互斥/融合前置），空池路径难脑补——日志给证据
 	UE_LOG(LogAICompanionDemo, Log, TEXT("[Wave] 卡池 %d 张入抽（%s）"), Pool.Num(), bChestPool ? TEXT("锁箱六选二") : TEXT("普通三选一"));
 
 	// 抽卡循环（09-30 锁箱六选二：bChestPool 抽 6 张入 ChestOffers，普通抽 3 张入 Offers）
-	const int32 DrawCount = bChestPool ? 6 : 3;
+	const bool bPlayerReward = !bChestPool && ActiveRewardPool == ERewardPool::Player;
+	const int32 DrawCount = bChestPool ? 6 : (bPlayerReward ? 2 : 3);
 	for (int32 Slot = 0; Slot < DrawCount; ++Slot)
 	{
 		// 池干涸保底（09-24 开箱崩溃案）：一次性卡拿太多时，池可被"互斥/OneShot 离池 + 同组抽走"三轮内抽干，
@@ -934,7 +960,12 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 		{
 			// 干涸保底（09-30 升级：锁箱模式不再 Vigor 无限刷——用户实测"只能重复选择两个选项"定罪
 			// 中期池薄+保底循环；金币袋=直接收益的厚礼填位，无限供给不重复抽）
-			const EUpgradeId Filler = bChestPool ? EUpgradeId::GoldPouch : EUpgradeId::Vigor;
+			const EUpgradeId Filler = bChestPool ? EUpgradeId::GoldPouch
+				: ActiveRewardPool == ERewardPool::AI ? EUpgradeId::HeavyRounds : EUpgradeId::Vigor;
+			OfferFallbackNote = bChestPool ? TEXT("候选不足：空槽以金币袋填位，仍为六选二。")
+				: ActiveRewardPool == ERewardPool::AI ? TEXT("AI候选不足：空槽以可叠加重击弹头填位。")
+				: ActiveRewardPool == ERewardPool::Player ? TEXT("玩家候选不足：空槽以可叠加强身填位。")
+				: TEXT("混合候选不足：空槽以可叠加强身填位。");
 			if (bChestPool)
 			{
 				ChestOffers[Slot] = Filler;
@@ -977,6 +1008,52 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 		const FName Group = Pool[Picked].Group;
 		Pool.RemoveAll([&Group](const FUpgradeCardDef& C) { return C.Group == Group; });
 	}
+	if (bPlayerReward) { Offers[2] = EUpgradeId::Flip; }
+}
+
+bool AWaveDirector::IsPlayerPoolCard(const EUpgradeId Id)
+{
+	switch (Id)
+	{
+	case EUpgradeId::Blink:
+	case EUpgradeId::GlassCannon:
+	case EUpgradeId::Vigor:
+	case EUpgradeId::SwiftMove:
+	case EUpgradeId::HealNova:
+	case EUpgradeId::BlinkBomb:
+	case EUpgradeId::FrostShotPlayer:
+	case EUpgradeId::ShockShot:
+	case EUpgradeId::HuntMark:
+	case EUpgradeId::ShockOverload:
+	case EUpgradeId::MarkMaster:
+	case EUpgradeId::FrostDeep:
+	case EUpgradeId::PlayerScatter:
+	case EUpgradeId::PlayerPierce:
+	case EUpgradeId::PlayerPrism:
+	case EUpgradeId::PlayerRapidFire:
+	case EUpgradeId::CompanionSwiftMove:
+		return true;
+	default: return false;
+	}
+}
+
+bool AWaveDirector::HasPlayerAttackSpeedBenefit() const
+{
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	return Hero && Hero->bPlayerShootingUnlocked && FMath::IsFinite(Hero->PlayerShotInterval)
+		&& Hero->PlayerShotInterval > kPlayerAttackIntervalFloor + KINDA_SMALL_NUMBER;
+}
+
+bool AWaveDirector::HasCompanionMoveSpeedBenefit() const
+{
+	if (CardTakenCounts.FindRef(EUpgradeId::CompanionSwiftMove) >= kCompanionMoveMaxPicks) { return false; }
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass()));
+	const UCharacterMovementComponent* HeroMove = Hero ? Hero->GetCharacterMovement() : nullptr;
+	const UCharacterMovementComponent* BuddyMove = Buddy ? Buddy->GetCharacterMovement() : nullptr;
+	if (!HeroMove || !BuddyMove || !FMath::IsFinite(BuddyMove->MaxWalkSpeed) || !FMath::IsFinite(HeroMove->MaxWalkSpeed)) { return false; }
+	const float NewSpeed = FMath::Min(BuddyMove->MaxWalkSpeed * kCompanionMoveFactor, HeroMove->MaxWalkSpeed);
+	return NewSpeed > BuddyMove->MaxWalkSpeed + KINDA_SMALL_NUMBER;
 }
 
 FName AWaveDirector::UpgradeCardKey(const EUpgradeId Id)
@@ -1012,12 +1089,46 @@ FName AWaveDirector::UpgradeCardKey(const EUpgradeId Id)
 	case EUpgradeId::PlayerPierce: return TEXT("PlayerPierce");
 	case EUpgradeId::PlayerPrism: return TEXT("PlayerPrism");
 	case EUpgradeId::GoldPouch: return TEXT("GoldPouch");
+	case EUpgradeId::PlayerRapidFire: return TEXT("PlayerRapidFire");
+	case EUpgradeId::CompanionSwiftMove: return TEXT("CompanionSwiftMove");
+	case EUpgradeId::Flip: return TEXT("Flip");
 	}
 	return NAME_None;
 }
 
 FString AWaveDirector::UpgradeCardDescription(const EUpgradeId Id) const
 {
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const ACompanionAIController* Ctl = CompanionController.Get();
+	if (!Ctl) { Ctl = Cast<ACompanionAIController>(UGameplayStatics::GetActorOfClass(this, ACompanionAIController::StaticClass())); }
+	const int32 MarkCap = Hero ? Hero->HuntMarkMaxStacks : 3;
+	const float ExecuteDamage = Ctl ? Ctl->ExecuteDamagePerMark : 15.f;
+	if (Id == EUpgradeId::HuntMark)
+	{
+		const bool bOwned = Hero && Hero->bHuntMarkUnlocked;
+		return bOwned ? FString::Printf(TEXT("已获%d次 · 上限%d→%d层\n再抽+1层，持续成长\n队友处决%.0f伤/层"),
+			CardTakenCounts.FindRef(Id), MarkCap, MarkCap + 1, ExecuteDamage)
+			: FString::Printf(TEXT("首次解锁 · 上限%d层\n你叠印，队友引爆\n每层处决%.0f伤"), MarkCap, ExecuteDamage);
+	}
+	if (Id == EUpgradeId::MarkMaster)
+	{
+		return FString::Printf(TEXT("上限%d→%d层，不降低\n处决%.0f→22伤/层\n保留普通猎印成长"), MarkCap, FMath::Max(MarkCap, 5), ExecuteDamage);
+	}
+	if (Id == EUpgradeId::PlayerRapidFire && Hero)
+	{
+		return FString::Printf(TEXT("射击间隔%.3f→%.3fs\n每次×0.85，最低0.15s\n已获%d次，到限离池"), Hero->PlayerShotInterval,
+			FMath::Max(Hero->PlayerShotInterval * kPlayerAttackIntervalFactor, kPlayerAttackIntervalFloor), CardTakenCounts.FindRef(Id));
+	}
+	if (Id == EUpgradeId::CompanionSwiftMove && Hero)
+	{
+		const ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass()));
+		if (Buddy && Buddy->GetCharacterMovement() && Hero->GetCharacterMovement())
+		{
+			const float CurrentSpeed = Buddy->GetCharacterMovement()->MaxWalkSpeed;
+			return FString::Printf(TEXT("队友%.0f→%.0fcm/s\n已获%d/3次，无收益离池\n最高不超过玩家步速"), CurrentSpeed,
+				FMath::Min(CurrentSpeed * kCompanionMoveFactor, Hero->GetCharacterMovement()->MaxWalkSpeed), CardTakenCounts.FindRef(Id));
+		}
+	}
 	// 叠加卡显示本次收益，避免再次抽到时仍写首层基线；完整说明继续复用DescribeCard。
 	if (Id == EUpgradeId::Radiance && bRadianceUnlocked)
 	{
@@ -1028,6 +1139,35 @@ FString AWaveDirector::UpgradeCardDescription(const EUpgradeId Id) const
 		return TEXT("每拍治疗量增加 1\n范围内双方持续回血。");
 	}
 	return FString();
+}
+
+FString AWaveDirector::AcquiredCardDescription(const EUpgradeId Id) const
+{
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const ACompanionAIController* Ctl = CompanionController.Get();
+	if (!Ctl) { Ctl = Cast<ACompanionAIController>(UGameplayStatics::GetActorOfClass(this, ACompanionAIController::StaticClass())); }
+	const int32 MarkCap = Hero ? Hero->HuntMarkMaxStacks : 3;
+	const float ExecuteDamage = Ctl ? Ctl->ExecuteDamagePerMark : 15.f;
+	if (Id == EUpgradeId::HuntMark)
+	{
+		return FString::Printf(TEXT("猎杀印记（元素）｜已获%d次；%s；当前最多%d层，队友命中消费全部印记，每层额外%.0f伤。首抽解锁，此后每张上限+1；普通成长无固定总层数上限。"),
+			CardTakenCounts.FindRef(Id), Hero && Hero->bHuntMarkUnlocked ? TEXT("已解锁") : TEXT("未解锁"), MarkCap, ExecuteDamage);
+	}
+	if (Id == EUpgradeId::MarkMaster)
+	{
+		return FString::Printf(TEXT("猎杀大师（深化）｜当前印记上限%d层、处决%.0f伤/层；领取后上限至少5，保留更高普通成长，处决强化至22伤/层。"), MarkCap, ExecuteDamage);
+	}
+	if (Id == EUpgradeId::PlayerRapidFire)
+	{
+		return FString::Printf(TEXT("本体速射（玩家成长）｜已获%d次，当前射击间隔%.3fs；每张×0.85，下限0.15s，到限不再入池。"), CardTakenCounts.FindRef(Id), Hero ? Hero->PlayerShotInterval : 0.5f);
+	}
+	if (Id == EUpgradeId::CompanionSwiftMove)
+	{
+		const ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass()));
+		return FString::Printf(TEXT("陪伴疾行（玩家成长·协作）｜已获%d/3次，当前队友最高步速%.0fcm/s；每张×1.10，最终不超过玩家当前最高步速，无实际增量不入池。"),
+			CardTakenCounts.FindRef(Id), Buddy && Buddy->GetCharacterMovement() ? Buddy->GetCharacterMovement()->MaxWalkSpeed : 0.f);
+	}
+	return DescribeCard(Id);
 }
 
 FString AWaveDirector::DescribeCard(EUpgradeId Id) const
@@ -1044,14 +1184,17 @@ FString AWaveDirector::DescribeCard(EUpgradeId Id) const
 	case EUpgradeId::BuddyHealing: return TEXT("贴贴疗愈（羁绊·可叠加）｜与队友 2.5m 内双方缓慢回血；再抽 +1 HP/拍——贴住他，也贴住危险");
 	case EUpgradeId::FrostShotPlayer: return TEXT("寒霜弹·本体版（元素）｜玩家弹挂冰霜轻减速；命中【灼烧中的敌人】=融化，本次伤害 ×2——辉耀的火，等你来点");
 	case EUpgradeId::ShockShot:       return TEXT("感电弹（元素）｜每个主弹/穿透命中赠1次4m分叉，70%弹伤并挂电3s；队友子弹直击配对两带电目标，每端传导至少20伤或本弹30%伤害（取高），消费两标记");
-	case EUpgradeId::HuntMark:        return TEXT("猎杀印记（元素）｜玩家弹叠金色 ◆（至多 3 层）；队友弹命中=处决，每层 15 额外伤害——你攒印记，他来引爆；再抽上限+1");
+	case EUpgradeId::HuntMark:        return AcquiredCardDescription(Id) + TEXT(" 本次选择：") + UpgradeCardDescription(Id).Replace(TEXT("\n"), TEXT("；"));
 	case EUpgradeId::ShockOverload:   return TEXT("感电过载（深化）｜每端基础传导20→40，比例30%→55%并取高；保留逐个主弹/穿透命中的免费分叉，队友基础子弹可触发");
-	case EUpgradeId::MarkMaster:      return TEXT("猎杀大师（深化）｜印记上限设为 5 层、处决设为 22/层——攒爆更狠");
+	case EUpgradeId::MarkMaster:      return AcquiredCardDescription(Id) + TEXT(" 本次选择：") + UpgradeCardDescription(Id).Replace(TEXT("\n"), TEXT("；"));
 	case EUpgradeId::FrostDeep:       return TEXT("深度冻结（深化）｜冰霜减速 1.5s/0.7→4s/0.4——冻得更久更狠");
 	case EUpgradeId::PlayerScatter:   return TEXT("玩家散射（弹道）｜你的射击三向分裂 ±15°——与 AI 散射完全独立");
 	case EUpgradeId::PlayerPierce:    return TEXT("玩家穿透（弹道）｜你的子弹贯穿敌群，全额伤害；可与玩家折射同持，每个贯穿目标各折射一次，分支不递归");
 	case EUpgradeId::PlayerPrism:     return TEXT("玩家折射（弹道）｜每个主弹/贯穿命中向8m内另一敌人单跳70%伤害；与穿透协同，整发目标去重；感电赠叉共用单跳");
 	case EUpgradeId::GoldPouch:       return TEXT("金币袋（厚礼）｜直接获得 15 金币——大奖池的保底厚礼，落袋为安");
+	case EUpgradeId::PlayerRapidFire: return AcquiredCardDescription(Id) + TEXT(" 本次选择：") + UpgradeCardDescription(Id).Replace(TEXT("\n"), TEXT("；"));
+	case EUpgradeId::CompanionSwiftMove: return AcquiredCardDescription(Id) + TEXT(" 本次选择：") + UpgradeCardDescription(Id).Replace(TEXT("\n"), TEXT("；"));
+	case EUpgradeId::Flip: return TEXT("Flip · 转交队友（本次操作）｜放弃本次玩家候选，转换为AI三选一；不获得技能，不领取下一次奖励，不改变下次等级奖励归属。每个玩家等级奖励只可转换一次。");
 	case EUpgradeId::GlassCannon:  return TEXT("玻璃大炮（契约）｜移速设为 7m/s / 最大生命 -40%：走位流的极限取舍");
 	case EUpgradeId::BloodSacrifice: return TEXT("血祭强化（契约）｜队友伤害 +50% / 最大生命 -20：以血换火力");
 	case EUpgradeId::Vigor:        return TEXT("强身（成长）｜生命上限 +30 并回满：稳稳的安全垫");
@@ -1106,6 +1249,7 @@ void AWaveDirector::MarkExplored(const FVector& WorldPos)
 void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 {
 	if (IsRunTerminated()) { return; }
+	if (Id == EUpgradeId::Flip) { FlipCurrentReward(); return; }
 	// 协议卡/血祭的落点：队友评分器与火力层（缓存一次，卡后常驻）
 	ACompanionAIController* Ctl = ResolveCompanionCtl();
 
@@ -1204,7 +1348,7 @@ void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 		// 元素深化·猎杀大师（09-30）：印记上限 3→5、处决 15→22/层
 		if (PlayerChar)
 		{
-			PlayerChar->HuntMarkMaxStacks = 5;
+			PlayerChar->HuntMarkMaxStacks = FMath::Max(PlayerChar->HuntMarkMaxStacks, 5);
 		}
 		if (Ctl)
 		{
@@ -1272,6 +1416,18 @@ void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 		{
 			PlayerChar->bHuntMarkUnlocked = true;
 			UnlockedIds.Add(TEXT("HuntMark"));
+		}
+		break;
+	case EUpgradeId::PlayerRapidFire:
+		if (!HasPlayerAttackSpeedBenefit()) { return; }
+		PlayerChar->PlayerShotInterval = FMath::Max(PlayerChar->PlayerShotInterval * kPlayerAttackIntervalFactor, kPlayerAttackIntervalFloor);
+		break;
+	case EUpgradeId::CompanionSwiftMove:
+		if (!HasCompanionMoveSpeedBenefit()) { return; }
+		if (ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass())))
+		{
+			Buddy->GetCharacterMovement()->MaxWalkSpeed = FMath::Min(Buddy->GetCharacterMovement()->MaxWalkSpeed * kCompanionMoveFactor,
+				PlayerChar->GetCharacterMovement()->MaxWalkSpeed);
 		}
 		break;
 	case EUpgradeId::RadianceOverload:
@@ -1382,7 +1538,7 @@ void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 		--ChestPicksRemaining;
 		if (ChestPicksRemaining > 0)
 		{
-			// 重建面板（拆+建，状态保留——HideUpgradeOverlay 会复位状态故不走它）
+			// 重建面板，保留本次宝箱的已选槽位和剩余领取数。
 			if (UpgradeOverlay.IsValid() && GEngine && GEngine->GameViewport)
 			{
 				GEngine->GameViewport->RemoveViewportWidgetContent(UpgradeOverlay.ToSharedRef());
@@ -1408,7 +1564,11 @@ void AWaveDirector::DebugPreviewUpgradeCards(int32 FirstCard, const bool bChest,
 	bChestDoublePick = bChest;
 	ChestPicksRemaining = bChest ? 2 : 0;
 	ChestTakenSlots.Reset();
-	constexpr int32 Count = static_cast<int32>(EUpgradeId::GoldPouch) + 1;
+	ActiveReward = { ERewardSource::DebugPreview, Level, 0 };
+	ActiveRewardPool = ERewardPool::Mixed;
+	bRewardFlipped = false;
+	OfferFallbackNote.Reset();
+	const int32 Count = DebugUpgradeCardCount();
 	FirstCard = FMath::Clamp(FirstCard, 0, Count - 1);
 	for (int32 Slot = 0; Slot < (bChest ? 6 : 3); ++Slot)
 	{
@@ -1456,6 +1616,129 @@ FString AWaveDirector::DebugUpgradeCardState() const
 	return FString::Printf(TEXT("{\"pending\":%s,\"chest\":%s,\"remaining\":%d,\"takenSlots\":%d,\"gold\":%d,\"upgrades\":[%s],\"offers\":[%s]}"),
 		bUpgradePending ? TEXT("true") : TEXT("false"), bChestDoublePick ? TEXT("true") : TEXT("false"),
 		ChestPicksRemaining, ChestTakenSlots.Num(), GoldCount, *Cards, *Candidates);
+#else
+	return TEXT("{}");
+#endif
+}
+
+void AWaveDirector::ProcessScheduledEvents()
+{
+	if (IsRunTerminated() || !GetWorld()) { return; }
+	if (BossAltarTimes.Num() > 0 && BossAltarSpawned.Num() != BossAltarTimes.Num())
+	{
+		BossAltarSpawned.Init(false, BossAltarTimes.Num());
+	}
+	for (int32 i = 0; i < BossAltarTimes.Num(); ++i)
+	{
+		if (!BossAltarSpawned[i] && ElapsedSeconds >= BossAltarTimes[i])
+		{
+			if (const APawn* P = UGameplayStatics::GetPlayerPawn(this, 0))
+			{
+				const float Angle = FMath::FRandRange(0.f, 2.f * PI);
+				const float Dist = FMath::FRandRange(6000.f, 8000.f);
+				const FVector Loc(P->GetActorLocation().X + FMath::Cos(Angle) * Dist,
+					P->GetActorLocation().Y + FMath::Sin(Angle) * Dist, P->GetActorLocation().Z);
+				if (ABossAltar* Altar = GetWorld()->SpawnActor<ABossAltar>(Loc, FRotator::ZeroRotator))
+				{
+					BossAltarSpawned[i] = true;
+					const TSubclassOf<ABossBase> SlotClass = BossClasses.IsValidIndex(i) ? BossClasses[i] : BossClasses[0];
+					const FString BossName = BossNames.IsValidIndex(i) ? BossNames[i] : FString::Printf(TEXT("BOSS %d"), i + 1);
+					Altar->SetBossInfo(SlotClass, BossName, i + 1);
+					URunEventLog::Publish(GetWorld(), TEXT("神秘的声音"), BossName + TEXT("已出现，寻找它的祭坛吧"),
+						FName(*FString::Printf(TEXT("BossAltar_%d"), i + 1)));
+					USFXLibrary::PlaySFX(GetWorld(), EGameSFX::BossWarn);
+					if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(kBannerKey, 6.f, FColor::Red,
+							FString::Printf(TEXT("☠ %s 的祭坛已出现——循红色光柱前往！"), *BossName));
+					}
+					UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] %d 号祭坛冒出 @ %s"), i + 1, *Loc.ToCompactString());
+				}
+			}
+		}
+	}
+	if (!bEnraged && ElapsedSeconds >= 720.f)
+	{
+		SetEnraged(true);
+		URunEventLog::Publish(GetWorld(), TEXT("神秘的声音"), TEXT("你怎么还在这里？"), TEXT("WorldEnrage"));
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(kBannerKey, 8.f, FColor::Red, TEXT("☠ 狂 暴 开 始 —— 逃 是 逃 不 掉 的"));
+		}
+		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 狂暴态开启——怪物曲线换挡不封顶"));
+	}
+}
+
+bool AWaveDirector::DebugAdvanceScheduleTime(const float DeltaSeconds)
+{
+#if WITH_EDITOR
+	if (IsRunTerminated() || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) { return false; }
+	// 人工推进调度时钟fixture；生成真实祭坛/切换真实狂暴，不伪造日志、不推进刷怪预算。
+	ElapsedSeconds += DeltaSeconds;
+	ProcessScheduledEvents();
+	return true;
+#else
+	return false;
+#endif
+}
+
+void AWaveDirector::DebugQueueLevelReward(const int32 RewardLevel)
+{
+#if WITH_EDITOR
+	if (RewardLevel >= 2) { EnterUpgradePause(false, ERewardSource::LevelUp, RewardLevel); }
+#endif
+}
+
+FString AWaveDirector::DebugGrowthState() const
+{
+#if WITH_EDITOR
+	auto SourceName = [](const ERewardSource Source) -> const TCHAR*
+	{
+		switch (Source)
+		{
+		case ERewardSource::LevelUp: return TEXT("LevelUp");
+		case ERewardSource::NormalChest: return TEXT("NormalChest");
+		case ERewardSource::StarterChest: return TEXT("StarterChest");
+		case ERewardSource::LockedChest: return TEXT("LockedChest");
+		case ERewardSource::BossRelic: return TEXT("BossRelic");
+		default: return TEXT("DebugPreview");
+		}
+	};
+	const TCHAR* PoolName = ActiveRewardPool == ERewardPool::Player ? TEXT("Player")
+		: ActiveRewardPool == ERewardPool::AI ? TEXT("AI") : TEXT("Mixed");
+	FString Queue;
+	for (const FRewardChoice& Reward : PendingChoices)
+	{
+		if (!Queue.IsEmpty()) { Queue += TEXT(","); }
+		Queue += FString::Printf(TEXT("{\"source\":\"%s\",\"level\":%d,\"boss\":%d}"), SourceName(Reward.Source), Reward.EarnedLevel, Reward.BossIndex);
+	}
+	FString Candidates;
+	for (int32 Slot = 0; bUpgradePending && !bRelicPending && Slot < (bChestDoublePick ? 6 : 3); ++Slot)
+	{
+		const EUpgradeId Id = bChestDoublePick ? ChestOffers[Slot] : Offers[Slot];
+		if (!Candidates.IsEmpty()) { Candidates += TEXT(","); }
+		Candidates += FString::Printf(TEXT("{\"slot\":%d,\"id\":\"%s\",\"short\":%s,\"tooltip\":%s}"), Slot,
+			*UpgradeCardKey(Id).ToString(), *GrowthJsonString(UpgradeCardDescription(Id)), *GrowthJsonString(DescribeCard(Id)));
+	}
+	FString ScheduledAltars;
+	for (const bool bSpawned : BossAltarSpawned)
+	{
+		if (!ScheduledAltars.IsEmpty()) { ScheduledAltars += TEXT(","); }
+		ScheduledAltars += bSpawned ? TEXT("true") : TEXT("false");
+	}
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass()));
+	const ACompanionAIController* Ctl = CompanionController.Get();
+	if (!Ctl) { Ctl = Cast<ACompanionAIController>(UGameplayStatics::GetActorOfClass(this, ACompanionAIController::StaticClass())); }
+	return FString::Printf(TEXT("{\"pending\":%s,\"source\":\"%s\",\"rewardLevel\":%d,\"actualLevel\":%d,\"pool\":\"%s\",\"flipped\":%s,\"generation\":%u,\"queue\":[%s],\"offers\":[%s],\"fallback\":%s,\"gold\":%d,\"paidChestCount\":%d,\"nextChestCost\":%d,\"starterClaimed\":%s,\"markPicks\":%d,\"markCap\":%d,\"executeDamage\":%.3f,\"markDescription\":%s,\"playerShotInterval\":%.5f,\"playerAttackBenefit\":%s,\"playerMaxWalkSpeed\":%.3f,\"companionMaxWalkSpeed\":%.3f,\"companionMovePicks\":%d,\"companionMoveBenefit\":%s,\"elapsedSeconds\":%.3f,\"enraged\":%s,\"altarSpawned\":[%s]}"),
+		bUpgradePending ? TEXT("true") : TEXT("false"), SourceName(ActiveReward.Source), ActiveReward.EarnedLevel, Level, PoolName,
+		bRewardFlipped ? TEXT("true") : TEXT("false"), ChoiceGeneration, *Queue, *Candidates, *GrowthJsonString(OfferFallbackNote), GoldCount,
+		ChestOpenCount, GetNextChestCost(), bStarterUpgradeClaimed ? TEXT("true") : TEXT("false"), CardTakenCounts.FindRef(EUpgradeId::HuntMark),
+		Hero ? Hero->HuntMarkMaxStacks : 0, Ctl ? Ctl->ExecuteDamagePerMark : 0.f, *GrowthJsonString(AcquiredCardDescription(EUpgradeId::HuntMark)),
+		Hero ? Hero->PlayerShotInterval : 0.f, HasPlayerAttackSpeedBenefit() ? TEXT("true") : TEXT("false"),
+		Hero && Hero->GetCharacterMovement() ? Hero->GetCharacterMovement()->MaxWalkSpeed : 0.f,
+		Buddy && Buddy->GetCharacterMovement() ? Buddy->GetCharacterMovement()->MaxWalkSpeed : 0.f, CardTakenCounts.FindRef(EUpgradeId::CompanionSwiftMove),
+		HasCompanionMoveSpeedBenefit() ? TEXT("true") : TEXT("false"), ElapsedSeconds, bEnraged ? TEXT("true") : TEXT("false"), *ScheduledAltars);
 #else
 	return TEXT("{}");
 #endif
@@ -1558,10 +1841,17 @@ void AWaveDirector::SetLevel(int32 TargetLevel)
 
 void AWaveDirector::DebugApplyUpgradeByIdx(int32 UpgradeIndex)
 {
-	if (UpgradeIndex >= 0 && UpgradeIndex <= static_cast<int32>(EUpgradeId::GoldPouch))
+	if (UpgradeIndex >= 0 && UpgradeIndex < DebugUpgradeCardCount())
 	{
 		ApplyUpgrade(static_cast<EUpgradeId>(UpgradeIndex));
 	}
+}
+
+FString AWaveDirector::DebugUpgradeCardLabel(const int32 UpgradeIndex) const
+{
+	if (UpgradeIndex < 0 || UpgradeIndex >= DebugUpgradeCardCount()) { return FString(); }
+	const EUpgradeId Id = static_cast<EUpgradeId>(UpgradeIndex);
+	return Id == EUpgradeId::Flip ? TEXT("Flip（转换当前玩家等级奖励）") : CardShortName(Id);
 }
 
 void AWaveDirector::NotifyBossKilled(int32 BossIndex, const FString& BossName, const FVector& BossLocation)
@@ -1576,7 +1866,7 @@ void AWaveDirector::NotifyBossKilled(int32 BossIndex, const FString& BossName, c
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] %s 击倒确认（累计 %d/3）"), *BossName, BossKilledCount);
 
 	// Death callbacks finish before next-frame reward display; concurrent rewards serialize.
-	if (BossIndex>=1 && BossIndex<=3) { PendingChoices.Add(BossIndex+1); }
+	if (BossIndex>=1 && BossIndex<=3) { PendingChoices.Add({ ERewardSource::BossRelic, 0, BossIndex }); }
 	if (BossIndex == 3)
 	{
 		if (AAICompanionDemoGameMode* GM = GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>())
@@ -1885,6 +2175,7 @@ AWaveDirector::FEndlessHudSnapshot AWaveDirector::GetHudSnapshot() const
 		Card.UpgradeId = UpgradeCardKey(Entry.Key);
 		Card.Name = CardShortName(Entry.Key);
 		Card.Count = Entry.Value;
+		Card.Description = AcquiredCardDescription(Entry.Key);
 		Card.Rarity = PresentationRarity(CardRarityOf(Entry.Key));
 	}
 	AppendRelicHudCards(Snap);
@@ -1935,6 +2226,15 @@ void AWaveDirector::GrantFreeUpgrade()
 		VoiceCtl->Bark(TEXT("运气不错。"), TEXT("Chest"), 0.f, EGameSFX::Voice_LockedChest);
 	}
 	EnterUpgradePause(true);
+}
+
+bool AWaveDirector::TryGrantStarterUpgrade()
+{
+	if (IsRunTerminated() || bUpgradePending || bStarterUpgradeClaimed) { return false; }
+	bStarterUpgradeClaimed = true;
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Growth] 初始宝箱免费三选一；金币=%d 收费箱次数=%d"), GoldCount, ChestOpenCount);
+	EnterUpgradePause(false, ERewardSource::StarterChest);
+	return true;
 }
 
 bool AWaveDirector::TrySpendGoldForUpgrade(const int32 Cost)

@@ -2,7 +2,7 @@
 
 /**
  * [INPUT]: 依赖 Engine 的胶囊/移动/弹簧臂/相机组件、EnhancedInput 输入链路、本模块 HealthComponent（M3 玩家血量）、本模块 Audio/SFXLibrary（PlayerHurt/Blink/Recall 事件音效）、本模块 AI/Combatant 的 CollectAliveCombatants（玩家火力链候选集）
- * [OUTPUT]: 对外提供 AAICompanionDemoCharacter——模板玩家（WASD/跳跃/视角）；M3 起作为敌方火力的合法目标（FindComponentByClass 契约可被任意阵营查询）；**Lv.6 自动射击与回响脉冲的目标/伤害集一律 CollectAliveCombatants 契约收集**（09-30 召唤师案：类型扫描曾让玩家"看不见" Boss——枪口永远越过 Boss 找杂兵；主弹命中判定走 ECC_Visibility 物理扫掠+ICombatant 契约，与走廊收集器双轨同认）；**回响脉冲 2.0（10-07）：累计器挂 OnHealApplied 治疗意图事件（辉耀结界持有者满血也计数），爆发=2s 蔓延领域（三层线框球扩张+跟随绿光+过程0.1s/1伤保留10DPS、历史半径补拍与短命命中反馈+终点爆25伤/冲击环/瞬时爆光/蠕虫同款Explosion音）——状态机实现已局部拆至AICompanionDemoCharacterHealNova.cpp，主文件订阅/推进/死亡清理保持**
+ * [OUTPUT]: 1.1 Lv6解锁一次文字/事件记录/独立语音，信标气泡同源记录； 对外提供 AAICompanionDemoCharacter——模板玩家（WASD/跳跃/视角）；M3 起作为敌方火力的合法目标（FindComponentByClass 契约可被任意阵营查询）；**Lv.6 自动射击与回响脉冲的目标/伤害集一律 CollectAliveCombatants 契约收集**（09-30 召唤师案：类型扫描曾让玩家"看不见" Boss——枪口永远越过 Boss 找杂兵；主弹命中判定走 ECC_Visibility 物理扫掠+ICombatant 契约，与走廊收集器双轨同认）；**回响脉冲 2.0（10-07）：累计器挂 OnHealApplied 治疗意图事件（辉耀结界持有者满血也计数），爆发=2s 蔓延领域（三层线框球扩张+跟随绿光+过程0.1s/1伤保留10DPS、历史半径补拍与短命命中反馈+终点爆25伤/冲击环/瞬时爆光/蠕虫同款Explosion音）——状态机实现已局部拆至AICompanionDemoCharacterHealNova.cpp，主文件订阅/推进/死亡清理保持**
  *  九遗物组件随玩家创建；旧固定三遗物逻辑退出。5s闪烁/20s召回，探地成功才耗召回CD/发语音；暂停与死亡禁主动技能，伤害/闪烁回调Relics。镜头先于玩法早退更新，蠕虫平滑远景与短震归CharacterWurmCamera；近归途门E交互优先，宝箱不竞争。
  * [POS]: 模块根的玩家角色，与 AI/CompanionCharacter 平行不继承（职责隔离）；M3 评分的"威胁/玩家安全"维度以此为数据源
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -18,6 +18,7 @@
 #include "AI/TreasureChest.h"
 #include "AI/WaveDirector.h"
 #include "Audio/SFXLibrary.h"
+#include "Events/RunEventLog.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/OverlapResult.h"
 #include "EngineUtils.h"
@@ -255,6 +256,7 @@ void AAICompanionDemoCharacter::UnlockRecall()
 	if (bRecallUnlocked) { return; }
 	bRecallUnlocked = true;
 	USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Voice_BeaconActivate);
+	URunEventLog::Publish(GetWorld(), TEXT("队友"), TEXT("我一直在你身边。"), TEXT("BeaconUnlock"));
 	if (ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(
 		UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass())))
 	{
@@ -301,6 +303,7 @@ void AAICompanionDemoCharacter::RecallCompanion()
 	else { return; }
 	USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Voice_BeaconRecall);
 	Companion->ShowSpeechBubble(TEXT("我从未离开过你"));
+	URunEventLog::Publish(GetWorld(), TEXT("队友"), TEXT("我从未离开过你"), TEXT("BeaconRecall"));
 
 	// 光效：起讫双闪 + 青色连线（与玩家闪烁同语言、异色系）
 	DrawDebugLine(GetWorld(), Start, Companion->GetActorLocation(), FColor::Cyan, false, 0.6f, 0, 6.f);
@@ -421,6 +424,13 @@ void AAICompanionDemoCharacter::Tick(float DeltaSeconds)
 					if (Director->GetUpgradeLevel() >= 6)
 					{
 						bPlayerShootingUnlocked = true;
+						const FString UnlockLine(TEXT("看来你找回了一些自己的能力"));
+						ACompanionCharacter* Buddy = Cast<ACompanionCharacter>(UGameplayStatics::GetActorOfClass(this, ACompanionCharacter::StaticClass()));
+						if (Buddy) { Buddy->ShowSpeechBubble(UnlockLine); }
+						URunEventLog::Publish(World, TEXT("队友"), UnlockLine, TEXT("PlayerAttackUnlock"));
+						const bool bVoiceStarted = USFXLibrary::TryPlayVoice(World, EGameSFX::Voice_PlayerAttackUnlock,
+							(Buddy ? Buddy->GetActorLocation() : GetActorLocation()) + FVector(0.f,0.f,60.f));
+						UE_LOG(LogAICompanionDemo, Warning, TEXT("[Combat] PlayerAttackUnlock voice=%d"), bVoiceStarted);
 						DrawDebugString(GetWorld(), FVector(0.f, 0.f, 220.f),
 							TEXT("Lv.6：你的武器开始自动反击！"), this, FColor::Yellow, 3.f, false, 1.2f);
 						UE_LOG(LogAICompanionDemo, Warning, TEXT("[Combat] 玩家射击解锁（Lv.6，自动开火）"));

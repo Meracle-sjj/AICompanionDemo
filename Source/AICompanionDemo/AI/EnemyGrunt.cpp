@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 EnemyGrunt.h 的组件契约、HealthComponent 的 OnDeath/ApplyDamage/IsDead/SetMaxHealth、AIModule 的 AISense_Sight（视觉源注册）、Engine 的 CharacterMovementComponent 与 SkeletalMeshComponent（PlayAnimation/SetAnimationMode）、AnimSequenceBase 的 GetPlayLength、TimerManager 的动画回切定时器、Kismet 的 GetPlayerPawn、本模块 XpPickup（死亡掉落生成）、本模块 TemporaryPickup（E5 暂态掉落生成）、本模块 Audio/SFXLibrary（EnemyDie/WarlockBeamCharge/WarlockBeamFire 事件音效）
  * [OUTPUT]: 对外提供 AEnemyGrunt 的实现——重力行走逼近（**追击全自驱寻路**：RefreshChasePath 每 0.5s FindPathToActorSynchronously 算路存路点串 + 沿"路径下一路点"喂输入——加速度与绕障同源，滑步案（PFC 不写加速度，vel=200/accel=0 探针实证）与双驱动打架案（直冲输入顶掉绕障路径=卡斜坡）双根治；无路径直指玩家兜底 + 失败回退窗）+ 贴脸挥拳节拍（动画与伤害同拍，伤害携带 Instigator=自己——玩家受击广播即队友的伤害通道信号）+ ragdoll 布娃娃死亡（切 Ragdoll 碰撞预设 QueryAndPhysics + 全骨骼模拟——mesh 默认 QueryOnly 只模拟不碰撞即"沉地"案根因）+ ApplyVariant 变体定型（三变体参数集：移速/血量/伤害/间隔/体型/"Paint Tint" 色调微差/经验值/蛋糕掉率，逐分支显式赋值保幂等；Standard=M3.5 基线零漂移）+ 死亡掉落 XpPickup（喂 XpValue）与 HealthPickup 柠檬蛋糕（HealDropChance 概率，蛮兵必掉）与 TemporaryPickup E5 暂态道具（RushDropChance 概率，种类随机定型）+ ICombatant 三方法 + **妖术师蓄力地面预警圈（09-29 视觉区分度案：红线战场与穿透红撞车定罪——MOBA 语言"脚下红圈=要挨打"，圈半径判宽+50，来源线降 1px 辅助；结算猩红+白芯与穿透红分家）**
- *  猎印由UPROPERTY持有；狂暴双股贴身紫红火焰由EnrageVisual管理，召唤杂兵出生读导演；死亡先清火焰并报告普通怪事件。
+ *  1.1仅Standard基础步速450→405cm/s，其他变体不变；ApplyVariant同步慢速恢复基线。猎印由UPROPERTY持有；狂暴双股贴身紫红火焰由EnrageVisual管理，召唤杂兵出生读导演；死亡先清火焰并报告普通怪事件。
  * [POS]: AI/ 的敌对方实现（球体 EnemyTarget 的继任者，WaveDirector 的生成目标）；球体时代两大物理补丁（SnapToGround 贴地、免 sweep）在 ACharacter 载体上整体作废——胶囊+重力天生正确，但两道 BP 隐式装配必须显式化（构造函数注释含三案根因）：① bRunPhysicsWithNoController（无 Controller 不模拟，悬浮冻结）；② 胶囊 42×96 + mesh 贴地(-90)/前向转正(-90°)（模板配在 BP 里，裸 C++ 缺失即浮空+恒侧身）；③ 胶囊 Visibility=Block（Pawn 预设默认 Ignore，队友 LOS 线穿透即永不开火）
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md；成员地图由主agent统一维护
  */
@@ -599,8 +599,8 @@ void AEnemyGrunt::ApplyVariant(const EGruntVariant InVariant)
 	// 猎犬快而脆（先贴脸咬人，仇恨覆盖把它顶上首选）；蛮兵慢而硬（先集火蛮兵还是先清贴脸猎犬，
 	// 评分板全程有戏）。色调在近黑基底上做红/蓝偏移：远看可辨，近看同族
 	// 09-22 移速重校（用户实测"被聚成一坨慢慢蹭，无压迫感"）：玩家 500 的四成太散步——
-	// 对齐 VS 压迫线（怪速≈玩家七成）：标准 340/猎犬 420（后期 ×1.3 反超玩家，逼你处理）/蛮兵 220（坦克保留慢）
-	float MoveSpeed = 450.f;
+	// 1.1真实定型值：标准405/猎犬480/蛮兵300/妖术师200/虚空裔420；后期成长由导演另乘。
+	float MoveSpeed = 405.f;   // 1.1首测反馈：仅Standard基础速度450降低10%，其他分支明确覆写。
 	float MaxHp = 45.f;   // 09-28 用户反馈"血太厚打不死、被追挫败感强"：标准兵 100→45（队友 10 伤/0.8s≈4 发倒地）——让首波即升 1-2 级拿到强化
 	float Damage = 5.f;
 	float AttackInterval = 1.5f;

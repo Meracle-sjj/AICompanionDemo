@@ -2,7 +2,7 @@
 
 /**
  * [INPUT]: 依赖 Engine 的 AGameModeBase 生命周期与 FindPlayerStart 出生点查询、SpawnActor 生成链路，依赖 AI/CompanionCharacter 与 AI/EnemyGrunt 的可生成实体类型、AI/WaveDirector（M3.75 玩法节奏中枢的装配目标）
- * [OUTPUT]: 开局装配与开始/死亡输入流转；蠕虫死亡生成归途传送门，奖励领取完且近门按E；Ending暂停世界、真实时钟渐入，返回主菜单重载本局
+ * [OUTPUT]: 开局装配、正常局独立免费箱、开始/暂停/设置/死亡输入流转和失焦暂停；蠕虫死亡生成归途传送门，奖励领取完且近门按E；Ending暂停世界、真实时钟渐入，返回主菜单重载本局
  * [POS]: Source/AICompanionDemo 的组合根（D6：代码生成取代手工摆放）——"谁入场"在此装配，"何时何地"已随 M3.75 迁入 WaveDirector，"入场后做什么"在 CompanionAIController：三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,6 +22,9 @@ class UDeathScreen;
 class UDamageFlash;
 class AEndingPortal;
 class UEndingScreen;
+class UPauseMenu;
+class UDisplaySettingsMenu;
+class URunEventPanel;
 
 /**
  * 简单第三人称 GameMode：M1 队友入场，M2 敌阵入场，M3.75 波次导演接管敌人生成。
@@ -63,7 +66,24 @@ public:
 	/** 门附近的E优先保留给归途交互；Character据此跳过宝箱/锁箱/祭坛分支。 */
 	UFUNCTION(BlueprintPure, Category = "Ending")
 	bool HasNearbyEndingPortal() const;
+	UFUNCTION(BlueprintCallable, Category="Run")
 	void ReturnToMainMenu();
+	UFUNCTION(BlueprintCallable, Category="Run")
+	void TogglePauseMenu();
+	UFUNCTION(BlueprintCallable, Category="Run")
+	void PauseForFocusLoss();
+	UFUNCTION(BlueprintCallable, Category="Run")
+	void ResumeRunFromPause();
+	/** 输入所有者统一仲裁；导演在奖励续接/结束后调用。 */
+	void RestoreRunInput();
+	UFUNCTION(BlueprintPure, Category="Run")
+	bool IsGameplayPaused() const { return bGameplayPaused; }
+	UFUNCTION(BlueprintCallable, Category="Run")
+	void ShowDisplaySettings();
+	UFUNCTION(BlueprintCallable, Category="Run")
+	void CloseDisplaySettings();
+	UFUNCTION(BlueprintPure, Category="Debug|Run")
+	FString DebugRunState() const;
 
 	UFUNCTION(BlueprintPure, Category = "Ending")
 	bool IsEndingShown() const { return bEndingShown; }
@@ -177,6 +197,9 @@ public:
 private:
 	/** 调试面板挂载（测试模式常驻右侧） */
 	void ShowDebugPanel();
+	void HandleApplicationActivation(bool bIsActive);
+
+	void SpawnStarterChest();
 
 	/** 标题幕装配：菜单挂载 + 世界冻结（BeginPlay 末尾调用；装配失败则不冻结——宁可没有幕布不能永远黑着） */
 	void ShowStartMenu();
@@ -205,6 +228,11 @@ private:
 	TObjectPtr<AEndingPortal> EndingPortal;
 	UPROPERTY(Transient)
 	TObjectPtr<UEndingScreen> EndingScreen;
+	UPROPERTY(Transient) TObjectPtr<UPauseMenu> PauseMenu;
+	UPROPERTY(Transient) TObjectPtr<UDisplaySettingsMenu> DisplaySettingsMenu;
+	UPROPERTY(Transient) TObjectPtr<URunEventPanel> RunEventPanel;
+	bool bGameplayPaused = false;
+	bool bReturningToMenu = false;
 	bool bRunStarted = false;
 	bool bWurmDefeated = false;
 	bool bEndingShown = false;

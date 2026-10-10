@@ -11,6 +11,7 @@ public class AICompanionDemo : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
 			"CoreUObject",
+			"Json",
 			"Engine",
 			"InputCore",
 			"EnhancedInput",

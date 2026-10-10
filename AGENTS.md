@@ -35,6 +35,8 @@ AICompanionDemo.uproject - 模块声明（Runtime/PostDefault，AdditionalDepend
 八项反馈修订结构：AI/BossSummonerBarrage负责单发弹幕与活弹所有权（10-09晚由三发回调，频率/速度保持），BossOrb以可见35cm核心连续球扫玩家胶囊/BlockPawn实体、地形先到即销毁；EnemyGruntSummoned负责紫色双倍攻速妖术师；BossBase全家族共享玩家拉远镜头，UI/CompanionHudBosses集中显示屏幕上方真血条。玩家穿透与一次折射可协同，AI保持互斥；Nova继承玩家当前状态与独立地刺判定，不重复主攻遗物。感电默认两端基础20/过载40，模式数值与实际飘字同步。Content/SFX/Boss为CC0真实爆炸独立BossImpact，Ending稳定路径使用无飘带/无佩剑v3战损双人图。源码/资源导入不等于运行验收，当前结果见指挥部docs/combat-polish-20261009.md、boss-orb-alignment-20261009.md和STATUS。
 
 
+2026-10-10 1.1实施结构（编译/玩法验证尚待报告，不表示发布）：Events/RunEventLog为Game/PIE每世界100条事实文本源；UI/RunEventPanel只读展示，GameMode装配与离局清理。GameMode统一ESC/应用失焦暂停、设置输入焦点与菜单重载；原奖励选择GlobalTimeDilation保留，暂停仅SetGamePaused。PauseMenu/DisplaySettingsMenu/DebugPanel属UI层，DefaultGameUserSettings配置首开窗口，Saved设置优先。正常StartRun附近生成独立免费闪光宝箱，Test身份先设置以避免混入。CompanionAIController按当前路径段喂输入、同目的地执行中的路径不重发；新语音槽及资产仅接Lv6实际一次解锁。WaveDirector奖励来源与领取时等级入队，Lv9玩家/Lv10 AI交替，Flip仅切当前奖励；完整实施参数、原因与验收进度见公开issue#1。
+
 ## GitHub迭代记录协议（用户2026-10-10明确要求）
 
 用户要求所有改动先在GitHub发表改动预期，完成后再宣布实装，并实时留存记录供面试评审。该明确授权覆盖本项目旧“不推送远程仓库”规定，但不授权发布秘密、第三方裸资产、购买签名或删除用户文件。

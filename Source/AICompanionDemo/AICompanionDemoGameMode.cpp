@@ -2,7 +2,7 @@
 
 /**
  * [INPUT]: 依赖 Engine 的 SpawnActor/FindPlayerStart/World，依赖 AI/CompanionCharacter 与 AI/EnemyGrunt 的类对象、AI/WaveDirector（M3.75 敌人生成路径的接管者）
- * [OUTPUT]: 开局装配、开始/死亡屏；归途门协调遗物队列与近门E优先级，Ending暂停世界和导演并清战斗屏幕消息，真实时钟渐入由界面负责；主菜单重载清理本局
+ * [OUTPUT]: 开局装配、免费初始箱、开始/暂停/设置/死亡屏；归途门协调遗物队列与近门E优先级，Ending暂停世界和导演并清战斗屏幕消息，真实时钟渐入由界面负责；主菜单重载清理本局
  * [POS]: Source/AICompanionDemo 的组合根实现；"谁入场"在此装配，"何时何地"在 WaveDirector，"入场后做什么"在 CompanionAIController——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -33,6 +33,10 @@
 #include "UI/DebugPanel.h"
 #include "UI/StartMenu.h"
 #include "UI/EndingScreen.h"
+#include "UI/PauseMenu.h"
+#include "UI/DisplaySettingsMenu.h"
+#include "UI/RunEventPanel.h"
+#include "Framework/Application/SlateApplication.h"
 
 AAICompanionDemoGameMode::AAICompanionDemoGameMode()
 {
@@ -176,6 +180,15 @@ void AAICompanionDemoGameMode::BeginPlay()
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[UI] DamageFlash 已挂载"));
 	}
 
+	if (URunEventPanel* Panel = CreateWidget<URunEventPanel>(World, URunEventPanel::StaticClass()))
+	{
+		RunEventPanel = Panel;
+		Panel->AddToViewport(2);
+	}
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().OnApplicationActivationStateChanged().AddUObject(this, &AAICompanionDemoGameMode::HandleApplicationActivation);
+	}
 	ShowStartMenu();
 }
 
@@ -213,8 +226,9 @@ void AAICompanionDemoGameMode::ShowStartMenu()
 
 void AAICompanionDemoGameMode::StartRun()
 {
-	if (bEndingShown || DeathScreen) { return; }
+	if (bRunStarted || bEndingShown || DeathScreen || bReturningToMenu) { return; }
 	bRunStarted = true;
+	if (!bTestMode) { SpawnStarterChest(); }
 	// 特效预载（09-30 用户实测"加载特效卡顿"）：六系 Vfx 首用加载一次付清——游戏内零卡顿
 	UVfxLibrary::PrecacheVfx(GetWorld());
 
@@ -239,8 +253,9 @@ void AAICompanionDemoGameMode::StartRun()
 
 void AAICompanionDemoGameMode::StartTestRun()
 {
-	StartRun();   // 全套复用：解冻/菜单退场/BGM/特效预载
-	bTestMode = true;
+	if (bRunStarted || bEndingShown || DeathScreen) { return; }
+	bTestMode = true; // 先确定入口身份，正常局免费箱不进入测试局。
+	StartRun();
 	if (WaveDirector)
 	{
 		WaveDirector->SetTestMode(true);   // 自动刷怪/祭坛调度全停——调试面板手动控制
@@ -386,9 +401,15 @@ void AAICompanionDemoGameMode::ShowDeathScreen()
 		Kills = Snap.KillCount;
 		Level = Snap.Level;
 	}
+	// 终局接管高层输入；清除暂停/设置/测试屏，死亡幕始终在最上层。
+	if (PauseMenu) { PauseMenu->RemoveFromParent(); PauseMenu = nullptr; }
+	if (DisplaySettingsMenu) { DisplaySettingsMenu->RemoveFromParent(); DisplaySettingsMenu = nullptr; }
+	if (DebugPanel) { DebugPanel->RemoveFromParent(); DebugPanel = nullptr; }
+	if (bGameplayPaused) { UGameplayStatics::SetGamePaused(this, false); }
+	bGameplayPaused = false;
 	Screen->Setup(Survival, Kills, Level);
 	Screen->BindHost(this);
-	AttachFullscreenUI(Screen, 10);
+	AttachFullscreenUI(Screen, 220);
 	DeathScreen = Screen;
 	if (EndingPortal) { EndingPortal->Destroy(); EndingPortal = nullptr; }
 
@@ -440,7 +461,7 @@ bool AAICompanionDemoGameMode::CanUseEndingPortal(const AEndingPortal* Portal) c
 	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
 	const UHealthComponent* Health = Player ? Player->FindComponentByClass<UHealthComponent>() : nullptr;
 	return IsValid(Portal) && Portal == EndingPortal && bRunStarted && bWurmDefeated && !bEndingShown
-		&& !DeathScreen && Health && !Health->IsDead() && (!WaveDirector || !WaveDirector->HasPendingRewardChoices());
+		&& !DeathScreen && !bGameplayPaused && !DisplaySettingsMenu && Health && !Health->IsDead() && (!WaveDirector || !WaveDirector->HasPendingRewardChoices());
 }
 
 bool AAICompanionDemoGameMode::HasNearbyEndingPortal() const
@@ -501,7 +522,15 @@ bool AAICompanionDemoGameMode::TryEnterEndingPortal(AEndingPortal* Portal)
 
 void AAICompanionDemoGameMode::ReturnToMainMenu()
 {
-	if (!bEndingShown) { return; }
+	if (bReturningToMenu || !GetWorld()) { return; }
+	bReturningToMenu = true;
+	UGameplayStatics::SetGamePaused(this, false);
+	UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		PC->ResetIgnoreMoveInput();
+		PC->ResetIgnoreLookInput();
+	}
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
 }
 
@@ -535,5 +564,155 @@ void AAICompanionDemoGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (EndingPortal) { EndingPortal->Destroy(); EndingPortal = nullptr; }
 	if (EndingScreen) { EndingScreen->RemoveFromParent(); EndingScreen = nullptr; }
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().OnApplicationActivationStateChanged().RemoveAll(this);
+	}
+	if (PauseMenu) { PauseMenu->RemoveFromParent(); PauseMenu = nullptr; }
+	if (DisplaySettingsMenu) { DisplaySettingsMenu->RemoveFromParent(); DisplaySettingsMenu = nullptr; }
+	if (RunEventPanel) { RunEventPanel->RemoveFromParent(); RunEventPanel = nullptr; }
 	Super::EndPlay(EndPlayReason);
+}
+
+// 1.1：暂停归组合根所有，不修改奖励选择的GlobalTimeDilation。
+void AAICompanionDemoGameMode::HandleApplicationActivation(bool bIsActive)
+{
+	if (!bIsActive) { PauseForFocusLoss(); }
+}
+
+void AAICompanionDemoGameMode::PauseForFocusLoss()
+{
+	if (bRunStarted && !bGameplayPaused && !DisplaySettingsMenu) { TogglePauseMenu(); }
+}
+
+void AAICompanionDemoGameMode::TogglePauseMenu()
+{
+	if (DisplaySettingsMenu) { CloseDisplaySettings(); return; }
+	if (bGameplayPaused) { ResumeRunFromPause(); return; }
+	if (!bRunStarted || bEndingShown || DeathScreen || bReturningToMenu || !GetWorld()) { return; }
+	UPauseMenu* Menu = CreateWidget<UPauseMenu>(GetWorld(), UPauseMenu::StaticClass());
+	if (!Menu) { return; }
+	if (!UGameplayStatics::SetGamePaused(this, true)) { return; }
+	bGameplayPaused = true;
+	PauseMenu = Menu;
+	Menu->BindHost(this);
+	AttachFullscreenUI(Menu, 200);
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		PC->bShowMouseCursor = true;
+		FInputModeUIOnly Mode;
+		Mode.SetWidgetToFocus(Menu->TakeWidget());
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PC->SetInputMode(Mode);
+	}
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Pause] paused; pendingReward=%d"), WaveDirector && WaveDirector->HasPendingRewardChoices());
+}
+
+void AAICompanionDemoGameMode::RestoreRunInput()
+{
+	if (bReturningToMenu) { return; }
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		UUserWidget* Exclusive = nullptr;
+		if (bEndingShown) { Exclusive = EndingScreen; }
+		else if (DeathScreen) { Exclusive = DeathScreen; }
+		else if (DisplaySettingsMenu) { Exclusive = DisplaySettingsMenu; }
+		else if (bGameplayPaused) { Exclusive = PauseMenu; }
+		else if (!bRunStarted) { Exclusive = StartMenu; }
+		if (Exclusive)
+		{
+			PC->bShowMouseCursor = true;
+			FInputModeUIOnly Mode;
+			Mode.SetWidgetToFocus(Exclusive->TakeWidget());
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			PC->SetInputMode(Mode);
+			return;
+		}
+		const bool bNeedsUI = bTestMode || (WaveDirector && WaveDirector->HasPendingRewardChoices());
+		PC->bShowMouseCursor = bNeedsUI;
+		if (bNeedsUI)
+		{
+			FInputModeGameAndUI Mode;
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Mode.SetHideCursorDuringCapture(false);
+			PC->SetInputMode(Mode);
+		}
+		else { PC->SetInputMode(FInputModeGameOnly()); }
+		if (FSlateApplication::IsInitialized()) { FSlateApplication::Get().SetAllUserFocusToGameViewport(); }
+	}
+}
+
+void AAICompanionDemoGameMode::ResumeRunFromPause()
+{
+	if (!bGameplayPaused || bEndingShown || DeathScreen || bReturningToMenu) { return; }
+	if (DisplaySettingsMenu) { DisplaySettingsMenu->RemoveFromParent(); DisplaySettingsMenu = nullptr; }
+	if (PauseMenu) { PauseMenu->RemoveFromParent(); PauseMenu = nullptr; }
+	UGameplayStatics::SetGamePaused(this, false);
+	bGameplayPaused = false;
+	RestoreRunInput();
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Pause] resumed; dilation=%.5f pendingReward=%d"), UGameplayStatics::GetGlobalTimeDilation(this), WaveDirector && WaveDirector->HasPendingRewardChoices());
+}
+
+void AAICompanionDemoGameMode::ShowDisplaySettings()
+{
+	if (DisplaySettingsMenu || bEndingShown || DeathScreen || bReturningToMenu || !GetWorld()) { return; }
+	if (bRunStarted && !bGameplayPaused) { TogglePauseMenu(); }
+	UDisplaySettingsMenu* Menu = CreateWidget<UDisplaySettingsMenu>(GetWorld(), UDisplaySettingsMenu::StaticClass());
+	if (!Menu) { return; }
+	DisplaySettingsMenu = Menu;
+	Menu->BindHost(this);
+	AttachFullscreenUI(Menu, 210);
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		PC->bShowMouseCursor = true;
+		FInputModeUIOnly Mode;
+		Mode.SetWidgetToFocus(Menu->TakeWidget());
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PC->SetInputMode(Mode);
+	}
+}
+
+void AAICompanionDemoGameMode::CloseDisplaySettings()
+{
+	if (!DisplaySettingsMenu) { return; }
+	DisplaySettingsMenu->RemoveFromParent();
+	DisplaySettingsMenu = nullptr;
+	UUserWidget* Host = bGameplayPaused ? static_cast<UUserWidget*>(PauseMenu) : static_cast<UUserWidget*>(StartMenu);
+	if (Host)
+	{
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+		{
+			FInputModeUIOnly Mode;
+			Mode.SetWidgetToFocus(Host->TakeWidget());
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			PC->SetInputMode(Mode);
+		}
+	}
+	else { RestoreRunInput(); }
+}
+
+void AAICompanionDemoGameMode::SpawnStarterChest()
+{
+	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!Player || !WaveDirector || !GetWorld()) { return; }
+	const FVector Target = Player->GetActorLocation() + FVector(210.f, 170.f, 0.f);
+	FHitResult Ground;
+	FCollisionQueryParams Trace(SCENE_QUERY_STAT(StarterChestGround), false, Player);
+	const FCollisionObjectQueryParams StaticObjects(ECC_WorldStatic);
+	if (!GetWorld()->LineTraceSingleByObjectType(Ground, Target + FVector(0.f,0.f,600.f), Target-FVector(0.f,0.f,3000.f), StaticObjects, Trace)) { return; }
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	if (ATreasureChest* Chest = GetWorld()->SpawnActor<ATreasureChest>(ATreasureChest::StaticClass(), Ground.ImpactPoint+FVector(0.f,0.f,40.f), FRotator::ZeroRotator, Params))
+	{
+		Chest->ConfigureStarterChest();
+		UE_LOG(LogAICompanionDemo, Warning, TEXT("[StarterChest] spawned at %s; free three-choice reward"), *Chest->GetActorLocation().ToCompactString());
+	}
+}
+
+FString AAICompanionDemoGameMode::DebugRunState() const
+{
+	return FString::Printf(TEXT("{\"runStarted\":%s,\"testMode\":%s,\"paused\":%s,\"pauseMenu\":%s,\"settings\":%s,\"startMenu\":%s,\"rewardPending\":%s,\"dilation\":%.6f}"),
+		bRunStarted?TEXT("true"):TEXT("false"), bTestMode?TEXT("true"):TEXT("false"), UGameplayStatics::IsGamePaused(this)?TEXT("true"):TEXT("false"),
+		PauseMenu && PauseMenu->IsInViewport()?TEXT("true"):TEXT("false"), DisplaySettingsMenu && DisplaySettingsMenu->IsInViewport()?TEXT("true"):TEXT("false"),
+		StartMenu && StartMenu->IsInViewport()?TEXT("true"):TEXT("false"), WaveDirector && WaveDirector->HasPendingRewardChoices()?TEXT("true"):TEXT("false"), UGameplayStatics::GetGlobalTimeDilation(this));
 }

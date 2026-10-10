@@ -1,6 +1,6 @@
-﻿/**
+/**
  * [INPUT]: 依赖 AIModule 的 AAIController/MoveToActor/PathFollowingComponent/AIPerception(Sight)、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息与 LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、HAL 的 FPlatformTime（台词双闸门时钟）、本模块 HealthComponent（M3 评分的威胁/残血数据面）
- * [OUTPUT]: 对外提供 ACompanionAIController——队友大脑 M3 版：Follow/Engage 双状态手写 FSM（D3）+ **双作战模式**（Guard 护卫=移动层永远跟玩家走射护主 / Berserk 战斗狂人=追击评分最优目标；Q 键 Tick 边沿切换，共享评分器与火力层——元策略层）+ 感知对齐（26m 视距全向视锥，UPROPERTY 可调，信息对等原则）+ utility 评分器 EvaluateTargets（距离/威胁/残血三维，威胁含"咬人仇恨覆盖拉满"，权重护主主导 0.6/0.3/0.1 + SwitchCost 切换惩罚）+ 伤害通道 HandlePlayerDamaged（玩家受击广播 → 凶手注入候选集）+ 屏幕评分板 DrawScoreboard（[咬] 仇恨标记，可解释北极星的核心交付）+ M3.75 生命感层：Bark 台词播报（七类事件触发一句话人格，全局+分类双冷却，头顶跟随字幕）+ 步态方向平滑（路点瞬变→VInterpTo 连续转向）+ E5 暂态狂怒攻速 ActivateFrenzy（开火间隔×0.5 弹道紫，定时自恢复——TemporaryPickup 触发）；暴露 Follow/Perception/Combat/Mode/Utility/Bark 六组 EditAnywhere 参数
+ * [OUTPUT]: 对外提供 ACompanionAIController——队友大脑 M3 版：Follow/Engage 双状态手写 FSM（D3）+ **双作战模式**（Guard 护卫=移动层永远跟玩家走射护主 / Berserk 战斗狂人=追击评分最优目标；Q 键 Tick 边沿切换，共享评分器与火力层——元策略层）+ 感知对齐（26m 视距全向视锥，UPROPERTY 可调，信息对等原则）+ utility 评分器 EvaluateTargets（距离/威胁/残血三维，威胁含"咬人仇恨覆盖拉满"，权重护主主导 0.6/0.3/0.1 + SwitchCost 切换惩罚）+ 伤害通道 HandlePlayerDamaged（玩家受击广播 → 凶手注入候选集）+ 屏幕评分板 DrawScoreboard（[咬] 仇恨标记，可解释北极星的核心交付）+ M3.75 生命感层：Bark 台词播报（七类事件触发一句话人格，全局+分类双冷却，头顶跟随字幕）+ 步态输入读当前路径段（不重扫已走路点）与方向平滑；同目标活跃路径不重发MoveTo+ E5 暂态狂怒攻速 ActivateFrenzy（开火间隔×0.5 弹道紫，定时自恢复——TemporaryPickup 触发）；暴露 Follow/Perception/Combat/Mode/Utility/Bark 六组 EditAnywhere 参数
  * [POS]: Source/AICompanionDemo/AI 的决策核心；驱动CompanionCharacter，面向ICombatant感知/决策/攻击；常驻AI目标调试文字已移除，决策日志与显式开启的评分板保留。
  *  狂暴读真实FrenzyTimer；Q被动由Health乘一次，弹路显示实际扣血。感电每端基础20、过载40与比例成长取高；Nova命中后继承玩家状态及独立地刺口。
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
@@ -279,6 +279,8 @@ public:
 	void DebugNovaBurst(const FVector& Center);
 	UFUNCTION(BlueprintPure, Category = "Debug|Combat")
 	FString DebugLastShotState() const;
+	UFUNCTION(BlueprintPure, Category="Debug|Movement")
+	FString DebugMovementState() const;
 
 private:
 	float LastShotRawDamage = 0.f;
@@ -345,6 +347,10 @@ private:
 
 	/** 喂入方向平滑缓存（A4）：跨帧指数转向，路点切换不再瞬变；零向量时直接对齐目标方向 */
 	FVector SmoothedFeedDir = FVector::ZeroVector;
+	TWeakObjectPtr<AActor> RequestedMoveGoal;
+	float RequestedAcceptance = -1.f;
+	int32 MovementRequestCount = 0;
+	void EnsureMoveRequest(AActor* Goal, float Acceptance);
 
 	/** 台词分类节流表（A1）：类别 → 上次播报时刻（FPlatformTime 秒） */
 	TMap<FName, double> LastBarkTime;
