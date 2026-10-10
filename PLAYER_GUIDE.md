@@ -1,6 +1,6 @@
 # 玩家指南
 
-**本文对应1.1 Windows候选，本地交付已准备，公开附件待上传。** 玩家文件名为 `AICompanionDemo-Win64-v1.1.zip`；[1.1发布状态](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)以实际附件出现为准。最终候选构建和独立开始页已通过，核心物理键鼠仍待异机复验。旧版[1.0 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)与附件保留；下文标注1.1新增规则。
+**本文对应已发布的1.1 Windows试玩包。** [下载玩家ZIP](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/AICompanionDemo-Win64-v1.1.zip)，文件名为 `AICompanionDemo-Win64-v1.1.zip`；[1.1 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)提供源码与校验清单，三附件远端大小／SHA及匿名下载核对通过。最终构建和独立开始页已有证据，核心物理键鼠仍待异机复验。旧版[1.0 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)与附件保留；下文标注1.1新增规则。
 
 公开源码包不含Content，只供阅读实现，不能直接游玩或完整打包。1.1大小、校验与上传状态见[发布记录](Docs/RELEASE.md)，首版记录见[1.0归档](Docs/RELEASE_1.0.md)。作者已在实验室Windows电脑安装运行库并进入1.0正常／测试模式，反馈运行流畅；这不是1.1完整自然整局或长期性能证据。首版与1.1候选均关闭并排除BGM，原本地工程保留音乐；第三方来源与发布边界见[THIRD_PARTY](Docs/THIRD_PARTY.md)。
 

@@ -2,17 +2,17 @@
 
 玩家与一名AI队友在沙丘战场中作战，通过站位、护卫／歼灭切换、局内构筑、资源消费与Boss挑战改变战局。这是一份面向**系统策划岗位**的个人可玩作品，使用 Unreal Engine 5.6.1 与 C++，运行时采用离线 FSM／Utility AI。
 
-**1.1本地交付已准备，公开附件待上传：[1.1发布状态](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)。**
+**[下载 Windows 1.1 试玩包（1.19 GB）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/AICompanionDemo-Win64-v1.1.zip) · [1.1 Release、源码与校验文件](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)**
 
 **[下载上一版 Windows 1.0 试玩包（1.19 GB）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip) · [1.0 Release 与校验文件](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)**
 
 **[试玩与操作](PLAYER_GUIDE.md) · [下载与发布记录](Docs/RELEASE.md) · [系统设计说明](Docs/SYSTEM_DESIGN.md) · [规则与迭代证据](Docs/EVIDENCE.md)**
 
-**本文与玩家指南对应1.1，公开附件仍待上传。**首版发布时，本机独立启动到开始界面，进一步输入被Windows网络权限弹窗阻塞；之后作者在实验室Windows机器安装运行库，确认进入1.0正常／测试模式且运行流畅。这些记录不等同于1.1完整通关、长期性能或多设备验收。首版记录保留在[1.0发布归档](Docs/RELEASE_1.0.md)，当前候选见[发布进度](Docs/RELEASE.md)。演示视频待补，已备[110秒录制分镜](Docs/VIDEO_SCRIPT.md)。开发自2026年8月起持续迭代；下文规则快照为2026-10-10的当前源码，新功能以版本标注区分。
+**本文与玩家指南对应已发布的1.1。**首版发布时，本机独立启动到开始界面，进一步输入被Windows网络权限弹窗阻塞；之后作者在实验室Windows机器安装运行库，确认进入1.0正常／测试模式且运行流畅。这些记录不等同于1.1完整通关、长期性能或多设备验收。首版记录保留在[1.0发布归档](Docs/RELEASE_1.0.md)，本轮远端附件与验证见[发布记录](Docs/RELEASE.md)。演示视频待补，已备[110秒录制分镜](Docs/VIDEO_SCRIPT.md)。开发自2026年8月起持续迭代；下文规则快照为2026-10-10的当前源码，新功能以版本标注区分。
 
 ## 根据试玩反馈持续迭代
 
-本轮反馈与设计预期先发表到[GitHub #1](https://github.com/Meracle-sjj/AICompanionDemo/issues/1)，再实施代码。[先行预期](Docs/ITERATION_1.1.md)保持原记录，[版本日志](CHANGELOG.md)追加实现与验证状态。审计发现拾取台词绕过事件记录后，又先追加公开预期再修复。**最终Editor构建8.89s、最新BuildCookRun 58.80s退出0；完整首轮225.27s属于修复前候选，不能当最终包。最终独立首次1280×720窗口开始页已验，核心物理键鼠仍待异机复验；1.1附件尚未公开上传。**
+本轮反馈与设计预期先发表到[GitHub #1](https://github.com/Meracle-sjj/AICompanionDemo/issues/1)，再实施代码。[先行预期](Docs/ITERATION_1.1.md)保持原记录，[版本日志](CHANGELOG.md)追加实现与验证状态。审计发现拾取台词绕过事件记录后，又先追加公开预期再修复。**最终Editor构建8.89s、最新BuildCookRun 58.80s退出0；完整首轮225.27s属于修复前候选，不能当最终包。独立首次1280×720窗口开始页已有证据；1.1三附件已公开，远端大小／SHA及匿名下载核对通过，核心物理键鼠仍待异机复验。**
 
 | 1.0反馈 | 1.1改动与实际证据 | 剩余边界 |
 | --- | --- | --- |

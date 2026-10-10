@@ -66,3 +66,7 @@
 ## 2026-10-10额度中断后的封包接手
 
 前代理最后已完成实际拾取事件接线修正、Editor8.89s成功及最终完整BuildCookRun58.80s／exit0，停在封包签名清单失败。接手修复本地封包工具的PowerShell调用后，玩家ZIP47文件逐条解码核对通过，大小1,191,507,139 B，摘要与待验边界见[发布记录](RELEASE.md)及[验证记录](RELEASE_VALIDATION.md)。当前仅本地准备完成，GitHub CLI未登录，尚未上传1.1附件；原先行预期、失败与1.0历史保留。
+
+## 2026-10-10发布结果追加
+
+账户认证恢复后，[公开封包记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/1#issuecomment-6095296752)已发表；校验清单字节数的195 B实测更正也以[后续记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/1#issuecomment-6095313829)保留。白名单243文件与annotated v1.1已推送，三附件先核对完整服务器SHA再正式发布，[1.1 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)可匿名下载，下载内容核对通过。1.0保持原附件与说明，当前发布结果不重写上述待上传历史，也不扩为独立键鼠／自然完整局已验。

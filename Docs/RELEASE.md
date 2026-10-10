@@ -1,14 +1,18 @@
-# 1.1候选发布记录
+# 1.1发布记录
 
-版本目标：`1.1`，记录日期2026-10-10（北京时间）。UE5.6.1 / Windows x64 / Development。**1.1源码已实装、Editor与完整BuildCookRun通过，独立候选已启动到开始界面；最终玩家ZIP已在本地逐文件验证，公开附件尚未上传，独立包核心操作仍待验。当前下载仍为1.0。**
+版本：`1.1`，记录日期2026-10-10（北京时间）。UE5.6.1 / Windows x64 / Development。**1.1已正式发布，玩家包、白名单源码包和SHA-256清单均可匿名下载，远端大小／摘要与本地一致。Editor与完整BuildCookRun、ZIP完整性和候选开始页已有证据；独立包核心操作仍待验。**
 
 首版记录完整保留：[1.0发布记录](RELEASE_1.0.md) · [1.0本地验证记录](RELEASE_VALIDATION_1.0.md) · [1.0 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)。没有修改首版标签或下载附件。
 
 ## 下载与启动
 
-[下载Windows 1.0试玩ZIP](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip)。首版为1,191,367,670 B（约1.19 GB / 1.11 GiB），SHA-256与完整性记录见[1.0归档](RELEASE_1.0.md)。**这里没有1.1下载链接；远端上传和匿名下载核对尚未完成。**
+[下载Windows 1.1试玩ZIP](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/AICompanionDemo-Win64-v1.1.zip) · [白名单源码ZIP](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/AICompanionDemo-source-v1.1.zip) · [SHA256SUMS](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.1/SHA256SUMS-v1.1.txt) · [正式Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)。Release id408784332，draft=false／prerelease=false；1.0标签、发布说明与三个附件保留，实核未变。
 
-本地最终玩家包 `AICompanionDemo-Win64-v1.1.zip` 为1,191,507,139 B（约1.19 GB / 1.11 GiB），47个文件，解压文件共1,490,823,923 B。SHA-256：`0ead5e7ce54c903740072ac6e507669bcf29d6b73e32d37789156399ac3a696f`。7z创建／测试均退出0，全条目解码SHA与封包暂存一致；这证明ZIP完整性，不代表核心游玩已验证。公开源码ZIP按[白名单导出工具](../Tools/Make-ReleaseSnapshot.ps1)生成，具体摘要随交付校验清单提供。
+最终玩家包 `AICompanionDemo-Win64-v1.1.zip` 为1,191,507,139 B（约1.19 GB / 1.11 GiB），47个文件，解压文件共1,490,823,923 B。SHA-256：`0ead5e7ce54c903740072ac6e507669bcf29d6b73e32d37789156399ac3a696f`。7z创建／测试均退出0，全条目解码SHA与封包暂存一致；这证明ZIP完整性，不代表核心游玩已验证。
+
+公开源码ZIP按[白名单导出工具](../Tools/Make-ReleaseSnapshot.ps1)生成，243文件／3,235,139 B，SHA-256：`5abe5b500fc60a31f94146553adfc0a24508b3ae0297fe4bf883b6a4c771a72e`。校验清单195 B（LF）。三附件服务器大小／SHA均匹配本地；无凭据下载HTTP和首1024字节核对通过，未重复下载整个1.19 GB玩家包。源码标签`v1.1`指向`9c6c165386ced03ef0ba6f120eda3bb05de3b162`，243个远端blob与快照逐条一致，10项README／机制图／截图匿名读取通过。
+
+包内文档及VERSION的本地准备状态记录封包时点；发布后的下载入口与远端审计追加于main及本页，已验证的附件和发布标签保持原快照。
 
 完整解压玩家ZIP，保留所有子目录，运行根目录 `AICompanionDemo.exe`；无需Unreal Editor或API密钥。首次缺少Visual C++运行库时安装随包官方x64安装程序。源码ZIP不含Content，不能直接游玩或完整恢复工程。操作与新增规则见[玩家指南](../PLAYER_GUIDE.md)。
 
@@ -21,7 +25,7 @@
 | PIE专项 | 免费箱、等级队列／Flip、重复成长、奖励暂停、菜单清局、事件／语音与文字几何取得实际回读；覆盖范围见[验证记录](RELEASE_VALIDATION.md) |
 | 独立包核心游玩 | **待验**：开始／测试、实际键鼠、战斗、成长、死亡、Boss／终局和全屏切换；PIE回调不替代这些操作 |
 | 玩家ZIP | **本地已验证**：47文件逐条解码与SHA核对通过，具体字节数及摘要见上文 |
-| 源码ZIP／公开附件 | 白名单导出源码并提供校验清单；**公开上传及匿名下载待完成**，不称1.1已发布 |
+| 源码ZIP／公开附件 | **已发布并核对**：源码快照243文件，三附件远端大小／SHA与匿名下载内容匹配本地 |
 | 可信发布者签名 | **未解决**：没有适用可信签名凭证，不以自签或关闭校验替代 |
 
 ![1.1独立候选开始页，1280×720](screenshots/1.1-package-menu.png)
@@ -48,4 +52,4 @@ Development引擎的TraceControl可能触发Windows网络权限提示，与离�
 
 玩家包放GitHub Releases，源码和文档进入普通Git；1.0附件继续可用。GitHub单Release附件须小于2GiB（2,147,483,648 B），每个Release最多1,000个附件；总资产体积／带宽没有总额限制。[GitHub官方Releases说明](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) 1.1能否满足单附件大小以最终压缩字节数为准，目前不沿用1.0体积作为1.1测量。
 
-普通Git超过50MiB警告、超过100MiB拒绝；玩家ZIP不入Git，当前白名单源码没有启用LFS的必要。[GitHub官方大文件说明](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github) 后续附件上传及校验通过后再将本页状态改为已发布，不以候选启动或源码推送代替发布完成。
+普通Git超过50MiB警告、超过100MiB拒绝；玩家ZIP不入Git，当前白名单源码没有启用LFS的必要。[GitHub官方大文件说明](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github) 本次在三附件全部上传并核对后记录已发布，核心游玩范围继续单独保留。
