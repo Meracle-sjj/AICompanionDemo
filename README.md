@@ -2,22 +2,24 @@
 
 玩家与一名AI队友在沙丘战场中作战，通过站位、护卫／歼灭切换、局内构筑、资源消费与Boss挑战改变战局。这是一份面向**系统策划岗位**的个人可玩作品，使用 Unreal Engine 5.6.1 与 C++，运行时采用离线 FSM／Utility AI。
 
-**[下载 Windows 1.0 试玩包（1.19 GB）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip) · [Release 与校验文件](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)**
+**1.1本地交付已准备，公开附件待上传：[1.1发布状态](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.1)。**
+
+**[下载上一版 Windows 1.0 试玩包（1.19 GB）](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip) · [1.0 Release 与校验文件](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)**
 
 **[试玩与操作](PLAYER_GUIDE.md) · [下载与发布记录](Docs/RELEASE.md) · [系统设计说明](Docs/SYSTEM_DESIGN.md) · [规则与迭代证据](Docs/EVIDENCE.md)**
 
-**下载仍为1.0；当前源码正在进行1.1迭代。**首版发布时，本机独立启动到开始界面，进一步输入被Windows网络权限弹窗阻塞；之后作者在实验室Windows机器安装运行库，确认进入正常／测试模式且运行流畅。这些记录不等同于完整通关、长期性能或多设备验收。首版体积、启动证据与限制保留在[1.0发布归档](Docs/RELEASE_1.0.md)，当前1.1候选见[发布进度](Docs/RELEASE.md)。演示视频待补，已备[110秒录制分镜](Docs/VIDEO_SCRIPT.md)。开发自2026年8月起持续迭代；下文规则快照为2026-10-10的当前源码，新功能以版本标注区分。
+**本文与玩家指南对应1.1，公开附件仍待上传。**首版发布时，本机独立启动到开始界面，进一步输入被Windows网络权限弹窗阻塞；之后作者在实验室Windows机器安装运行库，确认进入1.0正常／测试模式且运行流畅。这些记录不等同于1.1完整通关、长期性能或多设备验收。首版记录保留在[1.0发布归档](Docs/RELEASE_1.0.md)，当前候选见[发布进度](Docs/RELEASE.md)。演示视频待补，已备[110秒录制分镜](Docs/VIDEO_SCRIPT.md)。开发自2026年8月起持续迭代；下文规则快照为2026-10-10的当前源码，新功能以版本标注区分。
 
 ## 根据试玩反馈持续迭代
 
-本轮反馈与设计预期先发表到[GitHub #1](https://github.com/Meracle-sjj/AICompanionDemo/issues/1)，再实施代码。[先行预期](Docs/ITERATION_1.1.md)保持原记录，[版本日志](CHANGELOG.md)追加实现与验证状态。**1.1源码已实装，完整Editor与BuildCookRun通过；独立候选首次1280×720窗口开始页已验。PIE专项取得实际回读，独立核心操作与封包仍待验，没有1.1公开下载包。**
+本轮反馈与设计预期先发表到[GitHub #1](https://github.com/Meracle-sjj/AICompanionDemo/issues/1)，再实施代码。[先行预期](Docs/ITERATION_1.1.md)保持原记录，[版本日志](CHANGELOG.md)追加实现与验证状态。审计发现拾取台词绕过事件记录后，又先追加公开预期再修复。**最终Editor构建8.89s、最新BuildCookRun 58.80s退出0；完整首轮225.27s属于修复前候选，不能当最终包。最终独立首次1280×720窗口开始页已验，核心物理键鼠仍待异机复验；1.1附件尚未公开上传。**
 
 | 1.0反馈 | 1.1改动与实际证据 | 剩余边界 |
 | --- | --- | --- |
 | 全屏与测试入口不便 | 独立首次窗口1280×720；PIE设置处理保存并重开回读；面板收起／展开／返回清局，27条可见文字几何无不足 | 独立全屏与真实点击、重启、第二窗口的中文下缘 |
-| 缺少暂停与事件回看 | 暂停／恢复回调保留奖励队列与原流速；Lv.6一次真实解锁记录和4.44s SoundWave播放回读，语音已Cook | 物理ESC／AltTab、主观听音、自然12分钟及死亡／终局输入 |
+| 缺少暂停与事件回看 | 暂停／恢复保留奖励队列；跨Lv.6门槛的实际Tick一次解锁／4.44s语音回读；三类拾取记录与GC后保留、返回清局已测 | 物理ESC／AltTab、主观听音、自然12分钟及死亡／终局输入 |
 | 开局压力高 | 免费箱同回调远距拒绝、近距成功、重复拒绝，账本与下箱价不变；标准杂兵450→405cm/s已接入 | 自然局难度与存活体验，不以免费箱测试宣称改善幅度 |
-| 队友移动顿步 | 当前路径段与请求去重；坡地PFC Moving状态221样本平均477.64cm/s，停步末秒零速／请求稳定 | 急反向碰撞后停留；完整转向、追击、人眼动画及全地形未验 |
+| 队友移动顿步 | 当前路径段与请求去重；坡地PFC Moving状态221样本平均477.64cm/s（含一次零速），停步末秒零速／请求稳定 | 急反向碰撞后停留；完整转向、追击、人眼动画及全地形未验 |
 | 猎印重复与后期分工不清 | 正式授予桥猎印3→6层、大师保6；真实XP多级排队，Lv.9 Flip后仍续Lv.10 AI；速射／疾行收益上限回读 | 自然随机池、真实敌人全部叠层消费、候选不足与玩家速度钳制 |
 
 [详细验证记录](Docs/RELEASE_VALIDATION.md)区分PIE处理入口、真实独立启动和待操作项，保留编译／不支持分辨率的失败及既有日志错误。

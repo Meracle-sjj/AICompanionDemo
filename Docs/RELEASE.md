@@ -1,24 +1,27 @@
 # 1.1候选发布记录
 
-版本目标：`1.1`，记录日期2026-10-10（北京时间）。UE5.6.1 / Windows x64 / Development。**1.1源码已实装、Editor与完整BuildCookRun通过，独立候选已启动到开始界面；ZIP封包、附件上传与独立包核心操作尚未完成。当前下载仍为1.0。**
+版本目标：`1.1`，记录日期2026-10-10（北京时间）。UE5.6.1 / Windows x64 / Development。**1.1源码已实装、Editor与完整BuildCookRun通过，独立候选已启动到开始界面；最终玩家ZIP已在本地逐文件验证，公开附件尚未上传，独立包核心操作仍待验。当前下载仍为1.0。**
 
 首版记录完整保留：[1.0发布记录](RELEASE_1.0.md) · [1.0本地验证记录](RELEASE_VALIDATION_1.0.md) · [1.0 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.0)。没有修改首版标签或下载附件。
 
 ## 下载与启动
 
-[下载Windows 1.0试玩ZIP](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip)。首版为1,191,367,670 B（约1.19 GB / 1.11 GiB），SHA-256与完整性记录见[1.0归档](RELEASE_1.0.md)。**这里没有1.1下载链接；1.1压缩体积、SHA-256与远端下载核对待交付后追加。**
+[下载Windows 1.0试玩ZIP](https://github.com/Meracle-sjj/AICompanionDemo/releases/download/v1.0/AICompanionDemo-Win64-v1.0.zip)。首版为1,191,367,670 B（约1.19 GB / 1.11 GiB），SHA-256与完整性记录见[1.0归档](RELEASE_1.0.md)。**这里没有1.1下载链接；远端上传和匿名下载核对尚未完成。**
+
+本地最终玩家包 `AICompanionDemo-Win64-v1.1.zip` 为1,191,507,139 B（约1.19 GB / 1.11 GiB），47个文件，解压文件共1,490,823,923 B。SHA-256：`0ead5e7ce54c903740072ac6e507669bcf29d6b73e32d37789156399ac3a696f`。7z创建／测试均退出0，全条目解码SHA与封包暂存一致；这证明ZIP完整性，不代表核心游玩已验证。公开源码ZIP按[白名单导出工具](../Tools/Make-ReleaseSnapshot.ps1)生成，具体摘要随交付校验清单提供。
 
 完整解压玩家ZIP，保留所有子目录，运行根目录 `AICompanionDemo.exe`；无需Unreal Editor或API密钥。首次缺少Visual C++运行库时安装随包官方x64安装程序。源码ZIP不含Content，不能直接游玩或完整恢复工程。操作与新增规则见[玩家指南](../PLAYER_GUIDE.md)。
 
 | 1.1交付项目 | 当前真实状态 |
 | --- | --- |
 | 公开实施记录 | [先行预期#1](https://github.com/Meracle-sjj/AICompanionDemo/issues/1)保留；代码实施提交`938ec81`，设计／版本／机制图提交`c538d0e` |
-| Editor构建 | 完整Editor构建成功，21.54s；首次C4458失败记录保留 |
-| Build／Cook／Stage／Archive | 完整BuildCookRun成功，225.27s，退出0；全文仍有既有KeyGlow错误记录 |
+| Editor构建 | 首轮完整Editor构建21.54s；实际拾取事件接线修正后的最终构建8.89s成功；首次C4458失败记录保留 |
+| Build／Cook／Stage／Archive | 首轮完整BuildCookRun 225.27s；拾取修正后最终完整构建58.80s，退出0；全文仍有既有KeyGlow错误记录 |
 | 独立候选启动 | 通过根bootstrap启动；全新用户配置回读1280×720、窗口模式2，真实开始界面显示「显示设置」；另一轮正常退出 |
 | PIE专项 | 免费箱、等级队列／Flip、重复成长、奖励暂停、菜单清局、事件／语音与文字几何取得实际回读；覆盖范围见[验证记录](RELEASE_VALIDATION.md) |
 | 独立包核心游玩 | **待验**：开始／测试、实际键鼠、战斗、成长、死亡、Boss／终局和全屏切换；PIE回调不替代这些操作 |
-| 玩家ZIP／源码ZIP／公开附件 | **待交付**：最终大小、SHA-256、解码核对与匿名下载尚未在本记录中完成 |
+| 玩家ZIP | **本地已验证**：47文件逐条解码与SHA核对通过，具体字节数及摘要见上文 |
+| 源码ZIP／公开附件 | 白名单导出源码并提供校验清单；**公开上传及匿名下载待完成**，不称1.1已发布 |
 | 可信发布者签名 | **未解决**：没有适用可信签名凭证，不以自签或关闭校验替代 |
 
 ![1.1独立候选开始页，1280×720](screenshots/1.1-package-menu.png)
