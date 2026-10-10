@@ -2,9 +2,9 @@
 
 /**
  * [INPUT]: 依赖 EnhancedInput（IMC 注册管线）、UMG（移动端触摸控件，桌面零触发）
- * [OUTPUT]: 对外提供 AAICompanionDemoPlayerController——模板默认保留件：DefaultMappingContexts 注册 + 移动端控件装配，桌面ESC转交GameMode统一暂停（玩家输入的游戏侧响应在 Character，世界流转在 GameMode）
+ * [OUTPUT]: 模板IMC注册与移动端装配；桌面ESC/F1分别转交GameMode统一暂停与测试鼠标模式仲裁，不在Controller保存模式副本
  * [POS]: 模板随附的标准 PlayerController；保留以维持 Enhanced Input 初始化管线——它不是本项目的决策面，改动前先确认职责归属
- * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 
 #pragma once
@@ -48,5 +48,6 @@ protected:
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
 	void HandlePauseKey();
+	void HandleTestInputKey();
 
 };

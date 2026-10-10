@@ -2,9 +2,9 @@
 
 /**
  * [INPUT]: 依赖 Engine 的 AGameModeBase 生命周期与 FindPlayerStart 出生点查询、SpawnActor 生成链路，依赖 AI/CompanionCharacter 与 AI/EnemyGrunt 的可生成实体类型、AI/WaveDirector（M3.75 玩法节奏中枢的装配目标）
- * [OUTPUT]: 开局装配、正常局独立免费箱、开始/暂停/设置/死亡输入流转和失焦暂停；蠕虫死亡生成归途传送门，奖励领取完且近门按E；Ending暂停世界、真实时钟渐入，返回主菜单重载本局
+ * [OUTPUT]: 开局装配、正常局独立免费箱、菜单/奖励/终局输入仲裁；测试F1切换锁定战斗与游离点选，点选禁止视角输入，暂停恢复原偏好；蠕虫死亡归途门与Ending重载清理
  * [POS]: Source/AICompanionDemo 的组合根（D6：代码生成取代手工摆放）——"谁入场"在此装配，"何时何地"已随 M3.75 迁入 WaveDirector，"入场后做什么"在 CompanionAIController：三层职责分离
- * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 
 #pragma once
@@ -76,6 +76,13 @@ public:
 	void ResumeRunFromPause();
 	/** 输入所有者统一仲裁；导演在奖励续接/结束后调用。 */
 	void RestoreRunInput();
+	/** 仅无高层菜单/奖励的存活测试局接受F1；锁定偏好跨暂停保留。 */
+	UFUNCTION(BlueprintCallable, Category="Run|TestInput")
+	void ToggleTestInputMode();
+	UFUNCTION(BlueprintPure, Category="Run|TestInput")
+	bool IsTestGameplayInputLocked() const { return bTestGameplayInputLocked; }
+	UFUNCTION(BlueprintPure, Category="Run|TestInput")
+	FString GetTestInputHint() const;
 	UFUNCTION(BlueprintPure, Category="Run")
 	bool IsGameplayPaused() const { return bGameplayPaused; }
 	UFUNCTION(BlueprintCallable, Category="Run")
@@ -198,6 +205,10 @@ private:
 	/** 调试面板挂载（测试模式常驻右侧） */
 	void ShowDebugPanel();
 	void HandleApplicationActivation(bool bIsActive);
+	bool CanToggleTestInputMode() const;
+	/** SetIgnoreLookInput是计数器；这里只平衡本组合根自有的一次Push/Pop。 */
+	void SetRunLookBlocked(class APlayerController* PC, bool bBlocked);
+	void ReleaseRunLookBlock();
 
 	void SpawnStarterChest();
 
@@ -245,4 +256,7 @@ private:
 	bool bTestMode = false;
 
 	bool bGodMode = false;
+	bool bTestGameplayInputLocked = false;
+	bool bOwnsRunLookBlock = false;
+	TWeakObjectPtr<class APlayerController> RunInputController;
 };

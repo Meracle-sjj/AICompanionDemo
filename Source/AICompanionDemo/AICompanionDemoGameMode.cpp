@@ -2,7 +2,7 @@
 
 /**
  * [INPUT]: 依赖 Engine 的 SpawnActor/FindPlayerStart/World，依赖 AI/CompanionCharacter 与 AI/EnemyGrunt 的类对象、AI/WaveDirector（M3.75 敌人生成路径的接管者）
- * [OUTPUT]: 开局装配、免费初始箱、开始/暂停/设置/死亡屏；归途门协调遗物队列与近门E优先级，Ending暂停世界和导演并清战斗屏幕消息，真实时钟渐入由界面负责；主菜单重载清理本局
+ * [OUTPUT]: 开局装配和免费箱；菜单/奖励/终局优先于测试F1，GameOnly永久捕获与GameAndUI自由点选互换，游离鼠标不驱动视角；自有ignorelook计数跨暂停/失焦恢复并在离局平衡清理
  * [POS]: Source/AICompanionDemo 的组合根实现；"谁入场"在此装配，"何时何地"在 WaveDirector，"入场后做什么"在 CompanionAIController——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -24,6 +24,7 @@
 #include "Vfx/VfxLibrary.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -210,14 +211,7 @@ void AAICompanionDemoGameMode::ShowStartMenu()
 	AttachFullscreenUI(MenuWidget, 10);
 	StartMenu = MenuWidget;
 
-	// 09-26 鼠标解锁（用户实测"鼠标锁在游戏里无法点开始"）：GameAndUI 默认模式下鼠标被
-	// 游戏视口捕获转视角、且光标不可见——菜单期必须切 UI 输入模式 + 显示光标
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = true;
-		FInputModeUIOnly InputMode;
-		PC->SetInputMode(InputMode);
-	}
+	RestoreRunInput();
 
 	// 标题幕即冻结：不刷怪、不计时、敌人静止——点"开始游戏"才开演
 	UGameplayStatics::SetGlobalTimeDilation(this, 0.f);
@@ -232,19 +226,13 @@ void AAICompanionDemoGameMode::StartRun()
 	// 特效预载（09-30 用户实测"加载特效卡顿"）：六系 Vfx 首用加载一次付清——游戏内零卡顿
 	UVfxLibrary::PrecacheVfx(GetWorld());
 
-	// 开演：输入模式切回游戏 + 藏光标（菜单期 UIOnly 的逆操作）
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = false;
-		FInputModeGameOnly InputMode;
-		PC->SetInputMode(InputMode);
-	}
 	UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
 	if (StartMenu)
 	{
 		StartMenu->RemoveFromParent();
 		StartMenu = nullptr;
 	}
+	RestoreRunInput();
 	USFXLibrary::PlayBGM(GetWorld());   // 09-26 BGM：开演即起播（循环常驻，槽空静默）
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[UI] 开演（世界解冻）"));
 }
@@ -253,8 +241,9 @@ void AAICompanionDemoGameMode::StartRun()
 
 void AAICompanionDemoGameMode::StartTestRun()
 {
-	if (bRunStarted || bEndingShown || DeathScreen) { return; }
+	if (bRunStarted || bEndingShown || DeathScreen || bReturningToMenu) { return; }
 	bTestMode = true; // 先确定入口身份，正常局免费箱不进入测试局。
+	bTestGameplayInputLocked = false; // 初次进测试局先允许点选，F1返回战斗。
 	StartRun();
 	if (WaveDirector)
 	{
@@ -263,15 +252,8 @@ void AAICompanionDemoGameMode::StartTestRun()
 		WaveDirector->DebugGrantRandomUpgrades(10);   // 随机 10 卡武装（用户点名"测试免手加技能"）
 	}
 
-	// 测试模式常驻 UIAndGame（面板可点+游戏可玩）+ 鼠标显示
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = true;
-		FInputModeGameAndUI InputMode;
-		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(InputMode);
-	}
 	ShowDebugPanel();
+	RestoreRunInput();
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Test] 测试模式开演——调试面板已挂载"));
 }
 
@@ -413,13 +395,8 @@ void AAICompanionDemoGameMode::ShowDeathScreen()
 	DeathScreen = Screen;
 	if (EndingPortal) { EndingPortal->Destroy(); EndingPortal = nullptr; }
 
-	// 死亡屏同为 UI 输入模式（重开按钮需要光标可点——与开始菜单同款修法）
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = true;
-		FInputModeUIOnly InputMode;
-		PC->SetInputMode(InputMode);
-	}
+	bTestGameplayInputLocked = false;
+	RestoreRunInput();
 
 	// 世界定格已延后至死亡屏倒地窗（1.5s）——布娃娃需要真实世界时间倒下
 	//（首版立即 dilation=0 把物理定格在站姿——用户截图"僵直站立"案）
@@ -479,6 +456,7 @@ bool AAICompanionDemoGameMode::TryEnterEndingPortal(AEndingPortal* Portal)
 	const auto Snap = WaveDirector ? WaveDirector->GetHudSnapshot() : AWaveDirector::FEndlessHudSnapshot();
 	Screen->Setup(this, Snap.SurvivalSeconds, Snap.KillCount, Snap.Level);
 	bEndingShown = true;
+	bTestGameplayInputLocked = false;
 	EndingScreen = Screen;
 	if (WaveDirector) { WaveDirector->StopForEnding(); }
 	if (AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)))
@@ -510,7 +488,7 @@ bool AAICompanionDemoGameMode::TryEnterEndingPortal(AEndingPortal* Portal)
 	{
 		PC->bShowMouseCursor = true;
 		PC->SetIgnoreMoveInput(true);
-		PC->SetIgnoreLookInput(true);
+		SetRunLookBlocked(PC, true);
 		FInputModeUIOnly Mode;
 		Mode.SetWidgetToFocus(Screen->TakeWidget());
 		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -524,12 +502,13 @@ void AAICompanionDemoGameMode::ReturnToMainMenu()
 {
 	if (bReturningToMenu || !GetWorld()) { return; }
 	bReturningToMenu = true;
+	bTestGameplayInputLocked = false;
+	ReleaseRunLookBlock();
 	UGameplayStatics::SetGamePaused(this, false);
 	UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
 		PC->ResetIgnoreMoveInput();
-		PC->ResetIgnoreLookInput();
 	}
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
 }
@@ -562,6 +541,8 @@ FString AAICompanionDemoGameMode::DebugEndingState() const
 
 void AAICompanionDemoGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ReleaseRunLookBlock();
+	bTestGameplayInputLocked = false;
 	if (EndingPortal) { EndingPortal->Destroy(); EndingPortal = nullptr; }
 	if (EndingScreen) { EndingScreen->RemoveFromParent(); EndingScreen = nullptr; }
 	if (FSlateApplication::IsInitialized())
@@ -597,14 +578,7 @@ void AAICompanionDemoGameMode::TogglePauseMenu()
 	PauseMenu = Menu;
 	Menu->BindHost(this);
 	AttachFullscreenUI(Menu, 200);
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = true;
-		FInputModeUIOnly Mode;
-		Mode.SetWidgetToFocus(Menu->TakeWidget());
-		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(Mode);
-	}
+	RestoreRunInput();
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Pause] paused; pendingReward=%d"), WaveDirector && WaveDirector->HasPendingRewardChoices());
 }
 
@@ -621,14 +595,18 @@ void AAICompanionDemoGameMode::RestoreRunInput()
 		else if (!bRunStarted) { Exclusive = StartMenu; }
 		if (Exclusive)
 		{
+			SetRunLookBlocked(PC, true);
 			PC->bShowMouseCursor = true;
 			FInputModeUIOnly Mode;
-			Mode.SetWidgetToFocus(Exclusive->TakeWidget());
+			// 死亡页原生树不可聚焦，保留UIOnly点击；可聚焦菜单才请求键盘焦点。
+			if (Exclusive->IsFocusable()) { Mode.SetWidgetToFocus(Exclusive->TakeWidget()); }
 			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 			PC->SetInputMode(Mode);
 			return;
 		}
-		const bool bNeedsUI = bTestMode || (WaveDirector && WaveDirector->HasPendingRewardChoices());
+		const bool bNeedsUI = (WaveDirector && WaveDirector->HasPendingRewardChoices())
+			|| (bTestMode && !bTestGameplayInputLocked);
+		SetRunLookBlocked(PC, bNeedsUI);
 		PC->bShowMouseCursor = bNeedsUI;
 		if (bNeedsUI)
 		{
@@ -636,10 +614,60 @@ void AAICompanionDemoGameMode::RestoreRunInput()
 			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 			Mode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(Mode);
+			// 点击模式不在面板外按键时重新捕获鼠标，视角另由自有ignorelook阻断。
+			if (GetWorld()->GetGameViewport()) { GetWorld()->GetGameViewport()->SetMouseCaptureMode(EMouseCaptureMode::NoCapture); }
 		}
 		else { PC->SetInputMode(FInputModeGameOnly()); }
 		if (FSlateApplication::IsInitialized()) { FSlateApplication::Get().SetAllUserFocusToGameViewport(); }
 	}
+}
+
+void AAICompanionDemoGameMode::SetRunLookBlocked(APlayerController* PC, bool bBlocked)
+{
+	if (RunInputController.Get() != PC)
+	{
+		ReleaseRunLookBlock();
+		RunInputController = PC;
+	}
+	if (!PC || bOwnsRunLookBlock == bBlocked) { return; }
+	PC->SetIgnoreLookInput(bBlocked);
+	bOwnsRunLookBlock = bBlocked;
+	if (bBlocked) { PC->RotationInput = FRotator::ZeroRotator; }
+}
+
+void AAICompanionDemoGameMode::ReleaseRunLookBlock()
+{
+	if (bOwnsRunLookBlock)
+	{
+		if (APlayerController* PC = RunInputController.Get()) { PC->SetIgnoreLookInput(false); }
+	}
+	bOwnsRunLookBlock = false;
+	RunInputController.Reset();
+}
+
+bool AAICompanionDemoGameMode::CanToggleTestInputMode() const
+{
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const UHealthComponent* Health = Player ? Player->FindComponentByClass<UHealthComponent>() : nullptr;
+	return bTestMode && bRunStarted && !bGameplayPaused && !DisplaySettingsMenu && !DeathScreen
+		&& !bEndingShown && !bReturningToMenu && GetWorld() && !GetWorld()->IsPaused()
+		&& Health && !Health->IsDead() && (!WaveDirector || !WaveDirector->HasPendingRewardChoices());
+}
+
+void AAICompanionDemoGameMode::ToggleTestInputMode()
+{
+	if (!CanToggleTestInputMode()) { return; }
+	bTestGameplayInputLocked = !bTestGameplayInputLocked;
+	RestoreRunInput();
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[TestInput] F1 mode=%s"),
+		bTestGameplayInputLocked ? TEXT("locked-combat") : TEXT("free-selection"));
+}
+
+FString AAICompanionDemoGameMode::GetTestInputHint() const
+{
+	if (!CanToggleTestInputMode()) { return TEXT("菜单或奖励选择中 · 完成后恢复鼠标模式"); }
+	return bTestGameplayInputLocked ? TEXT("战斗模式 · 鼠标已锁定 · F1 切换到点选")
+		: TEXT("点选模式 · 鼠标自由 / 视角固定 · F1 回到战斗");
 }
 
 void AAICompanionDemoGameMode::ResumeRunFromPause()
@@ -662,14 +690,7 @@ void AAICompanionDemoGameMode::ShowDisplaySettings()
 	DisplaySettingsMenu = Menu;
 	Menu->BindHost(this);
 	AttachFullscreenUI(Menu, 210);
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-	{
-		PC->bShowMouseCursor = true;
-		FInputModeUIOnly Mode;
-		Mode.SetWidgetToFocus(Menu->TakeWidget());
-		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(Mode);
-	}
+	RestoreRunInput();
 }
 
 void AAICompanionDemoGameMode::CloseDisplaySettings()
@@ -677,18 +698,7 @@ void AAICompanionDemoGameMode::CloseDisplaySettings()
 	if (!DisplaySettingsMenu) { return; }
 	DisplaySettingsMenu->RemoveFromParent();
 	DisplaySettingsMenu = nullptr;
-	UUserWidget* Host = bGameplayPaused ? static_cast<UUserWidget*>(PauseMenu) : static_cast<UUserWidget*>(StartMenu);
-	if (Host)
-	{
-		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
-		{
-			FInputModeUIOnly Mode;
-			Mode.SetWidgetToFocus(Host->TakeWidget());
-			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-			PC->SetInputMode(Mode);
-		}
-	}
-	else { RestoreRunInput(); }
+	RestoreRunInput();
 }
 
 void AAICompanionDemoGameMode::SpawnStarterChest()
@@ -711,8 +721,14 @@ void AAICompanionDemoGameMode::SpawnStarterChest()
 
 FString AAICompanionDemoGameMode::DebugRunState() const
 {
-	return FString::Printf(TEXT("{\"runStarted\":%s,\"testMode\":%s,\"paused\":%s,\"pauseMenu\":%s,\"settings\":%s,\"startMenu\":%s,\"rewardPending\":%s,\"dilation\":%.6f}"),
+	const APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	const UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	return FString::Printf(TEXT("{\"runStarted\":%s,\"testMode\":%s,\"paused\":%s,\"pauseMenu\":%s,\"settings\":%s,\"startMenu\":%s,\"rewardPending\":%s,\"dilation\":%.6f,\"testLockedPreference\":%s,\"canToggleTestInput\":%s,\"cursorVisible\":%s,\"lookIgnored\":%s,\"ownedLookBlock\":%s,\"captureMode\":%d,\"lockMode\":%d}"),
 		bRunStarted?TEXT("true"):TEXT("false"), bTestMode?TEXT("true"):TEXT("false"), UGameplayStatics::IsGamePaused(this)?TEXT("true"):TEXT("false"),
 		PauseMenu && PauseMenu->IsInViewport()?TEXT("true"):TEXT("false"), DisplaySettingsMenu && DisplaySettingsMenu->IsInViewport()?TEXT("true"):TEXT("false"),
-		StartMenu && StartMenu->IsInViewport()?TEXT("true"):TEXT("false"), WaveDirector && WaveDirector->HasPendingRewardChoices()?TEXT("true"):TEXT("false"), UGameplayStatics::GetGlobalTimeDilation(this));
+		StartMenu && StartMenu->IsInViewport()?TEXT("true"):TEXT("false"), WaveDirector && WaveDirector->HasPendingRewardChoices()?TEXT("true"):TEXT("false"), UGameplayStatics::GetGlobalTimeDilation(this),
+		bTestGameplayInputLocked?TEXT("true"):TEXT("false"), CanToggleTestInputMode()?TEXT("true"):TEXT("false"),
+		PC && PC->bShowMouseCursor?TEXT("true"):TEXT("false"), PC && PC->IsLookInputIgnored()?TEXT("true"):TEXT("false"),
+		bOwnsRunLookBlock?TEXT("true"):TEXT("false"), Viewport?static_cast<int32>(Viewport->GetMouseCaptureMode()):-1,
+		Viewport?static_cast<int32>(Viewport->GetMouseLockMode()):-1);
 }

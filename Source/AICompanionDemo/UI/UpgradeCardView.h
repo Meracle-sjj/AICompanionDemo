@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 UObject 生命周期、Slate 的 SWidget/FSlateBrush/FButtonStyle、UpgradeCardPresentation 展示稀有度与元数据；宿主注入升级 ID、槽位、领取状态、真实稀有度/融合资格、完整说明、可选短说明与弱绑定选择委托
- * [OUTPUT]: FUpgradeCardOption 与 UUpgradeCardView::Build：升级/遗物三卡横排、锁箱六卡两行；蓝/紫/金/独特金红，融合印章与Flip双箭头纯几何；宿主动态短句/tooltip，点击只执行宿主委托，纹理UPROPERTY保活
+ * [INPUT]: 宿主注入三/六强化事实与选择委托，及独立可选Flip委托；Slate/展示元数据/纹理GC生命周期
+ * [OUTPUT]: 升级/遗物三卡或锁箱六卡；Flip额外页脚按钮不进入Options/Slot，点击仅执行宿主委托；成员style/纹理/brush保活
  * [POS]: UI/ 升级卡片展示层；不依赖 WaveDirector、升级枚举、抽卡或效果逻辑。宿主必须以 UPROPERTY 持有本对象，并在释放对象前移除返回的 Slate 树
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
  */
@@ -38,7 +38,7 @@ class AICOMPANIONDEMO_API UUpgradeCardView : public UObject
 public:
 	/** 返回全屏展示树；不冻结世界、不抽卡、不改变输入模式。 */
 	TSharedRef<SWidget> Build(const TArray<FUpgradeCardOption>& Options,
-		const FString& Heading, const FString& Hint, bool bChest);
+		const FString& Heading, const FString& Hint, bool bChest, const FSimpleDelegate& FlipAction = FSimpleDelegate());
 
 private:
 	/** 惰性装载纹理并返回稳定的 brush 地址；失败缓存纯色底并仅向日志告警。 */

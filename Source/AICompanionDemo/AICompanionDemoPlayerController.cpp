@@ -2,9 +2,9 @@
 
 /**
  * [INPUT]: 依赖 EnhancedInputSubsystem（本地玩家 IMC 注入）、SVirtualJoystick 触摸判定、AICompanionDemo.h 日志类别
- * [OUTPUT]: BeginPlay（触摸控件装配）与 SetupInputComponent（IMC 注册）两处模板实现与桌面ESC暂停转发
+ * [OUTPUT]: BeginPlay触摸装配、SetupInputComponent注册IMC与ESC/F1；F1仅普通游戏输入流转发测试鼠标切换，暂停/菜单资格由GameMode复验
  * [POS]: .h 声明的实现面；模板默认代码——本项目游戏逻辑不在此层
- * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 
 #include "AICompanionDemoPlayerController.h"
@@ -48,6 +48,7 @@ void AAICompanionDemoPlayerController::SetupInputComponent()
 	if (InputComponent)
 	{
 		InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AAICompanionDemoPlayerController::HandlePauseKey).bExecuteWhenPaused = true;
+		InputComponent->BindKey(EKeys::F1, IE_Pressed, this, &AAICompanionDemoPlayerController::HandleTestInputKey);
 	}
 
 	// only add IMCs for local player controllers
@@ -78,5 +79,13 @@ void AAICompanionDemoPlayerController::HandlePauseKey()
 	if (GetWorld())
 	{
 		if (AAICompanionDemoGameMode* GM = GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>()) { GM->TogglePauseMenu(); }
+	}
+}
+
+void AAICompanionDemoPlayerController::HandleTestInputKey()
+{
+	if (AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr)
+	{
+		GM->ToggleTestInputMode();
 	}
 }

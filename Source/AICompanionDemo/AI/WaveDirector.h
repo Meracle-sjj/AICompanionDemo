@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 Engine 的 AActor/TimerManager/SpawnActor（0.5s 节拍与环形刷怪）、Kismet 的 GetPlayerPawn（刷怪圆心与玩家死亡监听）、本模块 EnemyGrunt（变体注入 ApplyVariant 与刷怪队列枚举）、本模块 Combatant 接口与 HealthComponent（敌人 OnDeath 绑定→全灭检测/击杀计数；玩家 OnDeath→终局）；UI/UpgradeCardView（GC保护的图文视图，视口树先于视图释放）
  * [OUTPUT]: 对外提供 AWaveDirector——L4D 导演式节奏中枢（M3.75 B2）：波次表驱动的 Break→Spawning→WaveActive→…→Finished/Failed 相位机（环形刷怪、同屏上限节流补刷、全灭晋级）+ VS 成长账本（AddXp 收集口/等级曲线，普通横排三选一/锁箱2×3六选二的图文面板接入）+ 屏幕 HUD 行（key=4：波数/活敌/击杀/等级）与事件横幅（key=5：开波/升级/胜负）+ **妖术师饱和换算（10-07 用户裁决：CountAliveWarlocks 存活计数 ≥WarlockAliveLimit(5) 时，妖术师配额整批换算为随机杂兵批次 猎犬×8/标准兵×5/蛮兵×3——后期堆积死局治理）**；升级图文卡面的候选/选择槽位/暂停状态与编辑器验收口
- *  1.1成长契约：奖励队列保存来源/发生等级；Lv.9起玩家与AI池交替，Flip只转换当前玩家奖励；开局免费三选一独立于收费账本，猎印上限/收益从真实状态描述。原升级ID不变，新ID只追加。DebugGrowthState回读实际队列/收益/调度状态，DebugAdvanceScheduleTime仅编辑器人工时钟fixture复用正式事件路径。
+ *  成长契约：奖励保留来源/发生等级，Lv.9玩家/Lv.10 AI交替；玩家抽满三张强化，Flip独立按钮/F键只转换当前玩家等级奖励，不占数字槽。奖励输入统一由GameMode仲裁并恢复测试F1偏好。
  *  同批契约：64²连续探索场/33²真实地形显示；Boss死亡加入串行选择队列，九遗物由Relics组件结算；辉耀5/0.5s、每张+10，过载翻倍已有伤害；HUD稳定ID追加独特遗物与真实周期/狂暴剩余秒数。
  *  活蠕虫期间共享世界杂兵限额10/妖术师3，导演及召唤师逐只准入；超员直接退场无死亡/掉落/反馈伤害，导演自有活敌账本由OnDestroyed校正。
  *  v1.2公开只读IsRunTerminated供初始箱金焰清理；相位写入仍由导演持有。
@@ -275,6 +275,7 @@ private:
 	/** 入队即保留来源和发生等级，只有经验等级奖励参与后期轮换。 */
 	void EnterUpgradePause(bool bChestPool = false, ERewardSource Source = ERewardSource::NormalChest, int32 RewardLevel = 0);
 	void StartUpgradeReward(const FRewardChoice& Reward);
+	bool CanFlipCurrentReward() const;
 	void FlipCurrentReward();
 	bool HasPlayerAttackSpeedBenefit() const;
 	bool HasCompanionMoveSpeedBenefit() const;
@@ -452,6 +453,9 @@ public:
 	/** 编辑器验收：通过正式等级奖励入口创建/排队，不改角色当前等级。 */
 	UFUNCTION(BlueprintCallable, Category = "Debug|UpgradeCards")
 	void DebugQueueLevelReward(int32 RewardLevel);
+	/** 编辑器桥仅调用正式额外Flip操作，不伪造卡槽或消耗下一奖励。 */
+	UFUNCTION(BlueprintCallable, Category = "Debug|UpgradeCards")
+	void DebugFlipCurrentReward();
 	UFUNCTION(BlueprintPure, Category = "Debug|UpgradeCards")
 	FString DebugGrowthState() const;
 	/** 编辑器调度fixture：只推进导演调度时间并复用正式祭坛/狂暴口，不推进刷怪预算。 */

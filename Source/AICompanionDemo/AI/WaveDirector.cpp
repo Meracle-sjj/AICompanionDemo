@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 WaveDirector.h 的相位机契约、AI/EnemyGrunt 的 ApplyVariant 变体注入、AI/Combatant 的 ICombatant（GetHealthComponent 绑死亡）、Engine 的 TimerManager/SpawnActor/DrawDebugString/GEngine 屏幕消息、HealthComponent 的 OnDeath 多播、Kismet 的 GetPlayerPawn、本模块 Audio/SFXLibrary（UpgradeChoice 事件音效）；UI/UpgradeCardView（无字纹理、独立短文案与纯Slate展示）
  * [OUTPUT]: 实现AWaveDirector的波次/Endless节奏、三闸环形刷怪、XP/金币账本、领域与治疗节拍；升级冻结世界后按权重供给候选，显式提供展示稀有度与四融合标志，UpgradeCardView渲染三选一/六选二；鼠标与数字键共用槽位校验，ApplyUpgrade统一应用效果与恢复流速；按稳定升级ID记录次数并输出排序后的HUD图标快照。EndPlay先拆视口树再释放视图与纹理。
- *  1.1奖励保存来源/发生等级，Lv.9起玩家/AI交替；Flip仅转换当前玩家奖励；初始箱免费三选一不改收费账本。猎印卡面/HUD说明来自真实次数与上限，大师不降上限。Boss祭坛成功生成及真实狂暴接入世界事件记录。
+ *  奖励来源/等级不漂移；玩家奖励抽满三张强化，额外Flip按钮/F键转换本次玩家池，不占1/2/3；旧代次回调失效，完成后由GameMode恢复测试F1偏好。初始箱免费账本保持。
  *  选择出口串行续接；玩家穿透与折射可同持、散射仍互斥；AI穿透折射互斥。感电基础20/过载40下限与比例取高，Nova状态文案同步；虫战/遗物HUD局部实现各持真源。
  * [POS]: AI/ 的玩法节奏中枢实现；GameMode 组合根负责生成它并注入敌人类——"何时何地谁入场"从 GameMode 迁入此处，GameMode 只保留配置与装配职责
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
@@ -637,6 +637,11 @@ void AWaveDirector::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	if (CanFlipCurrentReward() && PC->WasInputKeyJustPressed(EKeys::F))
+	{
+		FlipCurrentReward();
+		return; // 同帧F与数字键只执行一次操作，避免新池被同帧领取。
+	}
 
 	static const FKey ChoiceKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
 	for (int32 Slot = 0; Slot < (bChestDoublePick ? 6 : 3); ++Slot)
@@ -697,10 +702,18 @@ void AWaveDirector::StartUpgradeReward(const FRewardChoice& Reward)
 	}
 }
 
+bool AWaveDirector::CanFlipCurrentReward() const
+{
+	const AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr;
+	return !IsRunTerminated() && bUpgradePending && !bRelicPending && !bChestDoublePick
+		&& ActiveReward.Source == ERewardSource::LevelUp && ActiveRewardPool == ERewardPool::Player && !bRewardFlipped
+		&& GetWorld() && !GetWorld()->IsPaused()
+		&& (!GM || (!GM->IsGameplayPaused() && !GM->IsEndingShown()));
+}
+
 void AWaveDirector::FlipCurrentReward()
 {
-	if (IsRunTerminated() || !bUpgradePending || bRelicPending || bChestDoublePick
-		|| ActiveReward.Source != ERewardSource::LevelUp || ActiveRewardPool != ERewardPool::Player || bRewardFlipped) { return; }
+	if (!CanFlipCurrentReward()) { return; }
 	bRewardFlipped = true;
 	ActiveRewardPool = ERewardPool::AI;
 	if (UpgradeOverlay.IsValid() && GEngine && GEngine->GameViewport)
@@ -724,11 +737,16 @@ void AWaveDirector::ShowUpgradeOverlay(const bool bChest)
 	{
 		UpgradeCardView = NewObject<UUpgradeCardView>(this);
 	}
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	if (AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr)
+	{
+		GM->RestoreRunInput();
+	}
+	else if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
 		PC->bShowMouseCursor = true;
 		FInputModeGameAndUI InputMode;
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 	}
 
@@ -763,7 +781,13 @@ void AWaveDirector::ShowUpgradeOverlay(const bool bChest)
 	FString Hint = bChest ? FString::Printf(TEXT("还可领取 %d 张 · 点击卡片或按 1–6"), ChestPicksRemaining)
 		: TEXT("选择一项强化 · 点击卡片或按 1 / 2 / 3");
 	if (!OfferFallbackNote.IsEmpty()) { Hint += TEXT("\n") + OfferFallbackNote; }
-	UpgradeOverlay = UpgradeCardView->Build(Options, Heading, Hint, bChest);
+	FSimpleDelegate FlipAction;
+	if (CanFlipCurrentReward())
+	{
+		FlipAction = FSimpleDelegate::CreateWeakLambda(this, [this, Generation]()
+		{ if (Generation == ChoiceGeneration) { FlipCurrentReward(); } });
+	}
+	UpgradeOverlay = UpgradeCardView->Build(Options, Heading, Hint, bChest, FlipAction);
 	GEngine->GameViewport->AddViewportWidgetContent(UpgradeOverlay.ToSharedRef(), 100);
 }
 
@@ -949,8 +973,7 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 	UE_LOG(LogAICompanionDemo, Log, TEXT("[Wave] 卡池 %d 张入抽（%s）"), Pool.Num(), bChestPool ? TEXT("锁箱六选二") : TEXT("普通三选一"));
 
 	// 抽卡循环（09-30 锁箱六选二：bChestPool 抽 6 张入 ChestOffers，普通抽 3 张入 Offers）
-	const bool bPlayerReward = !bChestPool && ActiveRewardPool == ERewardPool::Player;
-	const int32 DrawCount = bChestPool ? 6 : (bPlayerReward ? 2 : 3);
+	const int32 DrawCount = bChestPool ? 6 : 3;
 	for (int32 Slot = 0; Slot < DrawCount; ++Slot)
 	{
 		// 池干涸保底（09-24 开箱崩溃案）：一次性卡拿太多时，池可被"互斥/OneShot 离池 + 同组抽走"三轮内抽干，
@@ -1008,7 +1031,6 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 		const FName Group = Pool[Picked].Group;
 		Pool.RemoveAll([&Group](const FUpgradeCardDef& C) { return C.Group == Group; });
 	}
-	if (bPlayerReward) { Offers[2] = EUpgradeId::Flip; }
 }
 
 bool AWaveDirector::IsPlayerPoolCard(const EUpgradeId Id)
@@ -1613,9 +1635,9 @@ FString AWaveDirector::DebugUpgradeCardState() const
 			*UpgradeCardKey(Id).ToString(), static_cast<int32>(PresentationRarity(CardRarityOf(Id))),
 			IsFusionLegendary(Id) ? TEXT("true") : TEXT("false"));
 	}
-	return FString::Printf(TEXT("{\"pending\":%s,\"chest\":%s,\"remaining\":%d,\"takenSlots\":%d,\"gold\":%d,\"upgrades\":[%s],\"offers\":[%s]}"),
+	return FString::Printf(TEXT("{\"pending\":%s,\"chest\":%s,\"remaining\":%d,\"takenSlots\":%d,\"gold\":%d,\"upgrades\":[%s],\"offers\":[%s],\"flipAvailable\":%s}"),
 		bUpgradePending ? TEXT("true") : TEXT("false"), bChestDoublePick ? TEXT("true") : TEXT("false"),
-		ChestPicksRemaining, ChestTakenSlots.Num(), GoldCount, *Cards, *Candidates);
+		ChestPicksRemaining, ChestTakenSlots.Num(), GoldCount, *Cards, *Candidates, CanFlipCurrentReward() ? TEXT("true") : TEXT("false"));
 #else
 	return TEXT("{}");
 #endif
@@ -1686,6 +1708,13 @@ void AWaveDirector::DebugQueueLevelReward(const int32 RewardLevel)
 {
 #if WITH_EDITOR
 	if (RewardLevel >= 2) { EnterUpgradePause(false, ERewardSource::LevelUp, RewardLevel); }
+#endif
+}
+
+void AWaveDirector::DebugFlipCurrentReward()
+{
+#if WITH_EDITOR
+	FlipCurrentReward();
 #endif
 }
 

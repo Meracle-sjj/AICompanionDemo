@@ -1,6 +1,6 @@
 /**
  * [INPUT]: UpgradeCardView.h 展示契约、UpgradeCardPresentation 的41项元数据/既有纹理与四类调色、Slate图文布局/原生几何、宿主真实动态描述
- * [OUTPUT]: 蓝/紫/金升级卡与金边深红独特遗物卡；融合传说右上金红大拇指；无字图与文案分离；普通304×488/图272，锁箱304×410/图220；ScaleToFit/DownOnly、领取禁用、工具提示与缺图告警
+ * [OUTPUT]: 三张真实强化卡与可选独立Flip页脚（F快捷提示/双箭头），锁箱六卡与Boss遗物三卡不带Flip；304卡面、ScaleToFit/DownOnly、成员style和弱委托生命周期保持
  * [POS]: UI/ 纯展示实现；Build 只消费 FUpgradeCardOption，OnClicked 只执行 OnSelected。UObject/纹理/brush/style 的生命周期由持有此视图的宿主保证
  * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
  */
@@ -31,7 +31,7 @@ namespace
 		return static_cast<int32>(Rarity);
 	}
 
-	/** Flip只是宿主提供的操作卡，视图仅绘制双向箭头，不持有转换/奖励状态。 */
+	/** 额外Flip按钮的纯几何双箭头，不持有转换/奖励状态。 */
 	class SRewardPoolSwitchSymbol : public SLeafWidget
 	{
 	public:
@@ -281,7 +281,7 @@ TSharedRef<SWidget> UUpgradeCardView::MakeCard(const FUpgradeCardOption& Option,
 }
 
 TSharedRef<SWidget> UUpgradeCardView::Build(const TArray<FUpgradeCardOption>& Options,
-	const FString& Heading, const FString& Hint, const bool bChest)
+	const FString& Heading, const FString& Hint, const bool bChest, const FSimpleDelegate& FlipAction)
 {
 	PrepareButtonStyle();
 	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(8.f));
@@ -320,6 +320,34 @@ TSharedRef<SWidget> UUpgradeCardView::Build(const TArray<FUpgradeCardOption>& Op
 						.AutoWrapText(false).WrapTextAt(936.f).Justification(ETextJustify::Center)
 					]
 					+ SVerticalBox::Slot().AutoHeight()[Grid]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 14.f, 0.f, 0.f)
+					[
+						SNew(SBox).WidthOverride(480.f)
+						.Visibility(FlipAction.IsBound() ? EVisibility::Visible : EVisibility::Collapsed)
+						[
+							SNew(SButton).ButtonStyle(&CardButtonStyles[1]).IsFocusable(false)
+							.ContentPadding(FMargin(16.f, 10.f))
+							.ToolTipText(FText::FromString(TEXT("将本次玩家奖励改为队友三选一；不占强化槽，不消耗排队奖励。")))
+							.OnClicked_Lambda([FlipAction]() { FlipAction.ExecuteIfBound(); return FReply::Handled(); })
+							[
+								SNew(SHorizontalBox).Visibility(EVisibility::HitTestInvisible)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[ SNew(SBox).WidthOverride(32.f).HeightOverride(32.f)[SNew(SRewardPoolSwitchSymbol)] ]
+								+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(12.f, 0.f)
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("[F] Flip · 转交队友")))
+									.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+									.ColorAndOpacity(FLinearColor(0.83f, 0.70f, 1.f)).AutoWrapText(false)
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("额外操作")))
+									.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
+									.ColorAndOpacity(FLinearColor(0.62f, 0.63f, 0.75f))
+								]
+							]
+						]
+					]
 				]
 			]
 		];

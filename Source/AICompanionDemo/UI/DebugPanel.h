@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 UMG 的 UUserWidget（纯 C++ 无蓝图资产——RebuildWidget 手搭 Slate 树）、Slate 的 SOverlay/SScrollBox/SVerticalBox/SHorizontalBox/SButton/STextBlock/SBorder/SBox、FCoreStyle 默认字体、本模块 AICompanionDemoGameMode 的调试转发组
- * [OUTPUT]: UDebugPanel——测试模式分区控制台；固定操作/提示和滚动主体；明确标签换行宽度/自然高度、按钮不争抢游戏键盘焦点，DebugPanelState回读文字几何
+ * [OUTPUT]: 测试分区控制台与独立常驻F1模式提示（收起后仍可见）；点选/锁定状态只读GameMode，按钮不争抢游戏键盘焦点，DebugPanelState回读实际提示与文字几何
  * [POS]: UI/ 界面层第七件（与 CompanionHud 姊妹）：仅测试模式挂载（StartTestRun→ShowDebugPanel），正常模式零痕迹
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -46,6 +46,7 @@ private:
 	TWeakObjectPtr<AAICompanionDemoGameMode> Host;
 	TSharedPtr<SBorder> ExpandedPanel;
 	TSharedPtr<SBorder> CollapsedBar;
+	TSharedPtr<STextBlock> TestInputHint;
 	TArray<TWeakPtr<STextBlock>> LabelWidgets;
 	FButtonStyle ButtonStyle;
 	bool bStylesReady = false;

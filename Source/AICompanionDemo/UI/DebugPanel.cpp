@@ -1,6 +1,6 @@
 /**
  * [INPUT]: DebugPanel契约、Slate分区/滚动/按钮与真实字体Measure，GameMode测试转发、导演当前升级名称
- * [OUTPUT]: 青蓝深色测试控制台；固定操作/提示与四分区滚动；短标签单行、长名明确换行与自然高度；测试按钮不争抢游戏键盘焦点
+ * [OUTPUT]: 青蓝测试控制台与独立F1模式提示，展开/收起均可见；GameMode提供真实锁定/点选文字，鼠标/暂停不在UI另存状态；短标签单行、长名自然高度与按钮焦点契约保持
  * [POS]: UI/ 界面层实现件：仅测试模式挂载（正常模式零痕迹）——验收提速专用面板
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -192,9 +192,8 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 0.f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("滚轮浏览 · 收起面板可查看完整战场")))
-						.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
-						.ColorAndOpacity(FLinearColor(0.52f, 0.66f, 0.72f)).AutoWrapText(false)
+						// 为独立F1提示预留底部高度；收起后该提示仍保持可见。
+						SNew(SBox).HeightOverride(50.f)
 					]
 				]
 			]
@@ -205,6 +204,25 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 				.BorderBackgroundColor(FLinearColor(0.009f, 0.022f, 0.035f, 0.97f))
 				.Visibility(bCollapsed ? EVisibility::Visible : EVisibility::Collapsed)
 			[ MakeDebugButton(TEXT("展开测试面板  ›"), [this]() { SetCollapsed(false); }, 0.f) ]
+		]
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(24.f)
+		[
+			SNew(SBox).WidthOverride(320.f)
+			[
+				SNew(SBorder).BorderImage(WhiteBrush).Padding(FMargin(10.f, 7.f))
+				.BorderBackgroundColor(FLinearColor(0.009f, 0.022f, 0.035f, 0.94f))
+				.Visibility(EVisibility::HitTestInvisible)
+				[
+					SAssignNew(TestInputHint, STextBlock)
+					.Text_Lambda([this]()
+					{
+						const AAICompanionDemoGameMode* GM = Host.Get();
+						return FText::FromString(GM ? GM->GetTestInputHint() : TEXT("F1 切换鼠标模式"));
+					})
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+					.ColorAndOpacity(FLinearColor(0.57f, 0.90f, 1.f)).AutoWrapText(false).WrapTextAt(300.f)
+				]
+			]
 		];
 }
 
@@ -221,6 +239,7 @@ void UDebugPanel::ReleaseSlateResources(bool bReleaseChildren)
 	ExpandedPanel.Reset();
 	CollapsedBar.Reset();
 	LabelWidgets.Reset();
+	TestInputHint.Reset();
 	// 成员style保留：旧SObjectWidget树尚可能持有其地址。
 }
 
@@ -246,8 +265,9 @@ FString UDebugPanel::DebugPanelState() const
 				*Label->GetText().ToString(), Desired, Allotted, DesiredSize.X, AllottedSize.X);
 		}
 	}
-	return FString::Printf(TEXT("collapsed=%d inViewport=%d measured=%d undersized=%d labels=%d upgradeButtons=%d | %s"),
-		bCollapsed, IsInViewport(), Measured, Undersized, LabelWidgets.Num(), RenderedUpgradeCount, *Rows);
+	return FString::Printf(TEXT("collapsed=%d inViewport=%d measured=%d undersized=%d labels=%d upgradeButtons=%d inputHint=%s | %s"),
+		bCollapsed, IsInViewport(), Measured, Undersized, LabelWidgets.Num(), RenderedUpgradeCount,
+		TestInputHint ? *TestInputHint->GetText().ToString() : TEXT(""), *Rows);
 }
 
 void UDebugPanel::DebugSetCollapsed(bool bInCollapsed)

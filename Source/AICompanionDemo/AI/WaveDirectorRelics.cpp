@@ -1,6 +1,6 @@
 /**
  * [INPUT]: WaveDirector choice queue, BossRelicComponent persistent effects, shared card presentation.
- * [OUTPUT]: Source/earned-level preserving reward queue; Boss-specific rewards and serialized pauses; component-owned relic descriptions/cooldowns in HUD; completed choices restore input through GameMode arbitration; editor audit JSON.
+ * [OUTPUT]: Source/earned-level preserving reward queue; Boss relic choice entry/completion defer to GameMode input arbitration, retaining test F1 preference and balanced look blocking; component-owned HUD facts and editor audit JSON.
  * [POS]: AI/WaveDirector reward lifecycle; uses the existing viewport/texture GC ownership.
  * [PROTOCOL]: Update module/UI AGENTS when the reward contract changes.
  */
@@ -112,11 +112,16 @@ void AWaveDirector::ShowRelicChoice(int32 BossIndex)
 	bChestDoublePick = false;
 	UGameplayStatics::SetGlobalTimeDilation(this, 0.f);
 	if (!UpgradeCardView) { UpgradeCardView = NewObject<UUpgradeCardView>(this); }
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	if (AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr)
+	{
+		GM->RestoreRunInput();
+	}
+	else if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
 		PC->bShowMouseCursor = true;
 		FInputModeGameAndUI Mode;
 		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Mode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(Mode);
 	}
 	TArray<FUpgradeCardOption> Options;
