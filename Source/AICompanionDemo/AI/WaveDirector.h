@@ -4,6 +4,7 @@
  *  1.1成长契约：奖励队列保存来源/发生等级；Lv.9起玩家与AI池交替，Flip只转换当前玩家奖励；开局免费三选一独立于收费账本，猎印上限/收益从真实状态描述。原升级ID不变，新ID只追加。DebugGrowthState回读实际队列/收益/调度状态，DebugAdvanceScheduleTime仅编辑器人工时钟fixture复用正式事件路径。
  *  同批契约：64²连续探索场/33²真实地形显示；Boss死亡加入串行选择队列，九遗物由Relics组件结算；辉耀5/0.5s、每张+10，过载翻倍已有伤害；HUD稳定ID追加独特遗物与真实周期/狂暴剩余秒数。
  *  活蠕虫期间共享世界杂兵限额10/妖术师3，导演及召唤师逐只准入；超员直接退场无死亡/掉落/反馈伤害，导演自有活敌账本由OnDestroyed校正。
+ *  v1.2公开只读IsRunTerminated供初始箱金焰清理；相位写入仍由导演持有。
  * [POS]: AI/ 的玩法节奏中枢；被 GameMode 代码生成，敌人类经 SetEnemyClass 注入；升级账本按稳定枚举ID计数，显式映射UI稀有度/融合标志与HUD图标快照，不让UI解析玩法描述。
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
  */
@@ -185,6 +186,9 @@ public:
 	/** 快照出口：Endless 展示数据打包（含强化账本） */
 	FEndlessHudSnapshot GetHudSnapshot() const;
 
+	/** 终局只读出口：表现组件据此清理，不能更改导演相位。 */
+	bool IsRunTerminated() const { return Phase == EWavePhase::Finished || Phase == EWavePhase::Failed; }
+
 private:
 	/** 节奏相位：喘息倒计时 → 波内节流补刷 → 等全灭 → 下一波；终局 Finished（全波清空）/ Failed（玩家阵亡） */
 	enum class EWavePhase : uint8
@@ -195,8 +199,6 @@ private:
 		Finished,
 		Failed
 	};
-	/** 终局是入口边界，不能只依靠世界暂停挡住同帧迟到回调。 */
-	bool IsRunTerminated() const { return Phase == EWavePhase::Finished || Phase == EWavePhase::Failed; }
 
 	// ---------- C1 三选一升级 ----------
 

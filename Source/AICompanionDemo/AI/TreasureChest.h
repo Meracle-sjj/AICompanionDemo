@@ -1,8 +1,8 @@
 /**
  * [INPUT]: 依赖 Engine 的 AActor/UStaticMeshComponent（/Engine 基础立方体）与 Tick、Kismet 的 GetPlayerPawn/GetGameMode（金币钱包与升级中枢查询）、本模块 WaveDirector（TrySpendGoldForUpgrade——开箱进三选一暂停）、DrawDebugString（交互提示）
- * [OUTPUT]: ATreasureChest普通收费箱及ConfigureStarterChest初始免费箱；免费提示/自有金光球与灯光闪烁，不修改原材质。两类均经导演三选一，已开不可重复；初始箱不改变金币/收费计数。编辑器DebugTryOpen复验实际距离后调用正式TryOpen，DebugChestState只读身份/钱包/附近状态。
+ * [OUTPUT]: ATreasureChest普通收费箱及ConfigureStarterChest初始免费箱；免费箱两侧自有金色火焰/灯光，不修改原材质与Niagara。领取/玩家死亡/终局/EndPlay清理，暂停冻结。两类均经导演三选一，已开不可重复；初始箱不改变金币/收费计数。DebugChestState只读身份/钱包/实际火焰状态。
  * [POS]: AI/ 的道具交互代表件（宝箱经济的消费终端）；被 GameMode BeginPlay 代码生成于固定点（D6 范式），交互输入在玩家侧（Character Tick E 键边沿），开箱账本在 WaveDirector——三层职责分离
- * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
  */
 
 #pragma once
@@ -15,6 +15,9 @@ class UStaticMeshComponent;
 class AWaveDirector;
 class UPointLightComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UNiagaraComponent;
+class UNiagaraSystem;
 
 UCLASS(Config = Game)
 class AICOMPANIONDEMO_API ATreasureChest : public AActor
@@ -61,6 +64,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	/** 开箱表现：箱体染灰 + 盖条抬起 + 爆闪——"这个箱子用掉了"的状态语言 */
@@ -68,6 +72,8 @@ private:
 
 	/** 应用换装：箱体替换 + 盖条隐藏；返回是否已换装（换装=原生材质说话，跳过染色） */
 	bool ApplyMeshOverride();
+	bool BuildStarterFlames();
+	void ClearStarterFlames();
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
@@ -76,11 +82,17 @@ private:
 	TObjectPtr<UStaticMeshComponent> LidMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
-	TObjectPtr<UStaticMeshComponent> StarterGlowMesh;
-	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UPointLightComponent> StarterLight;
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> StarterGlowMaterial;
+	TObjectPtr<UNiagaraSystem> StarterSourceSystem;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> StarterFlameBaseMaterial;
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraSystem> StarterFlameSystem;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> StarterFlameMaterial;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UNiagaraComponent>> StarterFlames;
 	bool bStarterChest = false;
 	float StarterGlowPhase = 0.f;
 
