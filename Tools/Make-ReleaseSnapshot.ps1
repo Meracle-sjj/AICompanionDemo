@@ -58,7 +58,7 @@ function Add-SelectedFile([System.IO.FileInfo]$file) {
     $selected[$relative] = $file
 }
 
-foreach ($rootName in @('AICompanionDemo.uproject', 'README.md', 'PLAYER_GUIDE.md', 'AGENTS.md', 'CLAUDE.md', '.gitignore', '.gitattributes')) {
+foreach ($rootName in @('AICompanionDemo.uproject', 'README.md', 'PLAYER_GUIDE.md', 'CHANGELOG.md', 'AGENTS.md', 'CLAUDE.md', '.gitignore', '.gitattributes')) {
     $path = Join-Path $root $rootName
     if (Test-Path -LiteralPath $path -PathType Leaf) { Add-SelectedFile (Get-Item -LiteralPath $path -Force) }
 }

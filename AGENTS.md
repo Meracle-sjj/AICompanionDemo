@@ -34,4 +34,14 @@ AICompanionDemo.uproject - 模块声明（Runtime/PostDefault，AdditionalDepend
 
 八项反馈修订结构：AI/BossSummonerBarrage负责单发弹幕与活弹所有权（10-09晚由三发回调，频率/速度保持），BossOrb以可见35cm核心连续球扫玩家胶囊/BlockPawn实体、地形先到即销毁；EnemyGruntSummoned负责紫色双倍攻速妖术师；BossBase全家族共享玩家拉远镜头，UI/CompanionHudBosses集中显示屏幕上方真血条。玩家穿透与一次折射可协同，AI保持互斥；Nova继承玩家当前状态与独立地刺判定，不重复主攻遗物。感电默认两端基础20/过载40，模式数值与实际飘字同步。Content/SFX/Boss为CC0真实爆炸独立BossImpact，Ending稳定路径使用无飘带/无佩剑v3战损双人图。源码/资源导入不等于运行验收，当前结果见指挥部docs/combat-polish-20261009.md、boss-orb-alignment-20261009.md和STATUS。
 
+
+## GitHub迭代记录协议（用户2026-10-10明确要求）
+
+用户要求所有改动先在GitHub发表改动预期，完成后再宣布实装，并实时留存记录供面试评审。该明确授权覆盖本项目旧“不推送远程仓库”规定，但不授权发布秘密、第三方裸资产、购买签名或删除用户文件。
+
+- 修改代码/配置/资产前，在GitHub记录反馈、目标、设计判断与验收条件；设计变化先追加公开预期，再实施。1.1先行预期：<https://github.com/Meracle-sjj/AICompanionDemo/issues/1>，文档见Docs/ITERATION_1.1.md与CHANGELOG.md。
+- 按模块推送实际源码和进度，区分计划中/实施中/已实装/已验证/已发布；实装需接真实入口，验证需真实证据，发布需远端附件可下载。未完成不能称“所有模块已实装”。
+- 保留原反馈、预期与决策轨迹，用后续记录追加实际结果，不重写历史；公开展示仍从白名单副本发布，不把原Content或旧Git历史推送。
+- 1.0标签/包保留；新改动开发与验证后使用新版本。编译仍先关闭编辑器，禁止热重载，保护原HEAD/索引及未提交工作。
+
 [PROTOCOL]: 本文件是 L1 唯一真源（CLAUDE.md 为 @AGENTS.md 导入桩）；架构变更/顶级模块增删时更新此文件
