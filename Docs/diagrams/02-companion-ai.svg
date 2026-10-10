@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+<title id="title">协作AI：把护主预期拆成可解释的规则</title><desc id="desc">引擎负责感知与寻路；C++ FSM决定状态，Utility决定目标，Q模式决定移动取向。。原创规则示意，非游戏截图。</desc>
+<rect x="0" y="0" width="1600" height="1000" rx="0" fill="#14191d" stroke="none" stroke-width="2"/>
+<text x="60" y="94" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="46" font-weight="700" fill="#f5eddd">协作AI：把护主预期拆成可解释的规则</text>
+<text x="60" y="143" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">引擎负责感知与寻路；C++ FSM决定状态，Utility决定目标，Q模式决定移动取向。</text>
+<polyline points="60,174 1540,174" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round"/>
+<rect x="60" y="220" width="385" height="162" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="82" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">输入A：世界感知</text>
+<text x="82" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">AI Perception</text>
+<text x="82" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">视觉26m / 丢失30m</text>
+<rect x="60" y="417" width="385" height="162" rx="16" fill="#1c2429" stroke="#dc958c" stroke-width="2"/>
+<text x="82" y="454" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dc958c">输入B：玩家受击</text>
+<text x="82" y="497" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">OnDamaged来源</text>
+<text x="82" y="539" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">ICombatant活攻击者加入候选</text>
+<polyline points="445,300 492,300 492,359 535,359" fill="none" stroke="#86bfdb" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="535.00,359.00 522.00,353.00 522.00,365.00" fill="#86bfdb"/>
+<polyline points="445,499 492,499 492,414 535,414" fill="none" stroke="#dc958c" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="535.00,414.00 522.00,408.00 522.00,420.00" fill="#dc958c"/>
+<rect x="535" y="220" width="575" height="360" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="560" y="262" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#dfbc77">决策：0.25秒更新候选分数</text>
+<text x="560" y="315" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="28" font-weight="700" fill="#f5eddd">Score = 0.3D + 0.6T + 0.1V</text>
+<text x="560" y="358" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="26" font-weight="400" fill="#f5eddd">− 0.1 × 非现目标 − 0.35 × 无视线</text>
+<text x="560" y="416" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">D：距队友越近越高</text>
+<text x="560" y="455" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">T：越威胁玩家越高；正在攻击时为1</text>
+<text x="560" y="494" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">V：损血占比，低权重避免锁死首目标</text>
+<text x="560" y="546" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#dfbc77">切换惩罚抑制横跳，LOS惩罚优先可打目标</text>
+<polyline points="1110,400 1160,400" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1160.00,400.00 1147.00,394.00 1147.00,406.00" fill="#dfbc77"/>
+<rect x="1160" y="220" width="380" height="360" rx="16" fill="#1c2429" stroke="#90c9b4" stroke-width="2"/>
+<text x="1183" y="260" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#90c9b4">状态：Follow / Engage</text>
+<text x="1183" y="313" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="27" font-weight="700" fill="#f5eddd">有活候选 → Engage</text>
+<text x="1183" y="361" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="27" font-weight="700" fill="#f5eddd">无活候选 → Follow</text>
+<polyline points="1183,390 1517,390" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
+<text x="1183" y="435" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="27" font-weight="400" fill="#f5eddd">NavMesh + MoveTo</text>
+<text x="1183" y="477" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">移动与FireTimer并行</text>
+<text x="1183" y="520" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="24" font-weight="400" fill="#b1b9bb">基础：8m / 0.8s / 10伤</text>
+<text x="1183" y="559" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">候选清空：停火、归队</text>
+<rect x="60" y="630" width="460" height="208" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="82" y="667" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">Q 模式：玩家选择取舍</text>
+<text x="82" y="710" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">护卫</text>
+<text x="82" y="752" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">移动目标：玩家</text>
+<text x="82" y="786" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">玩家收到治疗 +10%</text>
+<rect x="570" y="630" width="460" height="208" rx="16" fill="#1c2429" stroke="#dc958c" stroke-width="2"/>
+<text x="592" y="667" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dc958c">Q 模式：共享评分与火力</text>
+<text x="592" y="710" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">歼灭</text>
+<text x="592" y="752" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">移动目标：评分最优敌人</text>
+<text x="592" y="786" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">队友伤害 +10%</text>
+<rect x="1080" y="630" width="460" height="208" rx="16" fill="#1c2429" stroke="#90c9b4" stroke-width="2"/>
+<text x="1102" y="667" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#90c9b4">可观察性</text>
+<text x="1102" y="710" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">日志与评分板</text>
+<text x="1102" y="752" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">ENTER / SWITCH记录原因</text>
+<text x="1102" y="786" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">评分板默认关闭，可显式开启</text>
+<polyline points="60,890 1540,890" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
+<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">现役规则：AI/CompanionAIController.cpp/.h · Health/HealthComponent.cpp；倍率在Health唯一入口结算</text>
+<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">2026-10-10规则快照 · 离线确定性游戏AI；固定事件台词使用预合成语音。示意不代表权重最优性或完整回归。</text>
+</svg>

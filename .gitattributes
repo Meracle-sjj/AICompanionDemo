@@ -1,0 +1,13 @@
+# UE 资产使用二进制 diff/merge，防止行尾改写；此文件不迁移已有历史。
+*.uasset binary
+*.umap binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.wav binary
+*.mp3 binary
+*.zip binary
+
+# 公开候选快照不含原始 Content，不启用 LFS。
+# 只有确认获得相应再分发权、决定维护完整私有资产仓后，才单独评估 LFS。

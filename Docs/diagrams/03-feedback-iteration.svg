@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+<title id="title">反馈迭代：可见火球与实际命中必须一致</title><desc id="desc">案例：召唤师火球飞过玩家头顶仍扣血。把体感问题转成几何约束，再核对实际结果。。原创规则示意，非游戏截图。</desc>
+<rect x="0" y="0" width="1600" height="1000" rx="0" fill="#14191d" stroke="none" stroke-width="2"/>
+<text x="60" y="94" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="46" font-weight="700" fill="#f5eddd">反馈迭代：可见火球与实际命中必须一致</text>
+<text x="60" y="143" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">案例：召唤师火球飞过玩家头顶仍扣血。把体感问题转成几何约束，再核对实际结果。</text>
+<polyline points="60,174 1540,174" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round"/>
+<rect x="60" y="220" width="460" height="214" rx="16" fill="#1c2429" stroke="#dc958c" stroke-width="2"/>
+<text x="82" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dc958c">01 作者试玩反馈</text>
+<text x="82" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">看得见躲开，却仍掉血</text>
+<text x="82" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">两次反馈：火球从头顶飞过</text>
+<text x="82" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">要求三线改回单线、保留速度</text>
+<rect x="570" y="220" width="460" height="214" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="592" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">02 旧版隔离PIE复现</text>
+<text x="592" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">球心高出胶囊顶部310cm</text>
+<text x="592" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">血量952 → 940，扣12血</text>
+<text x="592" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">旧XY100cm判定忽略高度/地形</text>
+<rect x="1080" y="220" width="460" height="214" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="1102" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">03 设计约束</text>
+<text x="1102" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">显示、命中与遮挡同构</text>
+<text x="1102" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">可见核心 = 查询半径35cm</text>
+<text x="1102" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">三维直线，地形先挡就销毁</text>
+<polyline points="520,327 570,327" fill="none" stroke="#dc958c" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="570.00,327.00 557.00,321.00 557.00,333.00" fill="#dc958c"/>
+<polyline points="1030,327 1080,327" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1080.00,327.00 1067.00,321.00 1067.00,333.00" fill="#dfbc77"/>
+<rect x="60" y="486" width="970" height="348" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="84" y="535" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="28" font-weight="700" fill="#f5eddd">04 实装：连续扫掠实际胶囊，并比较首次接触</text>
+<text x="84" y="582" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#86bfdb">本帧起点</text>
+<text x="699" y="582" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#86bfdb">拟达终点</text>
+<polyline points="172,636 746,636" fill="none" stroke="#86bfdb" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="173,636 330,636" fill="none" stroke="#86bfdb" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="330.00,636.00 317.00,630.00 317.00,642.00" fill="#86bfdb"/>
+<circle cx="170" cy="636" r="35" fill="#1c2429" stroke="#86bfdb" stroke-width="3"/>
+<circle cx="745" cy="636" r="35" fill="#1c2429" stroke="#86bfdb" stroke-width="3"/>
+<rect x="415" y="580" width="45" height="126" rx="22" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="362" y="736" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#dfbc77">实际玩家胶囊</text>
+<rect x="600" y="590" width="26" height="112" rx="0" fill="#43515a" stroke="#b1b9bb" stroke-width="2"/>
+<text x="558" y="736" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#b1b9bb">BlockPawn实体</text>
+<text x="84" y="786" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">按Hit.Time取先到接触；同距地形优先。示意不按世界比例。</text>
+<rect x="1080" y="486" width="460" height="348" rx="16" fill="#1c2429" stroke="#90c9b4" stroke-width="2"/>
+<text x="1103" y="527" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#90c9b4">05 验证与保留边界</text>
+<text x="1103" y="579" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="28" font-weight="700" fill="#f5eddd">新版自然单发迹线</text>
+<text x="1103" y="628" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">常态0.6s / 1600cm/s</text>
+<text x="1103" y="664" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">眩晕1.2s / 800cm/s</text>
+<text x="1103" y="700" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">地形命中销毁日志</text>
+<text x="1103" y="736" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#90c9b4">作者2026-10-09晚确认正常</text>
+<text x="1103" y="772" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">未宣称全地形/全角度覆盖</text>
+<polyline points="60,890 1540,890" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
+<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">现役规则：AI/BossOrb.cpp/.h · AI/BossSummonerBarrage.cpp；历史复现与作者验收摘要见 Docs/EVIDENCE.md</text>
+<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">失败复现、实现事实、作者体验验收分别记录；这个案例不替代完整可分发包、自然整局平衡或长期性能验证。</text>
+</svg>

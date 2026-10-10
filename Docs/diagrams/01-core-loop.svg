@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+<title id="title">核心循环：让自动战斗持续产生选择</title><desc id="desc">玩家负责站位、策略、构筑和挑战时机；队友承担自动感知与输出。。原创规则示意，非游戏截图。</desc>
+<rect x="0" y="0" width="1600" height="1000" rx="0" fill="#14191d" stroke="none" stroke-width="2"/>
+<text x="60" y="94" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="46" font-weight="700" fill="#f5eddd">核心循环：让自动战斗持续产生选择</text>
+<text x="60" y="143" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="25" font-weight="400" fill="#b1b9bb">玩家负责站位、策略、构筑和挑战时机；队友承担自动感知与输出。</text>
+<polyline points="60,174 1540,174" fill="none" stroke="#dfbc77" stroke-width="2" stroke-linejoin="round"/>
+<rect x="60" y="220" width="288" height="183" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="82" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">01 玩家决策</text>
+<text x="82" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">走位与模式</text>
+<text x="82" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">靠近 / 拉开队友</text>
+<text x="82" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Q 护卫 / 歼灭</text>
+<rect x="358" y="220" width="288" height="183" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="380" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">02 协作输出</text>
+<text x="380" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">自动战斗</text>
+<text x="380" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">前期队友火力</text>
+<text x="380" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Lv.6 玩家自动射击</text>
+<rect x="656" y="220" width="288" height="183" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="678" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">03 击杀收益</text>
+<text x="678" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">经验与金币</text>
+<text x="678" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">经验推动等级</text>
+<text x="678" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">金币形成机会成本</text>
+<rect x="954" y="220" width="288" height="183" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="976" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">04 成长入口</text>
+<text x="976" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">选择强化</text>
+<text x="976" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">升级 / 宝箱 / 遗物</text>
+<text x="976" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">前置、互斥与叠加</text>
+<rect x="1252" y="220" width="288" height="183" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="1274" y="257" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">05 局内构筑</text>
+<text x="1274" y="300" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">改变战局</text>
+<text x="1274" y="342" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">弹道与元素协作</text>
+<text x="1274" y="376" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">治疗、机动与风险</text>
+<polyline points="348,309 358,309" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="358.00,309.00 345.00,303.00 345.00,315.00" fill="#dfbc77"/>
+<polyline points="646,309 656,309" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="656.00,309.00 643.00,303.00 643.00,315.00" fill="#dfbc77"/>
+<polyline points="944,309 954,309" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="954.00,309.00 941.00,303.00 941.00,315.00" fill="#dfbc77"/>
+<polyline points="1242,309 1252,309" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1252.00,309.00 1239.00,303.00 1239.00,315.00" fill="#dfbc77"/>
+<polyline points="1396,403 1396,445 204,445 204,403" fill="none" stroke="#dfbc77" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="204.00,403.00 198.00,416.00 210.00,416.00" fill="#dfbc77"/>
+<rect x="680" y="420" width="244" height="46" rx="0" fill="#14191d" stroke="none" stroke-width="2"/>
+<text x="711" y="447" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="22" font-weight="400" fill="#dfbc77">重组站位与处理顺序</text>
+<rect x="60" y="488" width="460" height="354" rx="16" fill="#1c2429" stroke="#86bfdb" stroke-width="2"/>
+<text x="82" y="525" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#86bfdb">资源出口</text>
+<text x="82" y="568" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">金币与探索</text>
+<text x="82" y="610" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">普通箱：3 + 2 × 已开箱数</text>
+<text x="82" y="644" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">锁箱：钥匙资格 → 15金 + 六选二</text>
+<text x="82" y="678" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">钥匙：本局持有资格，不消耗</text>
+<text x="82" y="712" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">难度祭坛：8金 → 档位L + 1</text>
+<text x="82" y="746" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">敌HP × (1 + 0.3L)</text>
+<text x="82" y="780" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">敌XP × (1 + 0.25L)</text>
+<rect x="570" y="488" width="460" height="354" rx="16" fill="#1c2429" stroke="#dfbc77" stroke-width="2"/>
+<text x="592" y="525" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dfbc77">供给约束</text>
+<text x="592" y="568" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">保护选择质量</text>
+<text x="592" y="610" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">普通升级：三选一</text>
+<text x="592" y="644" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">一次性卡离池，可叠加卡保留</text>
+<text x="592" y="678" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Lv.6前排除玩家武器相关卡</text>
+<text x="592" y="712" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">融合：满足前置后入池</text>
+<text x="592" y="746" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">稀有度相对权重：1 / 0.75 / 0.45</text>
+<text x="592" y="780" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">Boss遗物：每Boss固定三选一</text>
+<rect x="1080" y="488" width="460" height="354" rx="16" fill="#1c2429" stroke="#dc958c" stroke-width="2"/>
+<text x="1102" y="525" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="19" font-weight="700" fill="#dc958c">阶段压力</text>
+<text x="1102" y="568" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="29" font-weight="700" fill="#f5eddd">挑战与离场</text>
+<text x="1102" y="610" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">3 / 6 / 9分钟：Boss祭坛出现</text>
+<text x="1102" y="644" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">接近祭坛开始对应挑战</text>
+<text x="1102" y="678" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">12分钟：开启狂暴压力</text>
+<text x="1102" y="712" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">蠕虫击倒 → 归途门</text>
+<text x="1102" y="746" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">先领奖，再近门松E、重新按E</text>
+<text x="1102" y="780" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="23" font-weight="400" fill="#b1b9bb">死亡结算 / 入门感谢页</text>
+<polyline points="60,890 1540,890" fill="none" stroke="#43515a" stroke-width="2" stroke-linejoin="round"/>
+<text x="60" y="930" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#b1b9bb">现役规则：WaveDirector.cpp/.h · WaveDirectorRelics.cpp · GameMode.cpp · EndingPortal.cpp</text>
+<text x="60" y="967" font-family="Microsoft YaHei, Noto Sans CJK SC, PingFang SC, sans-serif" font-size="20" font-weight="400" fill="#707b82">2026-10-10规则快照 · 示意图不代表固定出卡概率、完整组合平衡或运行性能；证据入口见 Docs/EVIDENCE.md</text>
+</svg>
