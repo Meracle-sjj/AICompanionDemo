@@ -1,6 +1,6 @@
 /**
  * [INPUT]: TreasureChest.h、原创M_StarterHalo/M_StarterMote的AuraColor/AuraOpacity、WorldStatic实际探地、MaterialBillboard世界半尺寸、Health/导演终局查询；原开箱音效。Niagara接口仅供离线Editor制作桥。
- * [OUTPUT]: 普通箱动态收费；初始箱85cm贴地金环/六个8–12cm稀疏上浮光点/柔和点光，无火焰柱或头顶球。游戏Tick驱动相位与透明度，真实暂停和低流速冻结；领取/玩家死亡/终局/EndPlay显式销毁。免费三选一账本不变。
+ * [OUTPUT]: 普通箱动态收费；初始箱85cm贴地紫环/六个8–12cm稀疏紫色上浮光点/柔和紫光，无火焰柱或头顶球。游戏Tick驱动相位与透明度，真实暂停和低流速冻结；领取/玩家死亡/终局/EndPlay显式销毁。免费三选一账本不变。
  * [POS]: AI/ 的道具交互代表件实现；交互输入在玩家 Character（E 键边沿），开箱账本在 WaveDirector，本类只管"门面与状态"——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
  */
@@ -37,7 +37,7 @@ namespace
 	const FLinearColor kChestBlue(0.25f, 0.45f, 1.0f);
 	const FLinearColor kLidCyanWhite(0.6f, 0.85f, 1.0f);
 	const FLinearColor kOpenedGray(0.28f, 0.28f, 0.3f);
-	const FLinearColor kStarterAuraTint(3.f, 1.8f, .22f, 1.f);
+	const FLinearColor kStarterAuraTint(1.8f, .36f, 3.f, 1.f);
 	constexpr int32 kStarterMoteCount = 6;
 }
 
@@ -90,7 +90,7 @@ ATreasureChest::ATreasureChest()
 	StarterLight->SetupAttachment(RootComponent);
 	StarterLight->SetAbsolute(false, false, true);
 	StarterLight->SetRelativeLocation(FVector(0.f, 0.f, 30.f));
-	StarterLight->SetLightColor(FLinearColor(1.f, 0.78f, 0.15f));
+	StarterLight->SetLightColor(FLinearColor(.6f, .12f, 1.f));
 	StarterLight->SetIntensity(650.f);
 	StarterLight->SetAttenuationRadius(320.f);
 	StarterLight->SetCastShadows(false);
