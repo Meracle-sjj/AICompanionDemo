@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 Engine 的 AActor/UStaticMeshComponent（/Engine 基础立方体）与 Tick、Kismet 的 GetPlayerPawn/GetGameMode（金币钱包与升级中枢查询）、本模块 WaveDirector（TrySpendGoldForUpgrade——开箱进三选一暂停）、DrawDebugString（交互提示）
- * [OUTPUT]: 普通收费箱及初始免费箱；预Cook专用火焰系统+组件金色MID，禁止运行期深复制/改写共享Renderer。领取/死亡/终局/EndPlay清理，暂停冻结；免费箱不改变钱包/收费计数。编辑器制作桥仅绑定固定项目衍生资产，不保存源包。
+ * [INPUT]: Engine的Actor/静态网格/贴地Decal/世界厘米MaterialBillboard、原创M_StarterHalo/M_StarterMote，世界Tick与真实暂停、Health/导演终局和开箱账本；固定Niagara衍生资产仅用于离线Editor制作桥。
+ * [OUTPUT]: 普通收费箱及初始免费箱；初始箱柔和金色贴地光环+六个稀疏上浮光点，Actor Tick驱动位置/呼吸/透明度；领取/死亡/终局/EndPlay清理，暂停冻结；免费箱不改变钱包/收费计数，运行宝箱不再创建Niagara火焰。
  * [POS]: AI/ 的道具交互代表件（宝箱经济的消费终端）；被 GameMode BeginPlay 代码生成于固定点（D6 范式），交互输入在玩家侧（Character Tick E 键边沿），开箱账本在 WaveDirector——三层职责分离
  * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
  */
@@ -16,8 +16,9 @@ class AWaveDirector;
 class UPointLightComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
-class UNiagaraComponent;
 class UNiagaraSystem;
+class UDecalComponent;
+class UMaterialBillboardComponent;
 
 UCLASS(Config = Game)
 class AICOMPANIONDEMO_API ATreasureChest : public AActor
@@ -75,8 +76,9 @@ private:
 
 	/** 应用换装：箱体替换 + 盖条隐藏；返回是否已换装（换装=原生材质说话，跳过染色） */
 	bool ApplyMeshOverride();
-	bool BuildStarterFlames();
-	void ClearStarterFlames();
+	bool BuildStarterAura();
+	void TickStarterAura(float DeltaSeconds);
+	void ClearStarterAura();
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
@@ -87,17 +89,25 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UPointLightComponent> StarterLight;
 	UPROPERTY(Transient)
-	TObjectPtr<UNiagaraSystem> StarterSourceSystem;
-	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> StarterFlameBaseMaterial;
 	UPROPERTY(Transient)
-	TObjectPtr<UNiagaraSystem> StarterFlameSystem;
+	TObjectPtr<UMaterialInterface> StarterHaloBaseMaterial;
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> StarterFlameMaterial;
+	TObjectPtr<UMaterialInterface> StarterMoteBaseMaterial;
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UNiagaraComponent>> StarterFlames;
+	TObjectPtr<UDecalComponent> StarterHalo;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> StarterHaloMaterial;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialBillboardComponent>> StarterMotes;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> StarterMoteMaterials;
 	bool bStarterChest = false;
-	float StarterGlowPhase = 0.f;
+	bool bStarterAuraRetired = false;
+	float StarterAuraAge = 0.f;
+	float StarterHaloOpacity = 0.f;
+	FVector StarterGroundLocation = FVector::ZeroVector;
+	FVector StarterGroundNormal = FVector::UpVector;
 
 	/** 已开：不可重复交互 */
 	bool bOpened = false;

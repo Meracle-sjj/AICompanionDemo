@@ -4,7 +4,7 @@
 
 **当前版本：1.2 候选 · 待独立包验收，未发布。**
 
-本轮已修订地图导航数据、测试面板中文布局与视觉、显示设置选项，以及免费初始箱的金色火焰提示。完整 Windows 包已构建与打包，实际键鼠验收尚未完成，下载将在通过后发布至 [v1.2 发布页（待发布）](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.2)。
+本轮修订地图导航数据、测试面板中文布局与视觉、显示设置选项；免费初始箱已接入柔和金色光晕与少量上浮光点。最新完整 Windows 构建成功，独立包正常开局的玩家镜头已确认新外观；本包实际领取、跟随与输入回归仍待完成，再提供 [v1.2 下载（待发布）](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.2)。
 
 作者实测 1.1 存在队友无法移动等严重故障；原反馈与本轮修复轨迹保留在 [GitHub #2](https://github.com/Meracle-sjj/AICompanionDemo/issues/2)。
 
@@ -32,7 +32,7 @@
 
 ![核心循环与资源出口](Docs/diagrams/01-core-loop.png)
 
-正常局出生点旁提供一次免费初始箱，以贴近箱体的金色火焰提示，不扣金币、不影响付费箱价格。经验升级三选一；付费宝箱价格递增；锁箱提供 15 金和六选二；8 金风险祭坛提高后续敌人生命与经验收益。
+正常局出生点旁提供一次免费初始箱，不扣金币、不影响付费箱价格；可领取时显示柔和金色光晕与少量上浮光点，领取后移除提示。经验升级三选一；付费宝箱价格递增；锁箱提供 15 金和六选二；8 金风险祭坛提高后续敌人生命与经验收益。
 
 Lv.9／11／13 等级奖励来自玩家池，Lv.10／12／14 来自 AI 池；宝箱与 Boss 奖励独立。玩家等级奖励第三槽为 Flip，仅把当前奖励改抽 AI 池，之后仍需选卡，下次奖励归属不变。
 
@@ -65,6 +65,6 @@ AI Perception 提供感知，Follow／Engage 状态决定行为，Utility 评分
 | [CompanionHud](Source/AICompanionDemo/UI/CompanionHud.cpp) | 选卡、技能账本、小地图与 Boss 血条 |
 | [RunEventLog](Source/AICompanionDemo/Events/RunEventLog.cpp) | 本局事件记录 |
 
-1.2 候选的源码与资源修订已完成，最终独立 Windows 包的移动、菜单、免费箱与重开流程正在验收，尚未发布。自然整局、全部构筑和长期性能仍需补充测试。程序尚未签名，Windows 可能显示未知发布者提示。
+初始箱光晕修订已通过 Editor 编译和受控 PIE 的暂停、GC、一次免费领取、重复领取拒绝、死亡清理及测试入口专项。最新完整 Windows BuildCookRun 成功（101.30 秒），资源容器确认两份光晕材质已打包；独立包正常开局的玩家镜头可见金色环晕与小光点，未出现此前初始箱 Niagara 复制崩溃。本包实际 E 键领取、走动跟随、Q 切换、菜单及重开仍待回归，1.2 未发布。自然整局、全部构筑和长期性能仍需补充测试。程序尚未签名，Windows 可能显示未知发布者提示。
 
 公开源码供设计与代码评审，**不含 Content 资产，无法单独完整复建**。试玩请下载完整 Windows 包；机制图的 PNG／SVG 位于 [Docs/diagrams](Docs/diagrams)。
