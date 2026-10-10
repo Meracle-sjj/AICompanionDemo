@@ -2,7 +2,7 @@
  * [INPUT]: 依赖 AIModule 的 MoveToActor/PathFollowingComponent/AIPerceptionComponent/AISenseConfig_Sight/AISense_Sight、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息/DrawDebugLine/LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、本模块 HealthComponent（玩家血量行与残血分）、本模块 Audio/SFXLibrary（Shot_Companion/Hit_Enemy/Explosion 事件音效）
  * [OUTPUT]: 对外提供 M3 行为实现——UpdateBrain 决策体（状态迁移 + ENTER/SWITCH 审计日志 + 走射行动：FireTimer 与寻路并行，站桩已废）、EvaluateTargets 三维评分器（威胁 = 距离近似 + 咬人仇恨覆盖，修复贴脸混战时距离分满格失明的退化）、DrawScoreboard 屏幕评分板、HandlePerceptionUpdated 感知回调、FireAtTarget 射击节拍、FeedMovementInput当前路径段馈送与同目标MoveTo去重（1.1）；M3.75 增补 Bark 台词播报（六类事件钩点——09-27 换目标播报退役，击杀播报挂连杀闸 5s/10 杀；全局+分类双冷却；09-26 换装头顶 3D 气泡、09-27 配音经 PlayVoice 空间化在队友身上）；E5 增补 ActivateFrenzy/RestoreFireRate（暂态狂怒攻速：开火间隔系数槽 + 弹道紫，定时自恢复——TemporaryPickup 触发）；**火力结算层候选集一律 CollectAliveCombatants 契约收集**（走廊命中/溅射/折射弹跳——09-30 召唤师案定罪 TActorIterator<AEnemyGrunt> 类型扫描把 ABossBase 排除在命中集外=弹道穿体不掉血；冰/电残留仍限定EnemyGrunt；猎印按ICombatant叠层/消费，覆盖Boss家族）
  *  火力/感电配对已抽到CompanionCombatShots；本文件保留Q护卫/歼灭切换与决策。伤害/治疗加成由Health唯一入口消费helper，弹路不重复乘算。
- * [POS]: Source/AICompanionDemo/AI 的决策核心实现；驱动CompanionCharacter、经ICombatant感知与攻击；2026-10-08移除常驻AI目标/状态调试行，真实决策日志与默认关闭的评分板保留为调试证据。
+ * [POS]: Source/AICompanionDemo/AI 的决策核心实现；驱动CompanionCharacter、经ICombatant感知与攻击；2026-10-08移除常驻AI目标/状态调试行；1.2五秒巡检记录真实MoveTo结果、导航/路径/移动状态，不代替玩家输入或绕过导航失败。
  * [PROTOCOL]: 变更时更新此头部，然后检查../AGENTS.md
  */
 
@@ -31,6 +31,7 @@
 #include "HAL/PlatformTime.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "NavigationData.h"
+#include "NavigationSystem.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISense_Sight.h"
@@ -412,6 +413,7 @@ void ACompanionAIController::UpdateBrain()
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Companion] 巡检：队友@%s 玩家@%s 间距 %.1f m"),
 			*GetPawn()->GetActorLocation().ToCompactString(),
 			*PlayerPawn->GetActorLocation().ToCompactString(), FollowDist / 100.f);
+		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Companion][Movement] %s"), *DebugMovementState());
 	}
 
 	// ---------- 4. 可解释输出 ----------
@@ -591,7 +593,7 @@ void ACompanionAIController::EnsureMoveRequest(AActor* Goal, float Acceptance)
 	RequestedMoveGoal = Goal;
 	RequestedAcceptance = Acceptance;
 	++MovementRequestCount;
-	MoveToActor(Goal, Acceptance, true, true, true); // 第五参为CanStrafe；移动Actor路径由PFC观察并更新。
+	LastMoveRequestResult = static_cast<int32>(MoveToActor(Goal, Acceptance, true, true, true)); // 第五参为CanStrafe；移动Actor路径由PFC观察并更新。
 }
 
 void ACompanionAIController::FeedMovementInput(float DeltaSeconds)
@@ -616,10 +618,20 @@ FString ACompanionAIController::DebugMovementState() const
 	const FVector Position = ControlledCharacter ? ControlledCharacter->GetActorLocation() : FVector::ZeroVector;
 	const FVector Velocity = ControlledCharacter ? ControlledCharacter->GetVelocity() : FVector::ZeroVector;
 	const FVector Target = Path ? Path->GetCurrentTargetLocation() : FVector::ZeroVector;
-	return FString::Printf(TEXT("{\"requests\":%d,\"pathStatus\":%d,\"segment\":%d,\"nextSegment\":%d,\"position\":[%.3f,%.3f,%.3f],\"velocity\":[%.3f,%.3f,%.3f],\"speed\":%.3f,\"accel\":%.3f,\"maxSpeed\":%.3f,\"target\":[%.3f,%.3f,%.3f]}"),
+	UNavigationSystemV1* Navigation = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	const ANavigationData* NavData = Navigation && ControlledCharacter
+		? Navigation->GetNavDataForProps(ControlledCharacter->GetNavAgentPropertiesRef(), Position) : nullptr;
+	const FNavigationPath* NavPath = Path ? Path->GetPath().Get() : nullptr;
+	return FString::Printf(TEXT("{\"requests\":%d,\"pathStatus\":%d,\"segment\":%d,\"nextSegment\":%d,\"position\":[%.3f,%.3f,%.3f],\"velocity\":[%.3f,%.3f,%.3f],\"speed\":%.3f,\"accel\":%.3f,\"maxSpeed\":%.3f,\"target\":[%.3f,%.3f,%.3f],\"lastMoveResult\":%d,\"navigationSystem\":%s,\"navData\":%s,\"navNeedsRebuild\":%s,\"pathValid\":%s,\"pathPoints\":%d,\"pathPartial\":%s,\"movementMode\":%d,\"actorTick\":%s,\"movementTick\":%s,\"paused\":%s,\"timeDilation\":%.4f}"),
 		MovementRequestCount, Path?int32(Path->GetStatus()):0, Path?Path->GetCurrentPathIndex():-1, Path?Path->GetNextPathIndex():-1,
 		Position.X, Position.Y, Position.Z, Velocity.X, Velocity.Y, Velocity.Z, Velocity.Size2D(), CMC?CMC->GetCurrentAcceleration().Size():0.f, CMC?CMC->MaxWalkSpeed:0.f,
-		Target.X, Target.Y, Target.Z);
+		Target.X, Target.Y, Target.Z, LastMoveRequestResult,
+		Navigation ? TEXT("true") : TEXT("false"), NavData ? TEXT("true") : TEXT("false"),
+		NavData && NavData->NeedsRebuild() ? TEXT("true") : TEXT("false"),
+		NavPath && NavPath->IsValid() ? TEXT("true") : TEXT("false"), NavPath ? NavPath->GetPathPoints().Num() : 0,
+		NavPath && NavPath->IsPartial() ? TEXT("true") : TEXT("false"), CMC ? static_cast<int32>(CMC->MovementMode) : -1,
+		IsActorTickEnabled() ? TEXT("true") : TEXT("false"), CMC && CMC->IsComponentTickEnabled() ? TEXT("true") : TEXT("false"),
+		GetWorld() && GetWorld()->IsPaused() ? TEXT("true") : TEXT("false"), UGameplayStatics::GetGlobalTimeDilation(this));
 }
 
 void ACompanionAIController::Tick(float DeltaSeconds)
