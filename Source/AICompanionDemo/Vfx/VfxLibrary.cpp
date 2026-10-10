@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 VfxLibrary.h 的入口契约、Engine 的 SpawnActor（蓝图类 _C 路径加载）、Niagara 的 UNiagaraFunctionLibrary（NS 直接播放——Explosion 系非样条无 BP 包装）
- * [OUTPUT]: 样条SpawnActor+LifeSpan；爆炸SpawnSystemAtLocation保持AutoDestroy，可选回传真实Niagara组件供宿主提前清理；旧调用行为不变
+ * [INPUT]: 依赖 VfxLibrary.h 的入口契约、Engine 的 SpawnActor（蓝图类 _C 路径加载）、TWeakObjectPtr 的 GC 失效检测、Niagara 的 UNiagaraFunctionLibrary（NS 直接播放——Explosion 系非样条无 BP 包装）
+ * [OUTPUT]: 样条类弱缓存失效时按原路径重新加载后SpawnActor+LifeSpan，避免跨地图GC后使用悬空类；爆炸SpawnSystemAtLocation保持AutoDestroy，可选回传真实Niagara组件供宿主提前清理
  * [POS]: Vfx/ 特效基建实现文件，与 VfxLibrary.h 一体两面；业务文件只认 SpawnVfx 一行，素材换包只改本文件路径表
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -11,6 +11,7 @@
 #include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 
 namespace
 {
@@ -36,7 +37,7 @@ void UVfxLibrary::PrecacheVfx(UWorld* World)
 		return;
 	}
 
-	// 预载=地下无人处闪现 0.01s（强制走一遍加载路径——玩家不可见）；首用缓存就此建立，游戏内零卡顿
+	// 预载=地下无人处闪现 0.01s，提前走本世界首用加载路径；GC 后的类缓存由 SpawnVfx 重验并重载。
 	for (int32 K = 0; K < static_cast<int32>(EVfx::Explosion); ++K)
 	{
 		SpawnVfx(World, static_cast<EVfx>(K), FVector(0.f, 0.f, -100000.f), 0.01f, 0.01f);
@@ -71,21 +72,26 @@ AActor* UVfxLibrary::SpawnVfx(UWorld* World, EVfx Kind, const FVector& Location,
 		return nullptr;   // 正常AutoDestroy；选择回传的宿主可在死亡/EndPlay时提前销毁。
 	}
 
-	// 样条系：蓝图 spawn（类指针函数级静态缓存——首用加载常驻）
-	static TMap<EVfx, UClass*> BpCache;
-	UClass** Found = BpCache.Find(Kind);
-	if (!Found)
+	// 静态缓存跨地图存在，不能保存不受 GC 跟踪的裸类指针；弱引用失效后重新加载。
+	static TMap<EVfx, TWeakObjectPtr<UClass>> BpCache;
+	const TWeakObjectPtr<UClass>* CachedClass = BpCache.Find(Kind);
+	UClass* BpClass = CachedClass ? CachedClass->Get() : nullptr;
+	if (!BpClass)
 	{
 		if (const TCHAR* Path = SplineBpPath(Kind))
 		{
-			Found = &BpCache.Add(Kind, LoadClass<AActor>(nullptr, Path));
+			BpClass = LoadClass<AActor>(nullptr, Path);
+			if (BpClass)
+			{
+				BpCache.Add(Kind, TWeakObjectPtr<UClass>(BpClass));
+			}
 		}
 	}
-	if (Found && *Found)
+	if (BpClass)
 	{
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		AActor* VfxActor = World->SpawnActor<AActor>(*Found, Location, FRotator::ZeroRotator, Params);
+		AActor* VfxActor = World->SpawnActor<AActor>(BpClass, Location, FRotator::ZeroRotator, Params);
 		if (VfxActor)
 		{
 			VfxActor->SetActorScale3D(FVector(Scale));
