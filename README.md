@@ -2,17 +2,15 @@
 
 一份面向**系统策划岗位**的个人可玩作品。玩家与 AI 队友在沙丘战场中协作，通过站位、护卫／歼灭切换、局内构筑、资源消费与 Boss 挑战改变战局。使用 **Unreal Engine 5.6.1、C++、离线 FSM／Utility AI**，游戏运行不调用大模型。
 
-**当前版本：1.2。Windows 包通过 GitHub Releases 提供，实际公开下载状态以 [v1.2 Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.2)为准。**
+**本页对应 v1.3，下载与发布状态以[正式 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3)为准。** Windows 玩家附件名为 `Player-Win64-v1.3.zip`，完整解压后运行。
 
-本轮接入紫色初始箱光晕、三张真实强化卡与额外 Flip、测试模式 F1 鼠标切换，并修复特效类缓存的 GC 生命周期。F1 以独立键帽和两行动作／状态显示，面板收起后仍可见；键帽版本已完成完整 Windows 构建、原生界面专项和两轮独立冷启动退出检查。旧金色光晕候选的致命崩溃记录保留，失败包停止发行。
+本轮根据作者 v1.2 实玩反馈恢复原 BGM，队友语音依次播放，补充三 Boss 入场／死亡提醒。磁暴改为枪口额外散射与 5 秒持续带电，重复信标缩短召回冷却，首领音效与两项遗物也有调整。
 
-作者实测 1.1 存在队友无法移动等严重故障；原反馈与本轮修复轨迹保留在 [GitHub #2](https://github.com/Meracle-sjj/AICompanionDemo/issues/2)。
+[v1.3 反馈与修订预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/3)保留作者反馈和验收目标。旧版本及其反馈轨迹继续保留。
 
 **开发周期：国庆节整个假期＋后续 3 天，约 10 天；非假期利用空闲时间开发。**
 
-[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [1.2 修订摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
-
-<!-- 最终独立包真实测试面板截图确认后，接入 Docs/screenshots/1.2-test-panel.png。 -->
+[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [1.3 修订摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
 
 ## 自动战斗中的玩家决策
 
@@ -50,7 +48,9 @@ AI Perception 提供感知，Follow／Engage 状态决定行为，Utility 评分
 
 作者试玩发现火球飞过头顶仍扣血，定位到碰撞仅判断水平距离。修订将可见核心和连续球扫统一为 35 cm，使用三维胶囊判定、首次接触结算与地形优先阻挡，改善攻击表达与实际判定的一致性。
 
-本版修订导航数据与设置输入，重新整理测试面板。测试模式按 F1 切换自由点选与锁定战斗；点选时鼠标不带动视角，暂停或奖励完成后恢复先前模式。F1 提示采用浅青键帽，旁边显示下一步动作和当前状态，面板收起后仍保留。具体变化见[修订摘要](CHANGELOG.md)。
+v1.3 将“带电”表达从一次性标记改为持续状态：玩家每次射击从枪口额外散射一条 70% 伤害侧弹，命中标记持续 5 秒并可刷新；队友每 0.5 秒连接附近两只带电活敌，标记不消费，单次传导伤害减半。电弧在目标死亡后保留短暂世界位置残影，让脆弱敌人的放电也能被看到。
+
+队友语音在同一队列中依次播放，字幕与当前录音一致；解锁射击、Boss 入场和死亡使用特殊颜色，加宽气泡与本局事件框。三 Boss 入场分别提醒幽紫结界消散、狂怒地刺危险和最后挑战；死亡另有专属回应。小地图下方在缩小时显示 TAB 键帽提示，放大时隐藏。具体变化见[修订摘要](CHANGELOG.md)。
 
 ## 本人职责与代码入口
 
@@ -64,9 +64,5 @@ AI Perception 提供感知，Follow／Engage 状态决定行为，Utility 评分
 | [GameMode](Source/AICompanionDemo/AICompanionDemoGameMode.cpp) | 开始、暂停、设置、死亡与结束流程 |
 | [CompanionHud](Source/AICompanionDemo/UI/CompanionHud.cpp) | 选卡、技能账本、小地图与 Boss 血条 |
 | [RunEventLog](Source/AICompanionDemo/Events/RunEventLog.cpp) | 本局事件记录 |
-
-2026-10-10 的金色光晕版本曾通过完整 Windows 构建（101.30 秒）与正常开局画面，但后续发现地图重载后再次开始会 Fatal Error；首启成功不能作为发行验收。匹配 PDB 将两次崩溃定位到特效库跨地图保存的裸类缓存，现已改为弱引用失效后重新加载，见[根因与修复预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/2#issuecomment-6100130600)。
-
-键帽修改前的修订通过 Editor 构建（45.66 秒）、28 项受控 PIE 和完整 Windows 构建（142.22 秒），作者确认正常／测试连续移动、队友跟随、E 开箱清理及 Q／F1 切换正常。最终键帽修订仅改两份展示源码，其余 197 份源码、4 份配置和 3576 份资源保持一致，保留该功能基线；上述人工连续键鼠操作未在最终程序重新采样。键帽版另通过 Editor 构建（22.91 秒）与完整 Windows 构建（118.58 秒，ExitCode=0），实际核对 960×540／1280×720 下的展开／收起提示、F1 镜头互斥、暂停／设置／奖励优先级、三卡与额外 Flip、第三项领取及测试面板操作；两轮同目录保留设置进入测试／正常局并正常退出，回菜单重入两次成功，未再现 Fatal Error。日志仍有钥匙光效材质缺失提示。三条新语音的播放／GC 续播与 Cook 身份已核对，人耳同音色、自然整局、全部构筑、长期性能及异机测试仍待补充。程序尚未签名，Windows 可能显示未知发布者提示。
 
 公开源码供设计与代码评审，**不含 Content 资产，无法单独完整复建**。试玩请下载完整 Windows 包；机制图的 PNG／SVG 位于 [Docs/diagrams](Docs/diagrams)。
