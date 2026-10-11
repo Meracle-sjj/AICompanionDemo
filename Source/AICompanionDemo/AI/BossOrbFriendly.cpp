@@ -1,6 +1,6 @@
 /**
  * [INPUT]: BossOrb外观、活ICombatant/Health、玩家遗物清理账本；步行旧路径仍读WorldStatic。
- * [OUTPUT]: 步行直线火球保留；闪烁三球追踪且穿越障碍、目标死亡重选、免伤悬停，直击30/邻敌20互斥；爆炸复用蠕虫入地橙黄球与Explosion。
+ * [OUTPUT]: 步行直线火球保持每敌30范围结算；闪烁三球直击30/邻敌20互斥；两者共用蠕虫入地橙黄球与Explosion爆闪，墙面也触发步行爆炸。
  * [POS]: AI/友方弹体；玩家死亡/EndPlay回收，命中爆闪交遗物登记硬寿命，不随球Destroy截断。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -69,17 +69,7 @@ void ABossOrb::TickFriendly(float DeltaSeconds)
 				{ Health->ApplyDamage(Damage, Source); }
 			}
 		}
-		AActor* ImpactVfx = UVfxLibrary::SpawnVfx(GetWorld(), EVfx::Fire, End, 0.5f, 1.f);
-		if (IsValid(Source))
-		{
-			if (UBossRelicComponent* Relics = Source->FindComponentByClass<UBossRelicComponent>())
-			{
-				Relics->TrackTransientVfx(ImpactVfx);
-			}
-			else if (IsValid(ImpactVfx)) { ImpactVfx->Destroy(); }
-		}
-		else if (IsValid(ImpactVfx)) { ImpactVfx->Destroy(); }
-		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Explosion);
+		SpawnFriendlyExplosionFx(Source);
 		Destroy(); return;
 	}
 	LifeSeconds -= DeltaSeconds;
@@ -179,6 +169,15 @@ void ABossOrb::ExplodeFriendlyHoming(AActor* Victim, AActor* Source)
 		}
 	}
 	if (IsActorBeingDestroyed()) return;
+	SpawnFriendlyExplosionFx(Source);
+	Destroy();
+}
+
+// ---------- 两条友方弹路共用爆闪；伤害仍归各自结算 ----------
+void ABossOrb::SpawnFriendlyExplosionFx(AActor* Source)
+{
+	if (!GetWorld() || IsActorBeingDestroyed()) return;
+	const FVector Center = GetActorLocation();
 	// 同蠕虫DiveImpactBurst：橙黄双层球形爆炸空间，叠统一Explosion爆闪。
 	DrawDebugSphere(GetWorld(), Center, FriendlyExplosionRadius, 12, FColor::Orange, false, .4f, 0, 3.f);
 	DrawDebugSphere(GetWorld(), Center, FriendlyExplosionRadius * .55f, 12, FColor::Yellow, false, .3f, 0, 2.f);
@@ -188,7 +187,6 @@ void ABossOrb::ExplodeFriendlyHoming(AActor* Victim, AActor* Source)
 	if (Relics) Relics->TrackTransientNiagara(Burst, .7f);
 	else if (IsValid(Burst)) Burst->DestroyComponent();
 	USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Explosion);
-	Destroy();
 }
 
 FString ABossOrb::DebugFriendlyHomingState() const

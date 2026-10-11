@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 GoldPickup.h 的组件契约、Engine 的 StaticMesh/MaterialInstanceDynamic（/Engine 基础球体 + BasicShapeMaterial 染色，参数真名 "Color"——09-12 实证）、DrawDebugString（拾取 +N 飘字）、Kismet 的 GetPlayerPawn/GetGameMode、本模块 Audio/SFXLibrary（Pickup_Gold 事件音效）
- * [OUTPUT]: 对外提供 AGoldPickup 的实现——磁吸三段式（同 XpPickup 范式）：圈外浮动自转 → 圈内渐加速飞向玩家 → 接触收集经 GameMode→WaveDirector::AddGold 入账 + 玩家头顶金色 +N 飘字 + 自毁；碰撞全关（纯距离判定，同族哲学）；45s 无人拾取自毁
+ * [INPUT]: GoldPickup.h、StaticMesh材质染色、GameMode/WaveDirector金币账本、Audio收集音、UI/CombatFeedbackSubsystem正式金币显示
+ * [OUTPUT]: 磁吸三段式、真实金币入账，仅钱包实际正增量显示头顶金币矢量图标与大数字，收集自毁/45s无人拾取自毁；碰撞全关
  * [POS]: AI/ 的宝箱经济货币层实现；掉落方 EnemyGrunt 只管生成与喂值，收集上报的组合根在 GameMode——生成与入账职责分离（XpPickup 同款）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,6 +17,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "UI/CombatFeedbackSubsystem.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -141,21 +142,26 @@ bool AGoldPickup::ApplyMeshOverride()
 void AGoldPickup::Collect()
 {
 	// 经组合根上报：GameMode 是唯一知道"导演是谁"的地方（职责分离与 XpPickup 同款）
+	int32 ActualGoldGained = 0;
 	if (const AAICompanionDemoGameMode* GameMode = Cast<AAICompanionDemoGameMode>(UGameplayStatics::GetGameMode(this)))
 	{
 		if (AWaveDirector* Director = GameMode->GetWaveDirector())
 		{
+			const int32 GoldBefore = Director->GetGold();
 			Director->AddGold(GoldValue);
+			ActualGoldGained = FMath::Max(Director->GetGold() - GoldBefore, 0);
 		}
 	}
 
-	// 拾取反馈：金色 +N 飘玩家头顶
-	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
+	// 账本拒绝入账时不伪报收益；正式数字生命周期归世界反馈层。
+	if (ActualGoldGained > 0)
 	{
-		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 170.f), FString::Printf(TEXT("+%d 金"), GoldValue),
-			PlayerPawn, FColor::Yellow, 0.8f, /*bDrawShadow*/ false, /*FontScale*/ 1.f);
+		if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
+		{
+			UCombatFeedbackSubsystem::ShowGold(GetWorld(), PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 170.f), ActualGoldGained);
+		}
 	}
-	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Gold] 拾取金币 +%d"), GoldValue);
+	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Gold] 拾取金币实际入账 +%d"), ActualGoldGained);
 	USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Pickup_Gold);   // [SFX] 金币收集
 
 	Destroy();

@@ -1,5 +1,5 @@
-﻿/** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口与感电配对显示。
- * [OUTPUT]: 全AI子弹共用FireShot；感电每0.5秒集中互斥配对/原伤减半/5秒不消费，AI穿透折射互斥，Nova各活命中继承玩家状态。
+﻿/** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口、感电显示与UI/CombatFeedbackSubsystem处决反馈。
+ * [OUTPUT]: FireShot和真实处决刀图标/实际伤害大数；感电0.5秒互斥配对/减半/5秒不消费，AI穿透折射互斥，Nova继承玩家状态。
  * [POS]: Companion火力局部实现；模式被动只由Health乘算，本文件提交原始伤害。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AI/CompanionAIController.h"
@@ -16,6 +16,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Relics/BossRelicComponent.h"
 #include "Vfx/ShockArcActor.h"
+#include "UI/CombatFeedbackSubsystem.h"
 
 // ---------- 命中链（09-24 弹道融合） ----------
 
@@ -79,9 +80,7 @@ void ACompanionAIController::ApplyHitChain(AActor* DirectVictim, UHealthComponen
 				DirectHealth->ApplyDamage(ExecDmg, InstigatorPawn);
 				if (IsValid(DirectHealth)) ActualExecDamage = FMath::Max(BeforeExecHealth - DirectHealth->GetCurrentHealth(), 0.f);
 			}
-			DrawDebugString(GetWorld(), ChainPoint + FVector(0.f, 0.f, 60.f),
-				FString::Printf(TEXT("处决 ◆×%d  -%.1f"), Marks, ActualExecDamage), nullptr,
-				FColor::FromHex(TEXT("FFD24D")), 0.7f, false, 1.1f);
+			UCombatFeedbackSubsystem::ShowExecute(GetWorld(), ChainPoint + FVector(0.f, 0.f, 60.f), ActualExecDamage, Marks);
 			DrawDebugSphere(GetWorld(), ChainPoint, 40.f, 10, FColor::FromHex(TEXT("FFD24D")), false, 0.25f, 0, 2.f);
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[Element] 处决结算：印记×%d 额外 %.1f 伤 → %s"),
 				Marks, ActualExecDamage, *GetNameSafe(DirectVictim));

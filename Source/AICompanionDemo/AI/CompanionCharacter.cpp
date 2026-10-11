@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 CompanionCharacter.h 的组件契约、Engine 的胶囊/移动组件与 UWidgetComponent（UMG）、UI/SpeechBubble 的气泡 widget、Kismet 的 GetPlayerController
- * [OUTPUT]: 对外提供 ACompanionCharacter 构造——放置即接管（AIControllerClass + AutoPossessAI）+ 头顶气泡组件（Screen 模式：620×140/底中锚定/事件配色/无碰撞）与 ShowSpeechBubble（惰性 CreateWidget——BeginPlay 期 PlayerController 可能未就绪）
+ * [OUTPUT]: 队友自动接管及620×140气泡装载；惰性CreateWidget，实际台词/时长/类别/奖励继续旗原样传UI，不自行判定优先级。
  * [POS]: Source/AICompanionDemo/AI 的成员，M1 跟随主体；与玩家 AICompanionDemoCharacter 平行不继承（玩家类绑相机弹簧臂与输入，队友职责隔离）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -67,7 +67,8 @@ void ACompanionCharacter::BeginPlay()
 		*GetNameSafe(this), *GetActorLocation().ToCompactString(), *GetNameSafe(GetController()));
 }
 
-void ACompanionCharacter::ShowSpeechBubble(const FString& Line, float Duration, ERunEventKind Kind)
+void ACompanionCharacter::ShowSpeechBubble(const FString& Line, float Duration, ERunEventKind Kind,
+	bool bContinueDuringReward)
 {
 	// 惰性建 widget（纯 C++ 类零蓝图资产）：BeginPlay 期 PlayerController 可能未就绪，首次台词必在开演后
 	if (!BubbleWidget)
@@ -84,6 +85,6 @@ void ACompanionCharacter::ShowSpeechBubble(const FString& Line, float Duration, 
 	}
 	if (BubbleWidget)
 	{
-		BubbleWidget->ShowLine(Line, Duration, Kind);
+		BubbleWidget->ShowLine(Line, Duration, Kind, bContinueDuringReward);
 	}
 }

@@ -2,7 +2,7 @@
  * [INPUT]: 依赖 AIModule 的 MoveToActor/PathFollowingComponent/AIPerceptionComponent/AISenseConfig_Sight/AISense_Sight、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息/DrawDebugLine/LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、本模块 HealthComponent（玩家血量行与残血分）、本模块 Audio/SFXLibrary（Shot_Companion/Hit_Enemy/Explosion 事件音效）
  * [OUTPUT]: 对外提供 M3 行为实现——UpdateBrain 决策体（状态迁移 + ENTER/SWITCH 审计日志 + 走射行动：FireTimer 与寻路并行，站桩已废）、EvaluateTargets 三维评分器（威胁 = 距离近似 + 咬人仇恨覆盖，修复贴脸混战时距离分满格失明的退化）、DrawScoreboard 屏幕评分板、HandlePerceptionUpdated 感知回调、FireAtTarget 射击节拍、FeedMovementInput当前路径段馈送与同目标MoveTo去重（1.1）；M3.75 增补 Bark 台词播报（六类事件钩点——09-27 换目标播报退役，击杀播报挂连杀闸 5s/10 杀；全局+分类双冷却；09-26 换装头顶 3D 气泡、09-27 配音经 PlayVoice 空间化在队友身上）；E5 增补 ActivateFrenzy/RestoreFireRate（暂态狂怒攻速：开火间隔系数槽 + 弹道紫，定时自恢复——TemporaryPickup 触发）；**火力结算层候选集一律 CollectAliveCombatants 契约收集**（走廊命中/溅射/折射弹跳——09-30 召唤师案定罪 TActorIterator<AEnemyGrunt> 类型扫描把 ABossBase 排除在命中集外=弹道穿体不掉血；冰/电残留仍限定EnemyGrunt；猎印按ICombatant叠层/消费，覆盖Boss家族）
  *  火力/感电配对已抽到CompanionCombatShots；本文件保留Q护卫/歼灭切换与决策。伤害/治疗加成由Health唯一入口消费helper，弹路不重复乘算。
- *  v1.3 Tick推进持续传导；Bark语音只入世界队列，真实起播才产生同录音字幕/历史。
+ *  Tick推进持续传导；Bark常规双冷却，紧急受伤/恢复绕过入口闸门交队列即时抢占，真实起播才产生同录音字幕/历史。
  * [POS]: Source/AICompanionDemo/AI 的决策核心实现；驱动CompanionCharacter、经ICombatant感知与攻击；2026-10-08移除常驻AI目标/状态调试行；1.2五秒巡检记录真实MoveTo结果、导航/路径/移动状态，不代替玩家输入或绕过导航失败。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -679,14 +679,14 @@ void ACompanionAIController::Bark(const FString& Line, const FName Category, con
 		return;
 	}
 
-	// 双闸门节流：全局冷却压总频次（混战不刷屏），分类冷却放行低频要事
-	//（击杀 0 冷却=只受全局闸门，连杀节奏保留；玩家挨打 6s、低血 8s、换目标 3s 各自独立）
+	// 常规事件仍经双闸门；受伤/恢复等紧急声音已由业务触发条件节流，不能错过时机。
+	const bool bInterrupting = USFXLibrary::IsInterruptingVoice(Voice);
 	const double Now = FPlatformTime::Seconds();
-	if (Now - LastBarkGlobalTime < BarkGlobalCooldown)
+	if (!bInterrupting && Now - LastBarkGlobalTime < BarkGlobalCooldown)
 	{
 		return;
 	}
-	if (const double* Last = LastBarkTime.Find(Category); Last && Now - *Last < CategoryCooldown)
+	if (const double* Last = LastBarkTime.Find(Category); !bInterrupting && Last && Now - *Last < CategoryCooldown)
 	{
 		return;
 	}

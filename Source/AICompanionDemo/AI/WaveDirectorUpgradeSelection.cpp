@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 经验金币账本、奖励队列、选择视图和候选池。
- * [OUTPUT]: 奖励来源/等级/Flip/槽位/前置资格仍归导演，不改变抽取行为。
+ * [OUTPUT]: 奖励来源/等级/Flip/槽位/前置资格与金币账本归导演；成功开箱台词由箱体提交，不在奖励入口重复发声。
  * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
@@ -549,10 +549,7 @@ void AWaveDirector::GrantFreeUpgrade()
 		return;
 	}
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 锁箱奖励——免费六选二！"));
-	if (ACompanionAIController* VoiceCtl = ResolveCompanionCtl())
-	{
-		VoiceCtl->Bark(TEXT("运气不错。"), TEXT("Chest"), 0.f, EGameSFX::Voice_LockedChest);
-	}
+	// 台词由成功开箱实体提交统一前三箱序号；奖励账本不再重复发声。
 	EnterUpgradePause(true);
 }
 
@@ -576,10 +573,7 @@ bool AWaveDirector::TrySpendGoldForUpgrade(const int32 Cost)
 	GoldCount -= Cost;
 	++ChestOpenCount;   // 09-25 价格递增账本：下一口更贵（GetNextChestCost = 基础 + 步进×计数）
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 开箱消耗 %d 金（余 %d，下一箱 %d 金）——进入三选一"), Cost, GoldCount, GetNextChestCost());
-	if (ACompanionAIController* VoiceCtl = ResolveCompanionCtl())
-	{
-		VoiceCtl->Bark(TEXT("补给开启。"), TEXT("Chest"), 0.f, EGameSFX::Voice_ChestOpen);
-	}
+	// 台词交回宝箱真实成功点，金币不足或重复互动不占成功序号。
 	EnterUpgradePause(false);
 	return true;
 }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SpeechBubble.h 的组件契约、Slate 的 SBorder/STextBlock（Widgets/Layout、Widgets/Text）、FSlateRoundedBoxBrush（零资产圆角底板——CompanionHud 同款实证）、FCoreStyle 默认字体、未暂停的Slate播放时钟
- * [OUTPUT]: 对外提供 USpeechBubble 的实现——ShowLine 置词+重置时钟（树未建时落 PendingLine 袋，RebuildWidget 末尾补挂——09-28 空气泡案根治）；620px画布/584px换行约束与事件类别配色；NativeTick 三段插值（浮现上浮 8px/淡出 0.25s），完毕后 opacity 归零静默待命（下词复用）
+ * [OUTPUT]: 固定584宽换行/配色；显式奖励继续旗贯穿早词缓存与Slate时钟，真实暂停全冻结，空词清除参数；不按文本/类别猜优先级。
  * [POS]: UI/ 四件套实现之一：世界空间展示层（挂 WidgetComponent，Screen 模式）；Bark 台词的"气泡感"正装——替代 DrawDebugString 的日志观感
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,8 +9,12 @@
 #include "RunEventStyle.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -25,10 +29,23 @@ namespace
 	constexpr float kRiseOffset = 8.f;   // 浮现上浮距离（px）
 }
 
-void USpeechBubble::ShowLine(const FString& Line, float Duration, ERunEventKind Kind)
+void USpeechBubble::ShowLine(const FString& Line, float Duration, ERunEventKind Kind, bool bContinueDuringReward)
 {
+	if (Line.IsEmpty())
+	{
+		PendingLine.Reset();
+		bPendingContinueDuringReward = false;
+		bContinuesDuringReward = false;
+		bShowing = false;
+		ElapsedSeconds = 0.f;
+		if (LineText.IsValid()) LineText->SetText(FText::GetEmpty());
+		SetRenderOpacity(0.f);
+		return;
+	}
 	if (LineText.IsValid())
 	{
+		PendingLine.Reset();
+		bPendingContinueDuringReward = false;
 		LineText->SetText(FText::FromString(FString::Printf(TEXT("「%s」"), *Line)));
 		LineText->SetColorAndOpacity(RunEventColor(Kind));
 	}
@@ -40,9 +57,11 @@ void USpeechBubble::ShowLine(const FString& Line, float Duration, ERunEventKind 
 		PendingLine = Line;
 		PendingDuration = Duration;
 		PendingKind = Kind;
+		bPendingContinueDuringReward = bContinueDuringReward;
 		return;
 	}
 	HoldDuration = Duration;
+	bContinuesDuringReward = bContinueDuringReward;
 	ElapsedSeconds = 0.f;
 	bShowing = true;
 }
@@ -52,8 +71,7 @@ TSharedRef<SWidget> USpeechBubble::RebuildWidget()
 	BubbleBrush = MakeUnique<FSlateRoundedBoxBrush>(kBubbleBg, 10.f, kBubbleOutline, 1.2f);
 
 	// 台词字号（09-27 用户实测"太小看不清"定罪：引擎默认约 12pt）——气泡是注意力焦点，22pt 起步
-	FSlateFontInfo BubbleFont = FCoreStyle::Get().GetFontStyle(TEXT("Bold"));
-	BubbleFont.Size = 22;
+	const FSlateFontInfo BubbleFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 22);
 
 	TSharedRef<SWidget> Tree = SAssignNew(BubbleBorder, SBorder)
 		.BorderImage(BubbleBrush.Get())
@@ -61,19 +79,22 @@ TSharedRef<SWidget> USpeechBubble::RebuildWidget()
 		.HAlign(HAlign_Center)
 		.VAlign(VAlign_Center)
 		[
+			SNew(SBox).WidthOverride(584.f)
+			[
 			SAssignNew(LineText, STextBlock)
 			.Font(BubbleFont)
 			.ColorAndOpacity(FSlateColor(kBubbleText))
 			.ShadowOffset(FVector2D(1.5f, 1.5f))
-			.AutoWrapText(true).WrapTextAt(584.f)
+			.AutoWrapText(false).WrapTextAt(584.f)
 			.Text(FText::GetEmpty())
+			]
 		];
 
 	// 早词补挂：树已成形，缓存的台词此刻才可能真正落进 LineText（时序正确的完整生命周期）
 	if (!PendingLine.IsEmpty())
 	{
 		const FString Line = MoveTemp(PendingLine);
-		ShowLine(Line, PendingDuration, PendingKind);
+		ShowLine(Line, PendingDuration, PendingKind, bPendingContinueDuringReward);
 	}
 	return Tree;
 }
@@ -88,8 +109,9 @@ void USpeechBubble::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		return;
 	}
 
-	// Slate播放时钟与实际音频一致；暂停或奖励冻结时显式停计，避免字幕先于声音消失。
-	if (!GetWorld() || GetWorld()->IsPaused() || UGameplayStatics::GetGlobalTimeDilation(this) < .01f) { return; }
+	// 实际最高事件跨奖励冻结演出；真实暂停仍停计，优先级由Audio显式旗标提供。
+	if (!GetWorld() || GetWorld()->IsPaused()
+		|| (UGameplayStatics::GetGlobalTimeDilation(this) < .01f && !bContinuesDuringReward)) { return; }
 	ElapsedSeconds += InDeltaTime;
 	const float Elapsed = ElapsedSeconds;
 
@@ -123,4 +145,30 @@ void USpeechBubble::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		bShowing = false;
 		SetRenderOpacity(0.f);
 	}
+}
+
+FString USpeechBubble::DebugSpeechBubbleState() const
+{
+	TSharedRef<FJsonObject> State = MakeShared<FJsonObject>();
+	State->SetStringField(TEXT("text"), LineText.IsValid() ? LineText->GetText().ToString() : FString());
+	State->SetStringField(TEXT("pendingText"), PendingLine);
+	State->SetBoolField(TEXT("showing"), bShowing);
+	State->SetBoolField(TEXT("continueDuringReward"), bContinuesDuringReward);
+	State->SetBoolField(TEXT("pendingContinueDuringReward"), bPendingContinueDuringReward);
+	State->SetNumberField(TEXT("elapsed"), ElapsedSeconds);
+	State->SetNumberField(TEXT("duration"), HoldDuration);
+	State->SetNumberField(TEXT("fixedWrapWidth"), 584.f);
+	State->SetNumberField(TEXT("opacity"), GetRenderOpacity());
+	if (LineText.IsValid())
+	{
+		const FVector2D Desired = LineText->GetDesiredSize();
+		const FVector2D Allocated = LineText->GetCachedGeometry().GetLocalSize();
+		State->SetNumberField(TEXT("desiredWidth"), Desired.X);
+		State->SetNumberField(TEXT("desiredHeight"), Desired.Y);
+		State->SetNumberField(TEXT("allocatedWidth"), Allocated.X);
+		State->SetNumberField(TEXT("allocatedHeight"), Allocated.Y);
+	}
+	FString Result;
+	FJsonSerializer::Serialize(State, TJsonWriterFactory<>::Create(&Result));
+	return Result;
 }

@@ -73,4 +73,5 @@ private:
 	void TickFriendly(float DeltaSeconds);
 	void TickFriendlyHoming(float DeltaSeconds, AActor* Source);
 	void ExplodeFriendlyHoming(AActor* Victim, AActor* Source);
+	void SpawnFriendlyExplosionFx(AActor* Source);
 };

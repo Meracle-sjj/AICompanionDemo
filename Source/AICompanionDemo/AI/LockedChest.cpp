@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 LockedChest.h 的组件契约、Engine 的 StaticMesh/PointLight/MaterialInstanceDynamic、DrawDebugHelpers（大奖爆闪）、Kismet 的 GetPlayerPawn/GetGameMode、本模块 WaveDirector（AddGold/GrantFreeUpgrade 奖励口）、本模块 AICompanionDemoCharacter 的持钥查询
- * [OUTPUT]: 对外提供 ALockedChest 的实现——Tick 双文案提示（无钥"需要宝箱钥匙"灰字 / 有钥"按 E 开锁"金字）→ TryOpen：持钥校验 → AddGold(15) + GrantFreeUpgrade（免费三选一）→ 三层金爆闪谢幕 0.9s 销毁
+ * [INPUT]: 依赖 LockedChest.h 的组件契约、Engine 的 StaticMesh/PointLight/MaterialInstanceDynamic、DrawDebugHelpers（大奖爆闪/失败短提示）、Kismet 的 GetPlayerPawn/GetGameMode、WaveDirector实际金币差额与奖励口、UI/CombatFeedbackSubsystem金币显示、AICompanionDemoCharacter持钥查询
+ * [OUTPUT]: 实际网格九点顺坡/轻埋沙；接近平滑显现钥匙无价格数字，持钥近身E提示；保留15金+免费六选二与原半径，仅钱包实际正增量显示金币图标，成功统一前三台词和短SFX，开启/死亡/终局/EndPlay清理。
  * [POS]: AI/ 交互物家族实现第四件：大奖的"金色夸张度"必须压过普通宝箱——免费三选一是核心甜头（普通箱花钱、锁箱白给）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -11,14 +11,21 @@
 #include "AICompanionDemo.h"
 #include "AICompanionDemoCharacter.h"
 #include "AICompanionDemoGameMode.h"
+#include "Audio/SFXLibrary.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/WorldSettings.h"
+#include "Health/HealthComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "UI/CombatFeedbackSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Vfx/ChestGrounding.h"
+#include "Vfx/ChestMarkerVisual.h"
 
 namespace
 {
@@ -29,9 +36,12 @@ namespace
 ALockedChest::ALockedChest()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bTickEvenWhenPaused = true;
 
 	BodyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BodyMesh"));
 	RootComponent = BodyMesh;
+	ChestMarker = CreateDefaultSubobject<UChestMarkerVisual>(TEXT("ChestMarker"));
+	ChestMarker->SetupAttachment(RootComponent);
 
 	ChestLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ChestLight"));
 	ChestLight->SetupAttachment(RootComponent);
@@ -85,17 +95,11 @@ void ALockedChest::BeginPlay()
 		}
 	}
 
-	// 探地落位（交互物家族标配）
-	FHitResult FloorHit;
-	FCollisionQueryParams FloorParams(SCENE_QUERY_STAT(LockedChestDrop), false, this);
-	FCollisionObjectQueryParams FloorObjects(ECC_WorldStatic);
-	const FVector ProbeStart = GetActorLocation() + FVector(0.f, 0.f, 8000.f);
-	if (GetWorld()->LineTraceSingleByObjectType(FloorHit, ProbeStart,
-		ProbeStart - FVector(0.f, 0.f, 24000.f), FloorObjects, FloorParams))
+	if (!ChestGrounding::Place(this, BodyMesh, GroundContact))
 	{
-		SetActorLocation(FVector(GetActorLocation().X, GetActorLocation().Y,
-			FloorHit.ImpactPoint.Z + MeshOverrideScale * 90.f));
+		UE_LOG(LogAICompanionDemo, Warning, TEXT("[LockedChest] 实际网格探地失败：%s，保留生成位置供诊断"), *GetActorLocation().ToCompactString());
 	}
+	DrawInteractHint();
 }
 
 void ALockedChest::Tick(float DeltaSeconds)
@@ -106,34 +110,62 @@ void ALockedChest::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	const AAICompanionDemoGameMode* GM = GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>();
+	const AWaveDirector* Director = GM ? GM->GetWaveDirector() : nullptr;
+	const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
+	const UHealthComponent* Health = Hero ? Hero->FindComponentByClass<UHealthComponent>() : nullptr;
+	if ((Health && Health->IsDead()) || (Director && Director->IsRunTerminated()))
+	{
+		if (ChestMarker) { ChestMarker->Retire(); }
+		return;
+	}
+	if (GetWorld()->IsPaused() || GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation() < .01f) { return; }
 	DrawInteractHint();
 }
 
 void ALockedChest::DrawInteractHint()
 {
 	const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-	if (!PlayerPawn)
-	{
-		return;
-	}
 	const AAICompanionDemoCharacter* PlayerChar = Cast<AAICompanionDemoCharacter>(PlayerPawn);
-	if (FVector::Dist2D(PlayerPawn->GetActorLocation(), GetActorLocation()) > InteractRadius)
+	if (ChestMarker)
 	{
-		return;
+		const bool bHasKey = PlayerChar && PlayerChar->HasTreasureKey();
+		const bool bNearby = PlayerPawn && FVector::Dist2D(PlayerPawn->GetActorLocation(), GetActorLocation()) <= InteractRadius;
+		ChestMarker->SetWorldLocation(ChestGrounding::MarkerAnchor(BodyMesh));
+		ChestMarker->Present(EChestMarkerKind::Key, 0, bHasKey && bNearby, bHasKey);
 	}
+}
 
-	if (PlayerChar && PlayerChar->HasTreasureKey())
-	{
-		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 90.f),
-			FString::Printf(TEXT("按 E 开锁！奖励 %d 金 + 免费升级"), GoldReward),
-			this, FColor::Yellow, 0.f, false, 1.2f);
-	}
-	else
-	{
-		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 90.f),
-			TEXT("上锁的大箱——需要宝箱钥匙"),
-			this, FColor::Silver, 0.f, false, 1.1f);
-	}
+void ALockedChest::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (ChestMarker) { ChestMarker->Retire(); }
+	Super::EndPlay(Reason);
+}
+
+FString ALockedChest::DebugChestState() const
+{
+#if WITH_EDITOR
+	const AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr;
+	const AWaveDirector* Director = GM ? GM->GetWaveDirector() : nullptr;
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	return FString::Printf(TEXT("{\"locked\":true,\"opened\":%s,\"goldReward\":%d,\"gold\":%d,\"hasKey\":%s,\"interactRadius\":%.3f,\"contact\":%s,\"marker\":%s}"),
+		bOpened ? TEXT("true") : TEXT("false"), GoldReward, Director ? Director->GetGold() : -1,
+		Hero && Hero->HasTreasureKey() ? TEXT("true") : TEXT("false"), InteractRadius,
+		*GroundContact.ToJson(), *(ChestMarker ? ChestMarker->DebugVisualState() : TEXT("{}")));
+#else
+	return TEXT("{}");
+#endif
+}
+
+bool ALockedChest::DebugTryOpen()
+{
+#if WITH_EDITOR
+	const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!Hero || FVector::DistSquared(Hero->GetActorLocation(), GetActorLocation()) > FMath::Square(InteractRadius)) { return false; }
+	return TryOpen();
+#else
+	return false;
+#endif
 }
 
 bool ALockedChest::TryOpen()
@@ -157,17 +189,22 @@ bool ALockedChest::TryOpen()
 	}
 
 	bOpened = true;
+	if (ChestMarker) { ChestMarker->Retire(); }
 
 	// 大奖：15 金 + 免费三选一（普通箱花钱买、锁箱白给——甜头必须压过普通箱）
 	const AAICompanionDemoGameMode* GameMode = Cast<AAICompanionDemoGameMode>(UGameplayStatics::GetGameMode(this));
 	AWaveDirector* Director = GameMode ? GameMode->GetWaveDirector() : nullptr;
 	if (Director)
 	{
+		const int32 GoldBefore = Director->GetGold();
 		Director->AddGold(GoldReward);
-		if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
+		const int32 ActualGoldGained = FMath::Max(Director->GetGold() - GoldBefore, 0);
+		if (ActualGoldGained > 0)
 		{
-			DrawDebugString(GetWorld(), PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 200.f),
-				FString::Printf(TEXT("+%d 金！"), GoldReward), PlayerPawn, FColor::Yellow, 1.5f, false, 1.3f);
+			if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
+			{
+				UCombatFeedbackSubsystem::ShowGold(GetWorld(), PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 200.f), ActualGoldGained);
+			}
 		}
 	}
 
@@ -179,6 +216,11 @@ bool ALockedChest::TryOpen()
 	if (Director)
 	{
 		Director->GrantFreeUpgrade();
+		if (!Director->IsRunTerminated())
+		{
+			USFXLibrary::PlaySFX(GetWorld(), EGameSFX::ChestOpen);
+			USFXLibrary::PlayChestOpenVoice(GetWorld(), GetActorLocation());
+		}
 	}
 	return true;
 }

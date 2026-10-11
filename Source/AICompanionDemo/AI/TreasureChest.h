@@ -1,14 +1,15 @@
 /**
  * [INPUT]: Engine的Actor/静态网格/贴地Decal/世界厘米MaterialBillboard、原创M_StarterHalo/M_StarterMote，世界Tick与真实暂停、Health/导演终局和开箱账本；固定Niagara衍生资产仅用于离线Editor制作桥。
- * [OUTPUT]: 普通收费箱及初始免费箱；初始箱柔和紫色贴地光环+六个稀疏紫色上浮光点，Actor Tick驱动位置/呼吸/透明度；领取/死亡/终局/EndPlay清理，暂停冻结；免费箱不改变钱包/收费计数，运行宝箱不再创建Niagara火焰。
+ * [OUTPUT]: 实际网格九点贴坡/轻埋沙的普通收费箱与初始免费箱；常驻描边FREE!及紫环星光，普通锁+导演真实大价格接近平滑显现；成功开箱走统一前三台词，奖励/半径不变，领取/死亡/终局/EndPlay清理。
  * [POS]: AI/ 的道具交互代表件（宝箱经济的消费终端）；被 GameMode BeginPlay 代码生成于固定点（D6 范式），交互输入在玩家侧（Character Tick E 键边沿），开箱账本在 WaveDirector——三层职责分离
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Vfx/ChestGrounding.h"
 #include "TreasureChest.generated.h"
 
 class UStaticMeshComponent;
@@ -19,6 +20,7 @@ class UMaterialInterface;
 class UNiagaraSystem;
 class UDecalComponent;
 class UMaterialBillboardComponent;
+class UChestMarkerVisual;
 
 UCLASS(Config = Game)
 class AICOMPANIONDEMO_API ATreasureChest : public AActor
@@ -79,12 +81,16 @@ private:
 	bool BuildStarterAura();
 	void TickStarterAura(float DeltaSeconds);
 	void ClearStarterAura();
+	void RefreshChestMarker();
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UStaticMeshComponent> BodyMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UStaticMeshComponent> LidMesh;
+	UPROPERTY(VisibleAnywhere, Category = "Chest")
+	TObjectPtr<UChestMarkerVisual> ChestMarker;
+	FChestGroundContact GroundContact;
 
 	UPROPERTY(VisibleAnywhere, Category = "Chest")
 	TObjectPtr<UPointLightComponent> StarterLight;

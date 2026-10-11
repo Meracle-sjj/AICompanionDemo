@@ -1,6 +1,6 @@
 /**
  * [INPUT]: RunEventLog的实际记录/代次、Slate字体/自动换行/滚动框。
- * [OUTPUT]: 左下620x190事件记录（100条上限来自记录源），序号/世界时间/说话人/原台词只读回显。
+ * [OUTPUT]: 620x190真实起播记录；固定行宽消除延后换行，预排版及跨帧末行可见确认防最后一条滞后。
  * [POS]: UI/RunEventPanel局部实现；暂停不改变记录或游戏时钟，Travel随旧世界销毁。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
@@ -46,28 +46,48 @@ void URunEventPanel::NativeTick(const FGeometry& Geometry,float DeltaTime)
  Super::NativeTick(Geometry,DeltaTime);
  const URunEventLog* Log=GetWorld()?GetWorld()->GetSubsystem<URunEventLog>():nullptr;
  if(Log && Log->GetRevision()!=LastRevision) { RefreshEntries(); }
+ if(bScrollPending && Scroll.IsValid() && LastRow.IsValid())
+ {
+  // ScrollToEnd下一次Tick只消费一次；换行/新树高度尚未稳定时必须继续确认真正末行。
+  ForceLayoutPrepass();
+  const FGeometry RowGeometry=LastRow->GetCachedGeometry();
+  const FGeometry ScrollGeometry=Scroll->GetCachedGeometry();
+  const float RowBottom=RowGeometry.LocalToAbsolute(FVector2D(0.f,RowGeometry.GetLocalSize().Y)).Y;
+  const float ViewTop=ScrollGeometry.LocalToAbsolute(FVector2D::ZeroVector).Y;
+  const float ViewBottom=ScrollGeometry.LocalToAbsolute(FVector2D(0.f,ScrollGeometry.GetLocalSize().Y)).Y;
+  const bool bAtBottom=RowGeometry.GetLocalSize().Y>0.f && ScrollGeometry.GetLocalSize().Y>0.f
+   && RowBottom>=ViewTop && RowBottom<=ViewBottom+1.f
+   && FMath::IsNearlyEqual(Scroll->GetScrollOffset(),Scroll->GetScrollOffsetOfEnd(),1.f);
+  StableBottomFrames=bAtBottom?StableBottomFrames+1:0;
+  if(StableBottomFrames>=2) { bScrollPending=false; }
+  else { Scroll->EndInertialScrolling(); Scroll->ScrollToEnd(); }
+ }
 }
 void URunEventPanel::RefreshEntries()
 {
  const URunEventLog* Log=GetWorld()?GetWorld()->GetSubsystem<URunEventLog>():nullptr;
  if(!Log || !Rows.IsValid()) { return; }
  Rows->ClearChildren();
+ LastRow.Reset();LastText.Reset();StableBottomFrames=0;
  for(const FRunEventEntry& Entry:Log->GetEntries())
  {
   const int32 Seconds=FMath::Max(0,FMath::FloorToInt(Entry.RunTime));
   const FString Line=FString::Printf(TEXT("[%02d:%02d] %s：%s"),Seconds/60,Seconds%60,*Entry.Speaker,*Entry.Text);
   Rows->AddSlot().AutoHeight().Padding(0.f,2.f)
-  [SNew(STextBlock).Text(FText::FromString(Line)).Font(FCoreStyle::GetDefaultFontStyle("Regular",14))
-   .AutoWrapText(true).ColorAndOpacity(Entry.Kind!=ERunEventKind::General || Entry.Speaker==TEXT("队友") ? RunEventColor(Entry.Kind) : FLinearColor(1.f,.78f,.44f))];
+  [SAssignNew(LastRow,STextBlock).Text(FText::FromString(Line)).Font(FCoreStyle::GetDefaultFontStyle("Regular",14))
+   .AutoWrapText(false).WrapTextAt(570.f).ColorAndOpacity(Entry.Kind!=ERunEventKind::General || Entry.Speaker==TEXT("队友") ? RunEventColor(Entry.Kind) : FLinearColor(1.f,.78f,.44f))];
+  LastText=Entry.Text;
  }
  DisplayedRows=Log->GetEntries().Num();
  LastRevision=Log->GetRevision();
- if(Scroll.IsValid()) { Scroll->ScrollToEnd(); }
+ bScrollPending=LastRow.IsValid();
+ if(Scroll.IsValid()) { ForceLayoutPrepass();Scroll->EndInertialScrolling();Scroll->ScrollToEnd(); }
 }
 void URunEventPanel::ReleaseSlateResources(bool bReleaseChildren)
 {
  Super::ReleaseSlateResources(bReleaseChildren);
  Rows.Reset();Scroll.Reset();LastRevision=-1;DisplayedRows=0;
+ LastRow.Reset();LastText.Reset();bScrollPending=false;StableBottomFrames=0;
 }
 FString URunEventPanel::DebugEventPanelState() const
 {
@@ -76,6 +96,23 @@ FString URunEventPanel::DebugEventPanelState() const
  Root->SetNumberField(TEXT("displayedRows"),DisplayedRows);
  Root->SetNumberField(TEXT("width"),620);Root->SetNumberField(TEXT("height"),190);
  Root->SetNumberField(TEXT("revision"),LastRevision);
+ Root->SetStringField(TEXT("lastText"),LastText);
+ Root->SetBoolField(TEXT("scrollPending"),bScrollPending);
+ Root->SetNumberField(TEXT("stableBottomFrames"),StableBottomFrames);
+ if(Scroll.IsValid() && LastRow.IsValid())
+ {
+  const FGeometry RowGeometry=LastRow->GetCachedGeometry();
+  const FGeometry ScrollGeometry=Scroll->GetCachedGeometry();
+  const float RowBottom=RowGeometry.LocalToAbsolute(FVector2D(0.f,RowGeometry.GetLocalSize().Y)).Y;
+  const float ViewTop=ScrollGeometry.LocalToAbsolute(FVector2D::ZeroVector).Y;
+  const float ViewBottom=ScrollGeometry.LocalToAbsolute(FVector2D(0.f,ScrollGeometry.GetLocalSize().Y)).Y;
+  Root->SetNumberField(TEXT("scrollOffset"),Scroll->GetScrollOffset());
+  Root->SetNumberField(TEXT("scrollEnd"),Scroll->GetScrollOffsetOfEnd());
+  Root->SetNumberField(TEXT("lastRowHeight"),RowGeometry.GetLocalSize().Y);
+  Root->SetNumberField(TEXT("lastRowBottom"),RowBottom);
+  Root->SetNumberField(TEXT("viewportBottom"),ViewBottom);
+  Root->SetBoolField(TEXT("lastRowBottomVisible"),RowGeometry.GetLocalSize().Y>0.f && RowBottom>=ViewTop && RowBottom<=ViewBottom+1.f);
+ }
  TArray<TSharedPtr<FJsonValue>> Entries;
  if(Log) { for(const FRunEventEntry& Entry:Log->GetEntries()) {
   TSharedRef<FJsonObject> Row=MakeShared<FJsonObject>();

@@ -2,7 +2,7 @@
 
 /**
  * [INPUT]: 依赖 Engine 的胶囊/移动/弹簧臂/相机组件、EnhancedInput 输入链路、本模块 HealthComponent（M3 玩家血量）、本模块 Audio/SFXLibrary（PlayerHurt/Blink/Recall 事件音效）、本模块 AI/Combatant 的 CollectAliveCombatants（玩家火力链候选集）
- * [OUTPUT]: v1.3 Lv6/信标语音入世界FIFO，字幕由实际播放产生；重复信标总/剩余召回CD减5秒（总CD下限5秒）； 对外提供 AAICompanionDemoCharacter——模板玩家（WASD/跳跃/视角）；M3 起作为敌方火力的合法目标（FindComponentByClass 契约可被任意阵营查询）；**Lv.6 自动射击与回响脉冲的目标/伤害集一律 CollectAliveCombatants 契约收集**（09-30 召唤师案：类型扫描曾让玩家"看不见" Boss——枪口永远越过 Boss 找杂兵；主弹命中判定走 ECC_Visibility 物理扫掠+ICombatant 契约，与走廊收集器双轨同认）；**回响脉冲 2.0（10-07）：累计器挂 OnHealApplied 治疗意图事件（辉耀结界持有者满血也计数），爆发=2s 蔓延领域（三层线框球扩张+跟随绿光+过程0.1s/1伤保留10DPS、历史半径补拍与短命命中反馈+终点爆25伤/冲击环/瞬时爆光/蠕虫同款Explosion音）——状态机实现已局部拆至AICompanionDemoCharacterHealNova.cpp，主文件订阅/推进/死亡清理保持**
+ * [OUTPUT]: 受伤跌破30%即挂近死旗、治疗越70%触发紧急恢复语音；Lv6/信标入世界FIFO，字幕由实际播放产生；重复信标总/剩余召回CD减5秒（总CD下限5秒）； 对外提供 AAICompanionDemoCharacter——模板玩家（WASD/跳跃/视角）；M3 起作为敌方火力的合法目标（FindComponentByClass 契约可被任意阵营查询）；**Lv.6 自动射击与回响脉冲的目标/伤害集一律 CollectAliveCombatants 契约收集**（09-30 召唤师案：类型扫描曾让玩家"看不见" Boss——枪口永远越过 Boss 找杂兵；主弹命中判定走 ECC_Visibility 物理扫掠+ICombatant 契约，与走廊收集器双轨同认）；**回响脉冲 2.0（10-07）：累计器挂 OnHealApplied 治疗意图事件（辉耀结界持有者满血也计数），爆发=2s 蔓延领域（三层线框球扩张+跟随绿光+过程0.1s/1伤保留10DPS、历史半径补拍与短命命中反馈+终点爆25伤/冲击环/瞬时爆光/蠕虫同款Explosion音）——状态机实现已局部拆至AICompanionDemoCharacterHealNova.cpp，主文件订阅/推进/死亡清理保持**
  *  九遗物组件随玩家创建；旧固定三遗物逻辑退出。5s闪烁/20s召回，探地成功才耗召回CD/发语音；暂停与死亡禁主动技能，伤害/闪烁回调Relics。镜头先于玩法早退更新，蠕虫平滑远景与短震归CharacterWurmCamera；近归途门E交互优先，宝箱不竞争。
  * [POS]: 模块根的玩家角色，与 AI/CompanionCharacter 平行不继承（职责隔离）；M3 评分的"威胁/玩家安全"维度以此为数据源
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -142,6 +142,11 @@ void AAICompanionDemoCharacter::GiveTreasureKey()
 
 void AAICompanionDemoCharacter::HandleHealthChanged(UHealthComponent* /*HealthComp*/, float /*NewHealth*/, float Delta)
 {
+	// 任何血量变化都登记低血边沿；不能仅在治疗分支挂旗，否则一次大治疗会漏恢复台词。
+	if (Health && !Health->IsDead() && Health->GetCurrentHealth() < Health->GetMaxHealth() * .3f)
+	{
+		bNearDeathFlag = true;
+	}
 	// 受伤累计警报（09-30 用户复测三定调："3 秒内掉了 20 血就播，否则都不播放"）：
 	// 3s 窗累计 ≥20 才响 + 响后 6s 静默冷却；冷却期用内层条件不响——**不再 return 整个函数**
 	//（上一版 return 连治疗光效一起吞了，结构缺陷本轮回修）。圣盾期 ApplyDamage 早退不广播，天然正确
@@ -196,11 +201,7 @@ void AAICompanionDemoCharacter::HandleHealthChanged(UHealthComponent* /*HealthCo
 		if (Health)
 		{
 			const float Pct = Health->GetCurrentHealth() / FMath::Max(Health->GetMaxHealth(), 1.f);
-			if (Pct < 0.3f)
-			{
-				bNearDeathFlag = true;
-			}
-			else if (bNearDeathFlag && Pct >= 0.7f)
+			if (bNearDeathFlag && Pct >= 0.7f)
 			{
 				bNearDeathFlag = false;
 				for (TActorIterator<ACompanionAIController> It(GetWorld()); It; ++It)

@@ -1,8 +1,8 @@
 /**
  * [INPUT]: TreasureChest.h、原创M_StarterHalo/M_StarterMote的AuraColor/AuraOpacity、WorldStatic实际探地、MaterialBillboard世界半尺寸、Health/导演终局查询；原开箱音效。Niagara接口仅供离线Editor制作桥。
- * [OUTPUT]: 普通箱动态收费；初始箱85cm贴地紫环/六个8–12cm稀疏紫色上浮光点/柔和紫光，无火焰柱或头顶球。游戏Tick驱动相位与透明度，真实暂停和低流速冻结；领取/玩家死亡/终局/EndPlay显式销毁。免费三选一账本不变。
+ * [OUTPUT]: 网格真实九点底面贴坡与轻埋沙；免费箱常驻粗体FREE!/85cm紫环/六光点；普通锁+导演真实价格10m–4m平滑渐显；成功统一前三台词，奖励/半径不变，暂停冻结、领取/死亡/终局/EndPlay清理。
  * [POS]: AI/ 的道具交互代表件实现；交互输入在玩家 Character（E 键边沿），开箱账本在 WaveDirector，本类只管"门面与状态"——三层职责分离
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "TreasureChest.h"
@@ -11,6 +11,8 @@
 #include "AICompanionDemo.h"
 #include "AICompanionDemoGameMode.h"
 #include "Audio/SFXLibrary.h"
+#include "Vfx/ChestGrounding.h"
+#include "Vfx/ChestMarkerVisual.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/DecalComponent.h"
@@ -95,13 +97,15 @@ ATreasureChest::ATreasureChest()
 	StarterLight->SetAttenuationRadius(320.f);
 	StarterLight->SetCastShadows(false);
 	StarterLight->SetVisibility(false);
+	ChestMarker = CreateDefaultSubobject<UChestMarkerVisual>(TEXT("ChestMarker"));
+	ChestMarker->SetupAttachment(RootComponent);
 }
 
 void ATreasureChest::ConfigureStarterChest()
 {
 	if (bOpened || bStarterAuraRetired) { return; }
 	bStarterChest = true;
-	if (HasActorBegunPlay()) { BuildStarterAura(); }
+	if (HasActorBegunPlay()) { BuildStarterAura(); RefreshChestMarker(); }
 }
 
 bool ATreasureChest::BuildStarterAura()
@@ -273,6 +277,7 @@ void ATreasureChest::ClearStarterAura()
 void ATreasureChest::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ClearStarterAura();
+	if (ChestMarker) { ChestMarker->Retire(); }
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -300,7 +305,7 @@ FString ATreasureChest::DebugChestState() const
 	FLinearColor Tint = FLinearColor::Black;
 	if (StarterHaloMaterial) { StarterHaloMaterial->GetVectorParameterValue(FMaterialParameterInfo(TEXT("AuraColor")), Tint); }
 	const bool bPaused = GetWorld() && (GetWorld()->IsPaused() || GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation() < .01f);
-	return FString::Printf(TEXT("{\"starter\":%s,\"opened\":%s,\"price\":%d,\"gold\":%d,\"paidChestCount\":%d,\"glow\":%s,\"nearby\":%s,\"interactRadius\":%.3f,\"halo\":%s,\"liveMotes\":%d,\"phase\":%.5f,\"haloOpacity\":%.5f,\"paused\":%s,\"retired\":%s,\"groundLocation\":[%.3f,%.3f,%.3f],\"groundNormal\":[%.4f,%.4f,%.4f],\"auraTint\":[%.3f,%.3f,%.3f,%.3f],\"motes\":[%s]}"),
+	const FString State = FString::Printf(TEXT("{\"starter\":%s,\"opened\":%s,\"price\":%d,\"gold\":%d,\"paidChestCount\":%d,\"glow\":%s,\"nearby\":%s,\"interactRadius\":%.3f,\"halo\":%s,\"liveMotes\":%d,\"phase\":%.5f,\"haloOpacity\":%.5f,\"paused\":%s,\"retired\":%s,\"groundLocation\":[%.3f,%.3f,%.3f],\"groundNormal\":[%.4f,%.4f,%.4f],\"auraTint\":[%.3f,%.3f,%.3f,%.3f],\"motes\":[%s]}"),
 		bStarterChest ? TEXT("true") : TEXT("false"), bOpened ? TEXT("true") : TEXT("false"),
 		bStarterChest ? 0 : (Director ? Director->GetNextChestCost() : OpenCost), Director ? Director->GetGold() : -1,
 		Director ? Director->ChestOpenCount : -1, StarterLight && StarterLight->IsVisible() ? TEXT("true") : TEXT("false"),
@@ -308,6 +313,8 @@ FString ATreasureChest::DebugChestState() const
 		LiveMotes, StarterAuraAge, StarterHaloOpacity, bPaused ? TEXT("true") : TEXT("false"), bStarterAuraRetired ? TEXT("true") : TEXT("false"),
 		StarterGroundLocation.X, StarterGroundLocation.Y, StarterGroundLocation.Z, StarterGroundNormal.X, StarterGroundNormal.Y, StarterGroundNormal.Z,
 		Tint.R, Tint.G, Tint.B, Tint.A, *MoteStates);
+	return State.LeftChop(1) + FString::Printf(TEXT(",\"contact\":%s,\"marker\":%s}"),
+		*GroundContact.ToJson(), *(ChestMarker ? ChestMarker->DebugVisualState() : TEXT("{}")));
 #else
 	return TEXT("{}");
 #endif
@@ -378,22 +385,13 @@ void ATreasureChest::BeginPlay()
 		}
 	}
 
-	// 起伏地形适配（Landscape 落地，2026-09-13；v15 加深）：固定 spawn 高度在地形起伏下会埋/悬——
-	// 向下探地落位（ObjectType 只认 WorldStatic，Landscape 是导航与探地的一等公民）。
-	// v15：地形域扩到 ±21m（504m 图），探程 12m 不够——上探 15m / 下探 50m 全域覆盖
-	FHitResult FloorHit;
-	FCollisionObjectQueryParams FloorParams;
-	FloorParams.AddObjectTypesToQuery(ECC_WorldStatic);
-	const FVector ProbeStart = GetActorLocation() + FVector(0.f, 0.f, 8000.f);
-	if (GetWorld()->LineTraceSingleByObjectType(FloorHit, ProbeStart,
-		ProbeStart - FVector(0.f, 0.f, 24000.f), FloorParams))
+	// 网格pivot不保证在几何中心；实际底面九点取代旧固定36cm半高，并沿地形法线贴坡。
+	if (!ChestGrounding::Place(this, BodyMesh, GroundContact))
 	{
-		// 箱体半高落位：换装后按 Fab 箱实际高度（72cm 高 × 1.0 缩放 → 半高 36）
-		const float HalfHeight = bSkinned ? 36.f : 25.f;
-		SetActorLocation(FVector(GetActorLocation().X, GetActorLocation().Y,
-			FloorHit.ImpactPoint.Z + HalfHeight));
+		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Chest] 实际网格探地失败：%s，保留生成位置供诊断"), *GetActorLocation().ToCompactString());
 	}
 	if (bStarterChest && !bStarterAuraRetired) { BuildStarterAura(); }
+	RefreshChestMarker();
 }
 
 void ATreasureChest::Tick(float DeltaSeconds)
@@ -404,38 +402,35 @@ void ATreasureChest::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	if (bStarterChest)
+	const AAICompanionDemoGameMode* GM = GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>();
+	const AWaveDirector* Director = GM ? GM->GetWaveDirector() : nullptr;
+	const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
+	const UHealthComponent* Health = Hero ? Hero->FindComponentByClass<UHealthComponent>() : nullptr;
+	if ((Health && Health->IsDead()) || (Director && Director->IsRunTerminated()))
 	{
-		const AAICompanionDemoGameMode* GM = GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>();
-		const AWaveDirector* Director = GM ? GM->GetWaveDirector() : nullptr;
-		const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
-		const UHealthComponent* Health = Hero ? Hero->FindComponentByClass<UHealthComponent>() : nullptr;
-		if ((Health && Health->IsDead()) || (Director && Director->IsRunTerminated()))
-		{
-			ClearStarterAura();
-			return;
-		}
-		const bool bFreeze = GetWorld()->IsPaused() || GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation() < .01f;
-		if (bFreeze) { return; }
-		if (!bStarterAuraRetired && IsValid(StarterHalo)) { TickStarterAura(DeltaSeconds); }
-	}
-
-	// 接近提示：头顶浮"按 E 开箱（N 金）"——交互邀请的可视语言
-	const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-	if (!PlayerPawn)
-	{
+		ClearStarterAura();
+		if (ChestMarker) { ChestMarker->Retire(); }
 		return;
 	}
-	if (FVector::Dist2D(PlayerPawn->GetActorLocation(), GetActorLocation()) <= InteractRadius)
+	const bool bFreeze = GetWorld()->IsPaused() || GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation() < .01f;
+	if (bFreeze) { return; }
+	if (bStarterChest)
 	{
-		// 09-25 动态价（用户定调"开得越多越贵"对冲金币常规化）：显示与扣费同源——导演的下一口价格
-		const AAICompanionDemoGameMode* GameModeHint = Cast<AAICompanionDemoGameMode>(UGameplayStatics::GetGameMode(this));
-		const AWaveDirector* DirectorHint = GameModeHint ? GameModeHint->GetWaveDirector() : nullptr;
-		const int32 Price = bStarterChest ? 0 : (DirectorHint ? DirectorHint->GetNextChestCost() : OpenCost);
-		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 60.f),
-			bStarterChest ? TEXT("按 E 领取初始补给（免费 · 仅一次）") : FString::Printf(TEXT("按 E 开箱（%d 金）"), Price),
-			this, FColor::Yellow, 0.f, /*bDrawShadow*/ false, /*FontScale*/ 1.1f);
+		if (!bStarterAuraRetired && IsValid(StarterHalo)) { TickStarterAura(DeltaSeconds); }
 	}
+	RefreshChestMarker();
+}
+
+void ATreasureChest::RefreshChestMarker()
+{
+	if (!ChestMarker || bOpened) { return; }
+	const AAICompanionDemoGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>() : nullptr;
+	const AWaveDirector* Director = GM ? GM->GetWaveDirector() : nullptr;
+	const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
+	const bool bNearby = Hero && FVector::Dist2D(Hero->GetActorLocation(), GetActorLocation()) <= InteractRadius;
+	ChestMarker->SetWorldLocation(ChestGrounding::MarkerAnchor(BodyMesh));
+	ChestMarker->Present(bStarterChest ? EChestMarkerKind::Free : EChestMarkerKind::Gold,
+		bStarterChest ? 0 : (Director ? Director->GetNextChestCost() : OpenCost), bNearby);
 }
 
 bool ATreasureChest::TryOpen()
@@ -474,8 +469,10 @@ bool ATreasureChest::TryOpen()
 
 	bOpened = true;
 	ClearStarterAura();
+	if (ChestMarker) { ChestMarker->Retire(); }
 	PlayOpenFx();
 	USFXLibrary::PlaySFX(GetWorld(), EGameSFX::ChestOpen);   // [SFX] 开箱成功（扣费后才响——钱不够不出声）
+	USFXLibrary::PlayChestOpenVoice(GetWorld(), GetActorLocation());
 	// 09-25 用户裁决：开箱后宝箱直接消失——原地留一具"开过的箱子"让玩家迷惑能不能再开；
 	// 延迟 0.9s 销毁让爆闪（0.5s）演完再走
 	SetLifeSpan(0.9f);

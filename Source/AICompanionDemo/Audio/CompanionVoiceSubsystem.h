@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 世界生命周期、SFXLibrary固定录音字幕/槽位和UAudioComponent真实播放状态。
- * [OUTPUT]: 每世界FIFO串行语音；音频开始才发布字幕/历史及关键事件类型，暂停与奖励冻结同步。
+ * [OUTPUT]: 普通FIFO与最新紧急抢占；紧急声音/气泡跨奖励冻结连续演出，真实暂停全部停播；起播预算/记录与前三成功箱计数。
  * [POS]: Audio/语音排程唯一所有者；仅Game/PIE，UPROPERTY保活声源/组件，Deinitialize停播清局。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -33,6 +33,7 @@ class AICOMPANIONDEMO_API UCompanionVoiceSubsystem : public UTickableWorldSubsys
 	GENERATED_BODY()
 public:
 	bool Enqueue(USoundBase* Sound, EGameSFX Event, float Volume, const FVector& Location, bool bSpatial);
+	EGameSFX RegisterChestOpened();
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 	virtual bool IsTickableWhenPaused() const override { return true; }
@@ -43,6 +44,7 @@ public:
 protected:
 	virtual bool DoesSupportWorldType(EWorldType::Type WorldType) const override;
 private:
+	bool CanPlayVoice(EGameSFX Event) const;
 	void StartNext();
 	void ClearActive();
 	UPROPERTY() TArray<FQueuedCompanionVoice> Pending;
@@ -54,4 +56,9 @@ private:
 	bool bAudioPaused = false;
 	int64 StartedCount = 0;
 	int64 CompletedCount = 0;
+	int64 InterruptedCount = 0;
+	int64 DiscardedPendingCount = 0;
+	int64 BudgetSkippedCount = 0;
+	int32 SuccessfulChestCount = 0;
+	TMap<EGameSFX, int32> PlayedByEvent;
 };

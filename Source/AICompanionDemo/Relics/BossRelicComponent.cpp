@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 本组件数据契约、ICombatant/Health、EnemyGrunt 普通减速与冰火残留、CompanionAIController 狂怒、
  *  BossOrb::LaunchFriendly、Vfx/SFX及Niagara组件回传、Engine Cone/BasicShapeMaterial、Character::LaunchCharacter。
- * [OUTPUT]: 九遗物结算；行走火球保留、闪烁落点三球持续追踪并直击30/邻敌20互斥；地刺50与5s/0.5s每跳10可刷新流血，狂暴HUD读真实Timer。
+ * [OUTPUT]: 九遗物结算；行走火球30范围伤与闪烁三球30/20互斥共用独立爆闪；地刺真实概率触发时仅播一次铡刀短砍音，50与5s/0.5s每跳10流血保持。
  * [POS]: Relics/运行时实现；仅敌人Health次生伤害，统一重入闸；死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -350,6 +350,8 @@ void UBossRelicComponent::TryStoneSpikes(const FVector& ImpactPoint)
 	{
 		const FVector Ground = GroundPoint(ImpactPoint);
 		SpawnSpikeVisuals(Ground);
+		// 只随这次概率成功的地刺发动；流血拍、受击和免伤反馈均不重播。
+		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::RelicStoneCleaver);
 		TArray<AActor*> Enemies;
 		CollectAliveCombatants(GetWorld(), Enemies);
 		for (AActor* Enemy : Enemies)

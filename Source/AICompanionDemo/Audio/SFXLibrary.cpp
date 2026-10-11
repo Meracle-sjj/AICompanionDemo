@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SFXLibrary.h 的槽位契约、Kismet/GameplayStatics 的 SpawnSound2D/SpawnSoundAtLocation、Engine/World、Engine/SoundAttenuation（运行时构造衰减——空间化语音零资产）
- * [OUTPUT]: 全语音按世界FIFO，固定录音字幕同源；妖术师降调，BGM每世界幂等，潜地循环空间附属
+ * [OUTPUT]: 固定录音字幕、抢占/三次预算/前三箱策略；地刺铡刀独立槽，地下声独立空间衰减，原BGM幂等
  * [POS]: Audio/ 的音效基建实现文件，与 SFXLibrary.h 一体两面；业务文件只认两个静态入口，不感知本文件存在
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -65,6 +65,7 @@ namespace
 		case EGameSFX::Voice_BossWurmAppear: Sound = Slots->Voice_BossWurmAppear; Volume = Slots->EventVoiceVolume; break;
 		case EGameSFX::Voice_BossWurmDefeated: Sound = Slots->Voice_BossWurmDefeated; Volume = Slots->EventVoiceVolume; break;
 		case EGameSFX::WurmBurrowLoop: Sound = Slots->WurmBurrowLoop; Volume = Slots->WurmBurrowVolume; break;
+		case EGameSFX::RelicStoneCleaver: Sound = Slots->RelicStoneCleaver; Volume = Slots->RelicStoneCleaverVolume; break;
 		case EGameSFX::Shot_Companion:   Sound = Slots->Shot_Companion;      Volume = Slots->Shot_CompanionVolume;    break;
 		case EGameSFX::Hit_Enemy:        Sound = Slots->Hit_Enemy;           Volume = Slots->Hit_EnemyVolume;         break;
 		case EGameSFX::EnemyDie:         Sound = Slots->EnemyDie;            Volume = Slots->EnemyDieVolume;          break;
@@ -113,6 +114,8 @@ namespace
 		case EGameSFX::Pickup_Magnet:    Sound = Slots->Pickup_Magnet;       Volume = Slots->Pickup_MagnetVolume;     break;
 		case EGameSFX::HealNovaBurst:    Sound = Slots->HealNovaBurst;       Volume = Slots->HealNovaBurstVolume;     break;
 		case EGameSFX::Voice_ChestOpen:  Sound = Slots->Voice_ChestOpen;     Volume = Slots->Voice_ChestOpenVolume;   break;
+		case EGameSFX::Voice_ChestOpenSecond: Sound = Slots->Voice_ChestOpenSecond; Volume = Slots->Voice_ChestOpenVolume; break;
+		case EGameSFX::Voice_ChestOpenThird: Sound = Slots->Voice_ChestOpenThird; Volume = Slots->Voice_ChestOpenVolume; break;
 		case EGameSFX::Voice_LockedChest: Sound = Slots->Voice_LockedChest;  Volume = Slots->Voice_LockedChestVolume; break;
 		case EGameSFX::Voice_Recovered:  Sound = Slots->Voice_Recovered;     Volume = Slots->Voice_RecoveredVolume;   break;
 		case EGameSFX::Voice_TreasureKey: Sound = Slots->Voice_TreasureKey;  Volume = Slots->Voice_TreasureKeyVolume; break;
@@ -140,6 +143,25 @@ namespace
 			AttHolder = TStrongObjectPtr<USoundAttenuation>(Att);
 		}
 		return AttHolder.Get();
+	}
+
+	// 地下声单独覆盖远景镜头，语音原400cm内圈不受此调整影响。
+	USoundAttenuation* WurmAttenuation()
+	{
+		static TStrongObjectPtr<USoundAttenuation> Holder;
+		if (!Holder.IsValid())
+		{
+			USoundAttenuation* Att = NewObject<USoundAttenuation>(GetTransientPackage());
+			Att->Attenuation = VoiceAttenuation()->Attenuation;
+			Att->Attenuation.bAttenuate = true;
+			Att->Attenuation.bSpatialize = true;
+			Att->Attenuation.DistanceAlgorithm = EAttenuationDistanceModel::Linear;
+			Att->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
+			Att->Attenuation.AttenuationShapeExtents = FVector(1200.f, 0.f, 0.f);
+			Att->Attenuation.FalloffDistance = 4800.f;
+			Holder = TStrongObjectPtr<USoundAttenuation>(Att);
+		}
+		return Holder.Get();
 	}
 }
 
@@ -208,6 +230,28 @@ bool USFXLibrary::TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Loc
 	return false;
 }
 
+bool USFXLibrary::IsInterruptingVoice(EGameSFX Event)
+{
+	return Event == EGameSFX::Voice_PlayerHurt || Event == EGameSFX::Voice_Recovered
+		|| GetVoiceKind(Event) == ERunEventKind::BossAppear || GetVoiceKind(Event) == ERunEventKind::BossDefeated;
+}
+
+bool USFXLibrary::IsLimitedItemVoice(EGameSFX Event)
+{
+	return (Event >= EGameSFX::CardVoice_Blink && Event <= EGameSFX::CardVoice_RadianceBond)
+		|| IsPickupVoice(Event) || Event == EGameSFX::Voice_BeaconRepeat;
+}
+
+void USFXLibrary::PlayChestOpenVoice(UWorld* World, const FVector& Location)
+{
+	if (!IsValid(World)) return;
+	if (UCompanionVoiceSubsystem* Queue = World->GetSubsystem<UCompanionVoiceSubsystem>())
+	{
+		const EGameSFX Event = Queue->RegisterChestOpened();
+		if (Event != EGameSFX::None) TryPlayVoice(World, Event, Location);
+	}
+}
+
 float USFXLibrary::GetPickupVoiceCooldownRemaining(const UObject* WorldContextObject)
 {
 	return PickupVoiceRemaining(WorldContextObject ? WorldContextObject->GetWorld() : nullptr);
@@ -243,7 +287,7 @@ UAudioComponent* USFXLibrary::StartWurmBurrowAudio(UWorld* World, USceneComponen
 	if (USoundWave* Loop = Cast<USoundWave>(Sound)) Loop->bLooping = true;
 	return UGameplayStatics::SpawnSoundAttached(Sound, AttachTo, NAME_None, FVector::ZeroVector,
 		FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true, Slots->WurmBurrowVolume,
-		1.f, 0.f, VoiceAttenuation(), nullptr, false);
+		1.f, 0.f, WurmAttenuation(), nullptr, false);
 }
 
 FName USFXLibrary::GetVoiceEventId(EGameSFX Event)
@@ -276,7 +320,9 @@ FString USFXLibrary::GetVoiceLine(EGameSFX Event)
 	case EGameSFX::Voice_Magnet: return TEXT("磁暴展开，战利品都过来！");
 	case EGameSFX::Voice_Frenzy: return TEXT("火力全开，都交给我！");
 	case EGameSFX::Voice_Aegis: return TEXT("圣盾加身，五秒无敌！");
-	case EGameSFX::Voice_ChestOpen: return TEXT("补给开启。");
+	case EGameSFX::Voice_ChestOpen: return TEXT("是的，这个世界确实有一些尘封的武器。");
+	case EGameSFX::Voice_ChestOpenSecond: return TEXT("继续找吧，还有很多。");
+	case EGameSFX::Voice_ChestOpenThird: return TEXT("看来你已经知道了如何武装自己。");
 	case EGameSFX::Voice_LockedChest: return TEXT("运气不错。");
 	case EGameSFX::Voice_Recovered: return TEXT("生命体征恢复，很好。");
 	case EGameSFX::Voice_TreasureKey: return TEXT("钥匙到手，找带锁的箱子。");
@@ -286,7 +332,7 @@ FString USFXLibrary::GetVoiceLine(EGameSFX Event)
 	case EGameSFX::CardVoice_Blink: return TEXT("空间折叠，出发。");
 	case EGameSFX::CardVoice_Scatter: return TEXT("现在可以攻击到更多敌人了。");
 	case EGameSFX::CardVoice_Pierce: return TEXT("这一枪，谁也挡不住。");
-	case EGameSFX::CardVoice_Prism: return TEXT("光线会替我找到你。");
+	case EGameSFX::CardVoice_Prism: return TEXT("折射的光线，会替我们追击敌人。");
 	case EGameSFX::CardVoice_RapidFire: return TEXT("射速提升，火力压制。");
 	case EGameSFX::CardVoice_Heavy: return TEXT("每一发都更重了。");
 	case EGameSFX::CardVoice_Explosive: return TEXT("让我们来制造一些爆炸。");

@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 UMG 的 UUserWidget（纯 C++ 无蓝图资产——RebuildWidget 手搭 Slate 树）、Slate 的 SBorder/STextBlock 与 FSlateRoundedBoxBrush（零资产圆角）、世界游戏DeltaTime与暂停/奖励冻结状态
- * [OUTPUT]: 对外提供 USpeechBubble——头顶 3D 聊天气泡（Screen 空间覆盖层，检索定稿：WoW/ESO 惯例恒定字号不被遮挡）：ShowLine(LINE,Duration,Kind)接收播放台词/时长/类别并重置游戏时钟；**早词缓存**（09-28 定罪：CreateWidget 后 Slate 树惰性构建，首词 ShowLine 时 LineText 未出生被静默丢弃→空气泡——PendingLine 缓存待 RebuildWidget 补挂）；三段状态机=浮现 0.2s 上浮淡入 → 停留 4.5s → 淡出 0.25s
+ * [INPUT]: UUserWidget/Slate圆角树、实际起播词/时长/类别和Audio显式奖励继续旗，Slate DeltaTime及真实世界暂停状态。
+ * [OUTPUT]: 固定584px中文换行；普通奖励冻结、紧急继续演出，真实暂停全部停计；早词保完整参数，空词清字幕/旗标。
  * [POS]: UI/ 四件套之一（09-26 夜轮，与 CompanionHud/DeathScreen/StartMenu 姊妹）：由 CompanionCharacter 的 WidgetComponent 装载（DrawSize/Pivot/MaxDrawDistance 挂载侧定）；未来敌人/玩家复用时组件与方法随迁
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,14 +22,16 @@ class AICOMPANIONDEMO_API USpeechBubble : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** 显示一句台词：新词覆盖旧词并重置生命周期（WoW 惯例——新指令压过闲聊，队列归Audio子系统） */
-	void ShowLine(const FString& Line, float Duration = 4.5f, ERunEventKind Kind = ERunEventKind::General);
+	/** 实际起播新词覆盖旧词并重置生命周期；空词立即清除，排队归Audio。 */
+	void ShowLine(const FString& Line, float Duration = 4.5f, ERunEventKind Kind = ERunEventKind::General,
+		bool bContinueDuringReward = false);
+	UFUNCTION(BlueprintPure, Category="Debug|UI") FString DebugSpeechBubbleState() const;
 
 protected:
-	/** 纯代码构建 Slate 树：圆角深底 + 台词白字（AutoWrapText 防长句溢出） */
+	/** 纯代码构建圆角深底与固定宽度中文字幕，禁用基于旧分配尺寸的自动换行。 */
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 
-	/** 生命周期状态机：游戏时钟驱动；暂停/奖励冻结保留当前字幕 */
+	/** Slate时钟驱动；真实暂停全冻结，奖励期仅Audio显式允许的当前词继续。 */
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
@@ -43,10 +45,12 @@ private:
 
 	float HoldDuration = 4.5f;
 	bool bShowing = false;
+	bool bContinuesDuringReward = false;
 
 	/** 早词缓存（09-28 空气泡案）：Slate 树建好前到达的台词先存此，RebuildWidget 末尾补挂 */
 	FString PendingLine;
 	float PendingDuration = 4.5f;
 	ERunEventKind PendingKind = ERunEventKind::General;
+	bool bPendingContinueDuringReward = false;
 	float ElapsedSeconds = 0.f;
 };

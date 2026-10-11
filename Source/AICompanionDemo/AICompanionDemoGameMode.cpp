@@ -2,9 +2,9 @@
 
 /**
  * [INPUT]: 依赖 Engine 的 SpawnActor/FindPlayerStart/World，依赖 AI/CompanionCharacter 与 AI/EnemyGrunt 的类对象、AI/WaveDirector（M3.75 敌人生成路径的接管者）
- * [OUTPUT]: 开局装配和免费箱；菜单/奖励/终局优先于测试F1，GameOnly永久捕获与GameAndUI自由点选互换，游离鼠标不驱动视角；自有ignorelook计数跨暂停/失焦恢复并在离局平衡清理
+ * [OUTPUT]: 开局装配、自然错向宝箱及免费箱；Ending清除DebugCanvas与正式数值层；菜单/奖励/终局优先于测试F1，GameOnly捕获与GameAndUI点选互换，ignorelook跨暂停/失焦恢复并在离局清理
  * [POS]: Source/AICompanionDemo 的组合根实现；"谁入场"在此装配，"何时何地"在 WaveDirector，"入场后做什么"在 CompanionAIController——三层职责分离
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "AICompanionDemoGameMode.h"
@@ -26,6 +26,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "UI/CompanionHud.h"
@@ -37,6 +38,7 @@
 #include "UI/PauseMenu.h"
 #include "UI/DisplaySettingsMenu.h"
 #include "UI/RunEventPanel.h"
+#include "UI/CombatFeedbackSubsystem.h"
 #include "Framework/Application/SlateApplication.h"
 
 AAICompanionDemoGameMode::AAICompanionDemoGameMode()
@@ -145,10 +147,15 @@ void AAICompanionDemoGameMode::BeginPlay()
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[Key] spawned at %s"), *KeyLocation.ToCompactString());
 		}
 	}
-	for (const FVector& LockedLocation : LockedChestSpawnLocations)
-	{
+
+    // 固定局部随机流自然错开朝向/落点，不扰动敌人或奖励随机序列。
+    FRandomStream ChestPlacement(0x131B);
+    for (const FVector& LockedLocation : LockedChestSpawnLocations)
+    {
+        const FVector Position = LockedLocation + FVector(ChestPlacement.FRandRange(-220.f, 220.f), ChestPlacement.FRandRange(-220.f, 220.f), 0.f);
+        const FRotator Rotation(0.f, ChestPlacement.FRandRange(-180.f, 180.f), 0.f);
 		if (ALockedChest* Locked = World->SpawnActor<ALockedChest>(
-			ALockedChest::StaticClass(), LockedLocation, FRotator::ZeroRotator, Params))
+			ALockedChest::StaticClass(), Position, Rotation, Params))
 		{
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[LockedChest] spawned at %s"), *LockedLocation.ToCompactString());
 		}
@@ -156,9 +163,12 @@ void AAICompanionDemoGameMode::BeginPlay()
 
 	// ---------- 宝箱入场（M3.75 E3：道具交互的代表件）----------
 	// 固定点铺在场地四象限的地标旁（石阵/走廊口/双山侧）——玩家打钱后绕路开箱，交互即目的
-	for (const FVector& ChestLocation : ChestSpawnLocations)
-	{
-		if (ATreasureChest* Chest = World->SpawnActor<ATreasureChest>(ATreasureChest::StaticClass(), ChestLocation, FRotator::ZeroRotator, Params))
+
+    for (const FVector& ChestLocation : ChestSpawnLocations)
+    {
+        const FVector Position = ChestLocation + FVector(ChestPlacement.FRandRange(-180.f, 180.f), ChestPlacement.FRandRange(-180.f, 180.f), 0.f);
+        const FRotator Rotation(0.f, ChestPlacement.FRandRange(-180.f, 180.f), 0.f);
+		if (ATreasureChest* Chest = World->SpawnActor<ATreasureChest>(ATreasureChest::StaticClass(), Position, Rotation, Params))
 		{
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[Chest] spawned at %s"), *ChestLocation.ToCompactString());
 		}
@@ -476,6 +486,12 @@ bool AAICompanionDemoGameMode::TryEnterEndingPortal(AEndingPortal* Portal)
 	}
 	const bool bPaused = UGameplayStatics::SetGamePaused(this, true);
 	UGameplayStatics::SetGlobalTimeDilation(this, 0.f);
+	// DebugCanvas在Slate结束页之后绘制，暂停又冻结其寿命；必须清账而非只提高幕布Z。
+	FlushDebugStrings(GetWorld());
+	if (UCombatFeedbackSubsystem* Feedback = GetWorld()->GetSubsystem<UCombatFeedbackSubsystem>())
+	{
+		Feedback->ClearForEnding();
+	}
 	if (Hud) { Hud->RemoveFromParent(); }
 	if (DebugPanel) { DebugPanel->RemoveFromParent(); }
 	if (DamageFlash) { DamageFlash->RemoveFromParent(); }
@@ -712,7 +728,7 @@ void AAICompanionDemoGameMode::SpawnStarterChest()
 	if (!GetWorld()->LineTraceSingleByObjectType(Ground, Target + FVector(0.f,0.f,600.f), Target-FVector(0.f,0.f,3000.f), StaticObjects, Trace)) { return; }
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	if (ATreasureChest* Chest = GetWorld()->SpawnActor<ATreasureChest>(ATreasureChest::StaticClass(), Ground.ImpactPoint+FVector(0.f,0.f,40.f), FRotator::ZeroRotator, Params))
+	if (ATreasureChest* Chest = GetWorld()->SpawnActor<ATreasureChest>(ATreasureChest::StaticClass(), Ground.ImpactPoint+FVector(0.f,0.f,40.f), FRotator(0.f,43.f,0.f), Params))
 	{
 		Chest->ConfigureStarterChest();
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[StarterChest] spawned at %s; free three-choice reward"), *Chest->GetActorLocation().ToCompactString());

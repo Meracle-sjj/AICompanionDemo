@@ -1,6 +1,6 @@
 /**
  * [INPUT]: USoundBase软引用槽、世界语音队列、Kismet 2D/空间/附属音频与原BGM/潜地循环声源。
- * [OUTPUT]: EGameSFX槽与统一固定字幕；全部语音交每世界FIFO，TryPlayVoice成功入队返回true；BGM/潜地循环独立于语音
+ * [OUTPUT]: 固定字幕/语音策略；普通串行、紧急抢占，拾取录音每世界限三次，前三成功箱专用台词；BGM/潜地循环独立
  *  信标首次解锁/成功召回沿用现役两条资源路径，v2声源为冷峻自然女声；台词分别为“我一直在你身边。”“我从未离开过你”。
  * [POS]: Audio/ 的音效基建唯一文件；全部游戏事件经 PlaySFX 收口发声——事件方不知道音效是否存在，素材到位与否只改 ini、代码零改动
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -93,6 +93,9 @@ enum class EGameSFX : uint8
 	Voice_BossWurmAppear,
 	Voice_BossWurmDefeated,
 	WurmBurrowLoop,
+	Voice_ChestOpenSecond,
+	Voice_ChestOpenThird,
+	RelicStoneCleaver,
 	None                 // 哨兵：无语音（Bark 默认值——PlaySFX 对它静默）
 };
 
@@ -115,6 +118,12 @@ public:
 
 	/** 返回true表示成功入本世界串行队列；前一句未完成时保持待播。 */
 	static bool TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Location);
+	/** 紧急事件不经过闲聊节流，立即替换当前及全部待播旧台词。 */
+	static bool IsInterruptingVoice(EGameSFX Event);
+	/** 相同拾取/升级录音每世界最多真正起播三次，排队和被吞不计数。 */
+	static bool IsLimitedItemVoice(EGameSFX Event);
+	/** 仅真实成功开箱调用；初始、普通、大锁箱共用前三次序号。 */
+	static void PlayChestOpenVoice(UWorld* World, const FVector& Location);
 	static FString GetVoiceLine(EGameSFX Event);
 	static ERunEventKind GetVoiceKind(EGameSFX Event);
 	static FName GetVoiceEventId(EGameSFX Event);
@@ -170,6 +179,10 @@ public:
 	TSoftObjectPtr<USoundBase> BossImpact;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
 	float BossImpactVolume = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Relic")
+	TSoftObjectPtr<USoundBase> RelicStoneCleaver;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Relic", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float RelicStoneCleaverVolume = .65f;
 
 	/** 经验晶体收集 */
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Pickup")
@@ -377,6 +390,8 @@ public:
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice", meta = (ClampMin = "0.0", ClampMax = "2.0"))
 	float Voice_ChestOpenVolume = 1.0f;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_ChestOpenSecond;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_ChestOpenThird;
 
 	/** 锁箱开锁（队友台词） */
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice")
@@ -450,7 +465,7 @@ public:
 	float EventVoiceVolume = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss") TSoftObjectPtr<USoundBase> WurmBurrowLoop;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WurmBurrowVolume = .75f;
+	float WurmBurrowVolume = 1.1f;
 	// ---------- BGM（09-26）：循环常驻，点"开始游戏"起播 ----------
 
 	/** BGM 曲目（SoundWave 需 Looping=true——导入脚本已设） */
