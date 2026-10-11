@@ -3,7 +3,7 @@
  * [OUTPUT]: 对外提供 UHealthComponent 的实现——伤害/治疗钳制与三委托广播时序（先受击带凶手 → 血量事件 → 死亡事件；Heal 只走血量事件且死者无效）；E5 增补圣盾无敌（ApplyDamage 全额早退 + 定时自恢复）；LastDamageTaken 快照（09-30 受击阈值入口数据源）
  *  玩家遗物减伤在扣血/致死判定前统一乘算，LastDamageTaken保存实际扣血供反伤；无敌早退不触发遗物反伤。
  *  Q歼灭模式对实际AI来源伤害统一乘当前模式系数；护卫模式仅增强玩家收到的治疗，钳制与治疗意图均使用增强后的值。
- * [POS]: Health唯一生命结算；扣血后先复制落点/模式/实际量，再沿原委托与死亡时序推进，反馈不参与账本。
+ * [POS]: Health唯一生命结算；模式/减伤结算后先保存HP截断前的完整伤害供UI，实际扣血/LastDamageTaken与原委托死亡时序保持；反馈不参与账本。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -98,6 +98,7 @@ void UHealthComponent::ApplyCombatDamage(float Damage, AActor* Instigator, const
 		Damage *= Controller->GetModeDamageMultiplier();
 	if (const UBossRelicComponent* Relics = GetOwner()->FindComponentByClass<UBossRelicComponent>())
 	{ Damage = Relics->ModifyIncomingDamage(Damage); }
+	const float ResolvedDamage = Damage;
 	CurrentHealth = FMath::Clamp(CurrentHealth - Damage, 0.f, MaxHealth);
 	const float Delta = CurrentHealth - OldHealth;
 	LastDamageTaken = -Delta;   // 受击阈值入口的数据源（09-30：受击表现分级判定用）
@@ -107,8 +108,9 @@ void UHealthComponent::ApplyCombatDamage(float Damage, AActor* Instigator, const
 	// 回血抵消）在 OnHealthChanged 广播期间 Heal 把血拉回——判定读到回血后的正数，死亡被静默吃掉。
 	// 本次伤害致死与否在钳制后即成事实，不受订阅方反应篡改
 	const bool bLethal = CurrentHealth <= 0.f;
-	// 位置与实际量在同步反伤/治疗/死亡回调之前成为值快照；UI不再读取会被回调改变的血量或模式。
-	UCombatFeedbackSubsystem::ShowDamage(GetWorld(), Context, -Delta, SourceSnapshot);
+	// 完整伤害体现本次攻击强度，HP只决定实际扣血；免伤/未扣血仍静默，反伤/死亡继续读原生命账本。
+	if (LastDamageTaken > 0.f)
+		UCombatFeedbackSubsystem::ShowDamage(GetWorld(), Context, ResolvedDamage, SourceSnapshot);
 	OnDamaged.Broadcast(this, Instigator);
 	OnHealthChanged.Broadcast(this, CurrentHealth, Delta);
 

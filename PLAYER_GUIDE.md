@@ -1,5 +1,7 @@
 # 玩家指南 · 1.3.2
 
+**v1.3.3 开发预览已接入，完整Win64、限定专项与两次独立冷启动／正常退出通过，本地试玩已就绪，尚未正式发布。** [修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。新版开始页增加完整「显示设置」按钮；普通弹白子弹、火焰亮红带橙黄芯、流血暗红、雷电紫色。数字表示减伤后的完整攻击伤害，致死不按剩余血量缩小；例如20打3血显示20，实际扣3。妖术师保持叠响上限，按玩家距离提示近身危机。下文启动入口对应现行稳定v1.3.2。
+
 **当前版本 v1.3.2：完整 Windows 构建、限定专项与两次独立启动／正常退出通过。** 下载入口为 [v1.3.2 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.2)。
 
 [1.3.2 修订摘要](CHANGELOG.md) · [本轮反馈与预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)

@@ -1,7 +1,7 @@
 /**
- * [INPUT]: WarlockAudioSubsystem契约、ICombatant::IsDead、Kismet空间起播与组件真实状态。
- * [OUTPUT]: 两声共享2组件硬预算、.5/.2游戏秒成功CD、400+2000cm衰减和编辑器真实入口探针。
- * [POS]: Audio妖术师专用短声预算；成功组件不等于可听批准，不使用墙钟重触发或未播队列。
+ * [INPUT]: WarlockAudioSubsystem契约、玩家Pawn位置、ICombatant::IsDead、Kismet空间起播与组件真实状态。
+ * [OUTPUT]: 两声共享2组件硬预算、.5/.2游戏秒成功CD、玩家800+1600cm线性音量与原位空间方向及编辑器真实入口探针。
+ * [POS]: Audio妖术师专用短声预算；危机距离不受Boss拉远镜头改变，成功组件不等于可听批准，不使用墙钟重触发或未播队列。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "Audio/WarlockAudioSubsystem.h"
@@ -11,6 +11,7 @@
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -22,8 +23,15 @@ namespace
 	constexpr int32 MaxComponents = 2;
 	constexpr double ChargeInterval = .5;
 	constexpr double FireInterval = .2;
-	constexpr float InnerDistance = 400.f;
-	constexpr float FalloffDistance = 2000.f;
+	constexpr float InnerDistance = 800.f;
+	constexpr float FalloffDistance = 1600.f;
+
+	float PlayerDistanceGain(const APawn* Player, const FVector& Location)
+	{
+		if (!IsValid(Player) || Player->GetActorLocation().ContainsNaN()) return 0.f;
+		const float Distance = FVector::Distance(Player->GetActorLocation(), Location);
+		return 1.f - FMath::Clamp((Distance - InnerDistance) / FalloffDistance, 0.f, 1.f);
+	}
 
 	bool IsLiveSource(AActor* Source, const UWorld* World)
 	{
@@ -77,10 +85,15 @@ bool UWarlockAudioSubsystem::Play(USoundBase* Sound, EGameSFX Event, float Volum
 	if (IsFrozen()) { ++RejectedFrozenCount; return false; }
 	if (!IsValid(Sound) || !FMath::IsFinite(Volume) || !FMath::IsFinite(Pitch) || Volume <= 0.f || Pitch <= 0.f
 		|| Location.ContainsNaN()) { ++FailedSpawnCount; return false; }
-	// 与空间衰减使用同一球形范围；无听者/听不到的远声不占近处预算或成功CD。
+	// ---------- 距离听玩家，方向听相机 ----------
+	// 拉远Boss镜头只改变取景，不能使玩家仍在22米攻击窗口内的危机声被相机距离吞掉。
+	// 手算一次玩家距离音量；引擎只保留原音源空间方向，避免第二次相机距离衰减。
 	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
-	if (!IsValid(Camera) || Camera->GetCameraLocation().ContainsNaN()) { ++RejectedListenerCount; return false; }
-	if (FVector::DistSquared(Camera->GetCameraLocation(), Location) > FMath::Square(InnerDistance + FalloffDistance))
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!IsValid(Camera) || Camera->GetCameraLocation().ContainsNaN()
+		|| !IsValid(Player) || Player->GetActorLocation().ContainsNaN()) { ++RejectedListenerCount; return false; }
+	const float DistanceGain = PlayerDistanceGain(Player, Location);
+	if (DistanceGain <= 0.f)
 	{
 		++RejectedDistanceCount;
 		return false;
@@ -92,7 +105,7 @@ bool UWarlockAudioSubsystem::Play(USoundBase* Sound, EGameSFX Event, float Volum
 	if (!Attenuation)
 	{
 		Attenuation = NewObject<USoundAttenuation>(this);
-		Attenuation->Attenuation.bAttenuate = true;
+		Attenuation->Attenuation.bAttenuate = false;
 		Attenuation->Attenuation.bSpatialize = true;
 		Attenuation->Attenuation.DistanceAlgorithm = EAttenuationDistanceModel::Linear;
 		Attenuation->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
@@ -100,7 +113,7 @@ bool UWarlockAudioSubsystem::Play(USoundBase* Sound, EGameSFX Event, float Volum
 		Attenuation->Attenuation.FalloffDistance = FalloffDistance;
 	}
 	UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(GetWorld(), Sound, Location,
-		FRotator::ZeroRotator, Volume, Pitch, 0.f, Attenuation, nullptr, false);
+		FRotator::ZeroRotator, Volume * DistanceGain, Pitch, 0.f, Attenuation, nullptr, false);
 	if (!IsValid(Audio) || !Audio->IsActive())
 	{
 		StopInstance(Audio);
@@ -111,6 +124,7 @@ bool UWarlockAudioSubsystem::Play(USoundBase* Sound, EGameSFX Event, float Volum
 	Item.Audio = Audio;
 	Item.Source = Source;
 	Item.Event = Event;
+	Item.BaseVolume = Volume;
 	ReadyAt = Now + (Event == EGameSFX::WarlockBeamCharge ? ChargeInterval : FireInterval);
 	++StartedComponentCount;
 	MaxObservedComponents = FMath::Max(MaxObservedComponents, Active.Num());
@@ -122,8 +136,14 @@ void UWarlockAudioSubsystem::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	PruneActive();
 	const bool bFrozen = IsFrozen();
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
 	for (const FWarlockSoundInstance& Item : Active)
-		if (IsValid(Item.Audio)) Item.Audio->SetPaused(bFrozen);
+	{
+		if (!IsValid(Item.Audio)) continue;
+		Item.Audio->SetPaused(bFrozen);
+		if (!bFrozen)
+			Item.Audio->SetVolumeMultiplier(Item.BaseVolume * PlayerDistanceGain(Player, Item.Audio->GetComponentLocation()));
+	}
 }
 
 bool UWarlockAudioSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
@@ -176,7 +196,12 @@ FString UWarlockAudioSubsystem::DebugWarlockAudioState() const
 	State->SetNumberField(TEXT("inner_distance"), InnerDistance);
 	State->SetNumberField(TEXT("falloff_distance"), FalloffDistance);
 	State->SetNumberField(TEXT("max_components"), MaxComponents);
+	State->SetStringField(TEXT("distance_listener"), TEXT("player_pawn"));
+	State->SetBoolField(TEXT("spatialized"), Attenuation && Attenuation->Attenuation.bSpatialize);
+	State->SetBoolField(TEXT("engine_distance_attenuation"), Attenuation && Attenuation->Attenuation.bAttenuate);
 	State->SetBoolField(TEXT("frozen"), IsFrozen());
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	const APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	State->SetNumberField(TEXT("charge_cooldown_remaining"), FMath::Max(0.0, ChargeReadyAt - Now));
 	State->SetNumberField(TEXT("fire_cooldown_remaining"), FMath::Max(0.0, FireReadyAt - Now));
@@ -193,9 +218,14 @@ FString UWarlockAudioSubsystem::DebugWarlockAudioState() const
 		Entry->SetStringField(TEXT("event"), Item.Event == EGameSFX::WarlockBeamCharge ? TEXT("charge") : TEXT("fire"));
 		if (IsValid(Item.Audio))
 		{
+			const FVector Location = Item.Audio->GetComponentLocation();
 			Entry->SetStringField(TEXT("sound"), GetPathNameSafe(Item.Audio->Sound));
 			Entry->SetStringField(TEXT("audio"), Item.Audio->GetName());
 			Entry->SetNumberField(TEXT("volume"), Item.Audio->VolumeMultiplier);
+			Entry->SetNumberField(TEXT("base_volume"), Item.BaseVolume);
+			Entry->SetNumberField(TEXT("distance_gain"), Item.BaseVolume > 0.f ? Item.Audio->VolumeMultiplier / Item.BaseVolume : 0.f);
+			Entry->SetNumberField(TEXT("player_distance"), IsValid(Player) ? FVector::Distance(Player->GetActorLocation(), Location) : -1.f);
+			Entry->SetNumberField(TEXT("camera_distance"), IsValid(Camera) ? FVector::Distance(Camera->GetCameraLocation(), Location) : -1.f);
 			Entry->SetNumberField(TEXT("pitch"), Item.Audio->PitchMultiplier);
 			Entry->SetNumberField(TEXT("x"), Item.Audio->GetComponentLocation().X);
 			Entry->SetNumberField(TEXT("y"), Item.Audio->GetComponentLocation().Y);

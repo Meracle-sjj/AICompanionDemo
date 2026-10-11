@@ -1,8 +1,8 @@
 /**
  * [INPUT]: UUserWidget/SObjectWidget 生命周期、稳定 Slate brush/style、/Game/UI/StartScreen 的无字合作封面；宿主 GameMode 的 StartRun/StartTestRun/ShowDisplaySettings 与 Kismet QuitGame
- * [OUTPUT]: UStartMenu——可接受设置返回焦点的等比封面开始页；开始游戏、测试模式、显示设置与退出；UPROPERTY保活纹理，编辑器验收桥复用真实按钮回调
+ * [OUTPUT]: UStartMenu——可接受设置返回焦点的等比封面开始页；开始/测试/显示设置完整按钮及文字退出；UPROPERTY保活纹理，编辑器验收桥复用真实按钮回调
  * [POS]: UI/ 开场展示；GameMode 以 Z10 装配并拥有冻结和输入状态，菜单不持有游戏账本。Brush/style 为成员值，随标准 SObjectWidget 所有权存活
- * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once

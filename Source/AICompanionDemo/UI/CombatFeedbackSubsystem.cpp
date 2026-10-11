@@ -1,6 +1,6 @@
 /**
- * [INPUT]: Health提交的实际伤害/语义/来源值快照，既有金币口，Slate粗体描边/矢量与世界投影。
- * [OUTPUT]: 金币整数与全伤害两位四舍五入裁尾零（正值不足0.005显示<0.01）；八族伤害图样与来源徽记，暂停冻结/终局清理。
+ * [INPUT]: Health提交的模式/减伤结算后完整伤害/语义/内部归属值快照，既有金币口，Slate粗体描边/矢量与世界投影。
+ * [OUTPUT]: 金币整数与全伤害两位四舍五入裁尾零（正值不足0.005显示<0.01）；九族伤害图样按类型着色，火焰亮红带橙黄内焰/流血暗红，暂停冻结/终局清理。
  * [POS]: 既有UI数值层的渲染与生命周期实现；不读取可变伤害账本或当前模式，不新增HUD/事件队列/图片字体资源。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,6 +26,10 @@ namespace
 	const FLinearColor Ink(.045f, .025f, .025f);
 	const FLinearColor CoinGold(1.f, .76f, .16f);
 	const FLinearColor BladeSilver(.88f, .97f, 1.f);
+	const FLinearColor FireRed(1.f, .12f, .025f);
+	const FLinearColor FireCore(1.f, .66f, .06f);
+	const FLinearColor BloodRed(.58f, .025f, .065f);
+	const FLinearColor ShockPurple(.77f, .36f, 1.f);
 
 	const TCHAR* KindName(ECombatDamageKind Kind)
 	{
@@ -45,26 +49,25 @@ namespace
 
 	void DamageStyle(ECombatDamageKind Kind, ECombatFeedbackIcon& Icon, FLinearColor& Tint)
 	{
-		Icon = ECombatFeedbackIcon::Bullet; Tint = FLinearColor(1.f, .89f, .45f);
+		Icon = ECombatFeedbackIcon::Bullet; Tint = FLinearColor::White;
 		switch (Kind)
 		{
 		case ECombatDamageKind::Frost: Icon = ECombatFeedbackIcon::Frost; Tint = FLinearColor(.60f, .87f, 1.f); break;
-		case ECombatDamageKind::Melt: Icon = ECombatFeedbackIcon::Frost; Tint = FLinearColor(1.f, .73f, .39f); break;
+		case ECombatDamageKind::Melt:
 		case ECombatDamageKind::Explosion:
 		case ECombatDamageKind::Burn:
-		case ECombatDamageKind::Fireball: Icon = ECombatFeedbackIcon::Drop; Tint = FLinearColor(1.f, .48f, .17f); break;
-		case ECombatDamageKind::Bleed: Icon = ECombatFeedbackIcon::Drop; Tint = FLinearColor(1.f, .16f, .28f); break;
-		case ECombatDamageKind::Shock: Icon = ECombatFeedbackIcon::Lightning; Tint = FLinearColor(.78f, .65f, 1.f); break;
-		case ECombatDamageKind::Execute: Icon = ECombatFeedbackIcon::Cleaver; Tint = FLinearColor(.98f, .98f, 1.f); break;
-		case ECombatDamageKind::Ricochet: Tint = FLinearColor(.97f, .56f, 1.f); break;
+		case ECombatDamageKind::Fireball:
+		case ECombatDamageKind::Radiance: Icon = ECombatFeedbackIcon::Flame; Tint = FireRed; break;
+		case ECombatDamageKind::Bleed: Icon = ECombatFeedbackIcon::Drop; Tint = BloodRed; break;
+		case ECombatDamageKind::Shock: Icon = ECombatFeedbackIcon::Lightning; Tint = ShockPurple; break;
+		case ECombatDamageKind::Execute: Icon = ECombatFeedbackIcon::Cleaver; break;
 		case ECombatDamageKind::Spike:
-		case ECombatDamageKind::Seismic: Icon = ECombatFeedbackIcon::Spikes; Tint = FLinearColor(.96f, .76f, .47f); break;
-		case ECombatDamageKind::Radiance: Icon = ECombatFeedbackIcon::Ray; Tint = FLinearColor(.35f, .94f, .83f); break;
+		case ECombatDamageKind::Seismic: Icon = ECombatFeedbackIcon::Spikes; break;
 		case ECombatDamageKind::Pulse: Icon = ECombatFeedbackIcon::Ray; Tint = FLinearColor(.49f, .99f, .54f); break;
-		case ECombatDamageKind::Beam: Icon = ECombatFeedbackIcon::Ray; Tint = FLinearColor(1.f, .44f, .48f); break;
-		case ECombatDamageKind::Reflect: Icon = ECombatFeedbackIcon::Impact; Tint = FLinearColor(.87f, .70f, .41f); break;
-		case ECombatDamageKind::Melee: Icon = ECombatFeedbackIcon::Impact; Tint = FLinearColor(1.f, .43f, .43f); break;
-		case ECombatDamageKind::MobFeedback: Icon = ECombatFeedbackIcon::Impact; Tint = FLinearColor(.93f, .81f, 1.f); break;
+		case ECombatDamageKind::Beam: Icon = ECombatFeedbackIcon::Ray; break;
+		case ECombatDamageKind::Reflect:
+		case ECombatDamageKind::Melee:
+		case ECombatDamageKind::MobFeedback: Icon = ECombatFeedbackIcon::Impact; break;
 		default: break;
 		}
 	}
@@ -75,10 +78,10 @@ namespace
 		{
 			return FString::Printf(TEXT("%.0f"), static_cast<double>(Entry.Amount));
 		}
-		const double ActualDamage = static_cast<double>(Entry.Amount);
-		if (ActualDamage < .005) return TEXT("<0.01");
-		// 两位精度表达实际结算值，不把二进制浮点误差向下放大一分。
-		const double DisplayDamage = FMath::RoundToDouble(ActualDamage * 100.) / 100.;
+		const double ResolvedDamage = static_cast<double>(Entry.Amount);
+		if (ResolvedDamage < .005) return TEXT("<0.01");
+		// 两位精度表达模式/减伤结算后的完整伤害，致死时不被目标剩余HP截小。
+		const double DisplayDamage = FMath::RoundToDouble(ResolvedDamage * 100.) / 100.;
 		FString Text = FString::Printf(TEXT("%.2f"), DisplayDamage);
 		while (Text.EndsWith(TEXT("0"))) Text.LeftChopInline(1);
 		if (Text.EndsWith(TEXT("."))) Text.LeftChopInline(1);
@@ -123,13 +126,14 @@ namespace
 		if (Icon != ECombatFeedbackIcon::Cleaver)
 		{
 			FLinearColor Color = Tint; Color.A = Alpha;
-			const auto Line = [&](TArray<FVector2f> Points, float Width = 4.f)
+			const auto Line = [&](TArray<FVector2f> Points, float Width = 4.f, const FLinearColor* Accent = nullptr)
 			{
 				for (FVector2f& Point : Points) Point = Center + Point * Scale;
+				FLinearColor LineColor = Accent ? *Accent : Color; LineColor.A = Alpha;
 				Stroke(Elements, LayerId, Geometry, Points, Dark, (Width + 4.f) * Scale);
-				Stroke(Elements, LayerId + 1, Geometry, Points, Color, Width * Scale);
+				Stroke(Elements, LayerId + 1, Geometry, Points, LineColor, Width * Scale);
 			};
-			// 七族新剪影与原Cleaver共八族；火/血共用滴形，以类别色区分，不另建纹理。
+			// 火焰用不对称多尖外焰与橙黄内焰，流血保留单尖血滴；剪影和亮度同时区分。
 			switch (Icon)
 			{
 			case ECombatFeedbackIcon::Bullet:
@@ -146,6 +150,10 @@ namespace
 			case ECombatFeedbackIcon::Drop:
 				Line({{0, -17}, {-10, -2}, {-12, 7}, {-7, 14}, {4, 15}, {11, 8}, {10, 1}, {0, -17}}, 6.f);
 				Line({{-5, 3}, {-5, 8}, {-2, 10}}, 2.f); break;
+			case ECombatFeedbackIcon::Flame:
+				Line({{-1, -20}, {-5, -10}, {-10, -13}, {-11, -4}, {-15, 2}, {-13, 11},
+					{-8, 16}, {0, 18}, {9, 14}, {13, 7}, {11, -2}, {8, -8}, {6, 0}, {3, -6}, {-1, -20}}, 4.f);
+				Line({{0, -7}, {-5, 2}, {-5, 9}, {0, 13}, {6, 9}, {6, 3}, {4, -2}, {2, 4}, {0, -7}}, 3.f, &FireCore); break;
 			case ECombatFeedbackIcon::Lightning:
 				Line({{5, -17}, {-10, 2}, {0, 2}, {-5, 17}, {12, -4}, {2, -4}, {5, -17}}, 4.f); break;
 			case ECombatFeedbackIcon::Spikes:
@@ -183,31 +191,6 @@ namespace
 			{Center + FVector2f(12, -10) * Scale, Center + FVector2f(18, -15) * Scale}, FLinearColor(.53f, .22f, .1f, Alpha), 3.f * Scale);
 	}
 
-	void DrawSourceBadge(FSlateWindowElementList& Elements, int32 LayerId, const FGeometry& Geometry,
-		FVector2f Position, ECombatDamageSource Source, float Alpha)
-	{
-		const TCHAR* Label = TEXT("");
-		FLinearColor Color(.82f, .84f, .88f, Alpha);
-		switch (Source)
-		{
-		case ECombatDamageSource::Player: Label = TEXT("玩家"); Color = FLinearColor(1.f, .91f, .56f, Alpha); break;
-		case ECombatDamageSource::CompanionGuard: Label = TEXT("护卫"); Color = FLinearColor(.39f, .89f, 1.f, Alpha); break;
-		case ECombatDamageSource::CompanionBerserk: Label = TEXT("歼灭"); Color = FLinearColor(.89f, .54f, 1.f, Alpha); break;
-		case ECombatDamageSource::Hostile: Label = TEXT("敌方"); Color = FLinearColor(1.f, .35f, .37f, Alpha); break;
-		default: return;
-		}
-		FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 12.f);
-		Font.OutlineSettings.OutlineSize = 2;
-		Font.OutlineSettings.OutlineColor = FLinearColor(Ink.R, Ink.G, Ink.B, Alpha);
-		const FString BadgeLabel(Label);
-		const FVector2D Size = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(BadgeLabel, Font);
-		Stroke(Elements, LayerId, Geometry,
-			{Position + FVector2f(-3, -1), Position + FVector2f(Size.X + 5, -1),
-			Position + FVector2f(Size.X + 2, Size.Y + 1), Position + FVector2f(-5, Size.Y + 1), Position + FVector2f(-3, -1)},
-			FLinearColor(Ink.R, Ink.G, Ink.B, Alpha), 5.f);
-		FSlateDrawElement::MakeText(Elements, LayerId + 1,
-			Geometry.ToPaintGeometry(FVector2f(Size), FSlateLayoutTransform(Position)), BadgeLabel, Font, ESlateDrawEffect::None, Color);
-	}
 }
 
 void UCombatFeedbackLayer::Setup(UCombatFeedbackSubsystem* InSource) { Source = InSource; }
@@ -246,10 +229,8 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 		FSlateDrawElement::MakeText(Elements, Base + 5,
 			Geometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextOrigin)), Text, Font,
 			ESlateDrawEffect::None, Color);
-		if (Entry.Icon != ECombatFeedbackIcon::Coin)
-			DrawSourceBadge(Elements, Base + 6, Geometry, TextOrigin + FVector2f(0.f, TextSize.Y + 1.f), Entry.Source, Alpha);
 	}
-	return Base + 7;
+	return Base + 5;
 }
 
 void UCombatFeedbackSubsystem::ShowGold(UWorld* World, const FVector& Location, int32 Amount)
@@ -261,20 +242,20 @@ void UCombatFeedbackSubsystem::ShowGold(UWorld* World, const FVector& Location, 
 	}
 }
 
-void UCombatFeedbackSubsystem::ShowExecute(UWorld* World, const FVector& Location, float ActualDamage, int32 MarkCount)
+void UCombatFeedbackSubsystem::ShowExecute(UWorld* World, const FVector& Location, float ResolvedDamage, int32 MarkCount)
 {
-	ShowDamage(World, {ECombatDamageKind::Execute, Location, MarkCount}, ActualDamage, ECombatDamageSource::Unknown);
+	ShowDamage(World, {ECombatDamageKind::Execute, Location, MarkCount}, ResolvedDamage, ECombatDamageSource::Unknown);
 }
 
-void UCombatFeedbackSubsystem::ShowDamage(UWorld* World, const FCombatDamageContext& Context, float ActualDamage, ECombatDamageSource Source)
+void UCombatFeedbackSubsystem::ShowDamage(UWorld* World, const FCombatDamageContext& Context, float ResolvedDamage, ECombatDamageSource Source)
 {
-	if (!World || !FMath::IsFinite(ActualDamage) || ActualDamage <= 0.f || Context.Location.ContainsNaN()
+	if (!World || !FMath::IsFinite(ResolvedDamage) || ResolvedDamage <= 0.f || Context.Location.ContainsNaN()
 		|| static_cast<uint8>(Context.Kind) > static_cast<uint8>(ECombatDamageKind::MobFeedback)
 		|| static_cast<uint8>(Source) > static_cast<uint8>(ECombatDamageSource::Hostile)) return;
 	if (UCombatFeedbackSubsystem* State = World->GetSubsystem<UCombatFeedbackSubsystem>())
 	{
 		FCombatFeedbackEntry Entry;
-		Entry.Location = Context.Location; Entry.Amount = ActualDamage; Entry.MarkCount = Context.MarkCount;
+		Entry.Location = Context.Location; Entry.Amount = ResolvedDamage; Entry.MarkCount = Context.MarkCount;
 		Entry.Kind = Context.Kind; Entry.Source = Source;
 		DamageStyle(Context.Kind, Entry.Icon, Entry.Tint);
 		State->Push(Entry);
@@ -339,12 +320,13 @@ FString UCombatFeedbackSubsystem::DebugFeedbackState() const
 	{
 		if (!Values.IsEmpty()) Values += TEXT(",");
 		const bool bCoin = Entry.Icon == ECombatFeedbackIcon::Coin;
-		Values += FString::Printf(TEXT("{\"amount\":%.9g,\"kind\":%d,\"kindName\":\"%s\",\"source\":%d,\"sourceName\":\"%s\",\"age\":%.9g,\"marks\":%d,\"icon\":%d,\"display\":\"%s\",\"location\":[%.9g,%.9g,%.9g]}"),
+		Values += FString::Printf(TEXT("{\"amount\":%.9g,\"kind\":%d,\"kindName\":\"%s\",\"source\":%d,\"sourceName\":\"%s\",\"age\":%.9g,\"marks\":%d,\"icon\":%d,\"display\":\"%s\",\"tint\":[%.9g,%.9g,%.9g],\"location\":[%.9g,%.9g,%.9g]}"),
 			static_cast<double>(Entry.Amount), bCoin ? -1 : static_cast<int32>(Entry.Kind), bCoin ? TEXT("gold") : KindName(Entry.Kind),
 			static_cast<int32>(Entry.Source), SourceName(Entry.Source), static_cast<double>(Entry.Age), Entry.MarkCount,
-			static_cast<int32>(Entry.Icon), *FormatCombatFeedbackAmount(Entry), Entry.Location.X, Entry.Location.Y, Entry.Location.Z);
+			static_cast<int32>(Entry.Icon), *FormatCombatFeedbackAmount(Entry), Entry.Tint.R, Entry.Tint.G, Entry.Tint.B,
+			Entry.Location.X, Entry.Location.Y, Entry.Location.Z);
 	}
-	return FString::Printf(TEXT("{\"entries\":%d,\"layerVisible\":%s,\"endingMuted\":%s,\"lifetime\":%.2f,\"limit\":%d,\"values\":[%s]}"),
+	return FString::Printf(TEXT("{\"entries\":%d,\"layerVisible\":%s,\"endingMuted\":%s,\"sourceBadgeVisible\":false,\"damageAmountMode\":\"resolved_before_health_clamp\",\"lifetime\":%.2f,\"limit\":%d,\"values\":[%s]}"),
 		Entries.Num(), Layer && Layer->IsInViewport() ? TEXT("true") : TEXT("false"), bEndingMuted ? TEXT("true") : TEXT("false"), FeedbackLifetime, FeedbackLimit, *Values);
 }
 

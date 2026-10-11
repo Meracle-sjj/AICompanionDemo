@@ -1,5 +1,7 @@
 # AI队友协作生存原型：系统设计说明
 
+**v1.3.3 开发预览：漫画数字按机制分类，完整攻击伤害与实际生命扣除分开。** 模式/遗物乘算后的完整值进入反馈，HP截断后的Delta仍供反伤、受击、击杀与死亡链使用；20伤打剩3血显示20、实际扣3。来源仅内部追踪；辉耀属于灼烧语义，火焰/流血剪影与明暗分开、雷电紫色。妖术师将威胁距离绑定玩家位置，空间方向仍走引擎；声音叠响/CD/暂停约束保持，开始页设置复用既有按钮。[本轮记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。Editor、完整Win64、限定运行与两次独立冷启动／正常退出已通过；人耳与自然整局另验，下文为稳定v1.3.2基线。
+
 本文对应当前版本 v1.3.2：统一实际伤害反馈与妖术师声音控制已接入，完整 Windows 构建、限定专项与两次独立启动／正常退出通过。下载入口为 [v1.3.2 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.2)。本轮反馈与目标见 [GitHub #5](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)，此前修订保留在 [GitHub #4](https://github.com/Meracle-sjj/AICompanionDemo/issues/4)。[作品入口](../README.md) · [玩家指南](../PLAYER_GUIDE.md) · [修订摘要](../CHANGELOG.md)
 
 ## 设计目标与核心循环

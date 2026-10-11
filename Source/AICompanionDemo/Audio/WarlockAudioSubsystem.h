@@ -1,6 +1,6 @@
 /**
- * [INPUT]: SFXLibrary解析的两类妖术师短声、ICombatant存活契约和世界暂停/生命周期。
- * [OUTPUT]: 每世界两个空间组件预算与成功起播间隔；只读状态/编辑器真实入口探针，暂停冻结/死亡清理。
+ * [INPUT]: SFXLibrary解析的两类妖术师短声、玩家Pawn距离、ICombatant存活契约和世界暂停/生命周期。
+ * [OUTPUT]: 每世界两个空间组件预算与成功起播间隔；玩家8至24米距离音量/原位空间方向，暂停冻结/死亡清理与只读探针。
  * [POS]: Audio仅妖术师两声的生命周期所有者；不接语音/BGM，不修改技能时序或伤害。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -20,6 +20,7 @@ struct FWarlockSoundInstance
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> Audio;
 	UPROPERTY(Transient) TWeakObjectPtr<AActor> Source;
 	UPROPERTY(Transient) EGameSFX Event = EGameSFX::None;
+	float BaseVolume = 0.f;
 };
 
 UCLASS()

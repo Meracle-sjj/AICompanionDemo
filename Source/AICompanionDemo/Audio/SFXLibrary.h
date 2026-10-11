@@ -1,6 +1,6 @@
 /**
  * [INPUT]: USoundBase软引用槽、世界语音队列、Kismet 2D/空间/附属音频与原BGM/潜地循环声源。
- * [OUTPUT]: 固定字幕/语音策略；妖术师两短声专用空间入口与每世界预算；BGM/潜地循环独立
+ * [OUTPUT]: 固定字幕/语音策略；妖术师两柔和短声以0.50/0.55基准音量交玩家距离/空间方向预算；BGM/潜地循环独立
  *  信标首次解锁/成功召回沿用现役两条资源路径，v2声源为冷峻自然女声；台词分别为“我一直在你身边。”“我从未离开过你”。
  * [POS]: Audio声音槽位真源；普通音效、固定语音与妖术师空间短声各有明确入口，业务不直接创建组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -248,7 +248,7 @@ public:
 	TSoftObjectPtr<USoundBase> WarlockBeamCharge;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamChargeVolume = 0.25f;
+	float WarlockBeamChargeVolume = 0.50f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
 	float WarlockBeamChargePitch = 1.f;
 
@@ -257,7 +257,7 @@ public:
 	TSoftObjectPtr<USoundBase> WarlockBeamFire;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamFireVolume = 0.3f;
+	float WarlockBeamFireVolume = 0.55f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
 	float WarlockBeamFirePitch = 1.f;
 

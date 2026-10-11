@@ -1,5 +1,7 @@
 # 资源来源与分发说明
 
+v1.3.3 开发预览沿用已发布v1.3.2的两条原创短PCM，只改起播音量/玩家距离规则；火焰新剪影仍由代码绘制，未增加图片、字体、采样、在线服务或第三方资产。源码接入、Editor／Win64构建与新包原两短声的真实Cook载荷核对已完成；人耳危机感尚待实玩反馈。[本轮记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。下文保留稳定v1.3.2素材来源与分发边界。
+
 本文对应当前版本 v1.3.2：完整 Windows 构建、限定专项与两次独立启动／正常退出通过，新妖术师两条短声与原 BGM 已核对实际资源收录。下载入口为 [v1.3.2 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.2)。作品包含素材复用、AI 辅助生成与程序制作，保留相应权利归属。v1.3.2 新增两条原创数学合成 PCM 与八族代码矢量伤害图样，未新增外部音频采样、图标或字体资源；原 BGM 继续沿用作者此前明确的分发确认，人耳听感另验。本轮预期见 [GitHub #5](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)。
 
 ## 主要来源

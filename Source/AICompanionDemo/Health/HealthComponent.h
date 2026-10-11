@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 Engine 的 UActorComponent 与 Actor 伤害链路（PointDamage/AnyDamage 均可接入）
  * [OUTPUT]: 对外提供 UHealthComponent——通用生命值组件：MaxHealth/CurrentHealth（EditAnywhere）、ApplyDamage(含 Instigator)、Heal(治疗唯一入口，死者无效)、SetMaxHealth(出生定型充满/升级扩容钳制)、SetInvulnerable(E5 圣盾无敌，伤害全额早退定时自恢复)、OnDamaged/OnHealthChanged/OnDeath/**OnHealApplied（10-07 治疗意图事件：满血治疗也广播，Attempted/Actual 双参——"满血也计数"类消费方订阅此口而非血量事件）**动态多播委托；**LastDamageTaken/GetLastDamageTaken（09-30 受击阈值入口数据源：每次 ApplyDamage 钳制后的实际扣血快照——OnDamaged 委托不带伤害量，受击分级表现订阅方读此口）**；挂载方自行决定受击表现与死亡处理
- * [POS]: Health/唯一生命账本；原Blueprint ApplyDamage保留泛用语义，原生ApplyCombatDamage接业务类别/落点/猎印层数，实际扣血后一次向既有UI层提交反馈，现役队友未挂载Health。
+ * [POS]: Health/唯一生命账本；原Blueprint ApplyDamage保留泛用语义，原生ApplyCombatDamage接业务类别/落点/猎印层数。实际生命仍钳制，UI接收模式/减伤结算后、HP截断前的完整伤害；现役队友未挂载Health。
  *  Q模式被动在实现的唯一入口结算：护卫增强玩家治疗，歼灭增强实际队友来源伤害，默认均10%；不在调用点重复增强。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -37,7 +37,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void ApplyDamage(float Damage, AActor* Instigator = nullptr);
 
-	/** C++语义入口；与Blueprint泛用入口共用原生命结算，反馈只使用本次实际扣血快照。 */
+	/** C++语义入口；实际扣血保持HP钳制，反馈显示模式/减伤结算后、HP截断前的完整伤害；免伤仍静默。 */
 	void ApplyCombatDamage(float Damage, AActor* Instigator, const FCombatDamageContext& Context);
 
 	UFUNCTION(BlueprintPure, Category = "Health")

@@ -1,8 +1,8 @@
 /**
  * [INPUT]: StartMenu纹理/brush/style生命周期、无字合作封面、Slate等比布局与复合字体；GameMode开始/测试/显示设置接口
- * [OUTPUT]: 可焦点1920×1080等比封面页；左侧开始/测试入口，下方同排显示设置与退出，保留作品/制作周期标注与缺图菜单
+ * [OUTPUT]: 可焦点1920×1080等比封面页；左侧开始/测试/显示设置三完整按钮，下方文字退出，保留作品/制作周期标注与缺图菜单
  * [POS]: UI/ 开场展示实现。SStartMenuBackdrop只绘制背景，冻结/输入/测试模式仍由GameMode管理；所有文字均为Slate控件，封面不烘焙文字
- * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "StartMenu.h"
@@ -250,26 +250,18 @@ TSharedRef<SWidget> UStartMenu::RebuildWidget()
 								Button(TEXT("测试模式"), TEXT("自由验证技能与首领"), TEXT("02"), false,
 									FOnClicked::CreateUObject(this, &UStartMenu::OnTestClicked))
 							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0.f, 12.f, 0.f, 0.f)
+							[
+								Button(TEXT("显示设置"), TEXT("调整分辨率与窗口显示"), TEXT("03"), false,
+									FOnClicked::CreateUObject(this, &UStartMenu::OnSettingsClicked))
+							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0.f, 14.f, 0.f, 0.f)
 							[
-								SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 22.f, 0.f)
+								SNew(SButton).ButtonStyle(&TextButtonStyle).ContentPadding(FMargin(3.f, 7.f))
+								.OnClicked(FOnClicked::CreateUObject(this, &UStartMenu::OnQuitClicked))
 								[
-									SNew(SButton).ButtonStyle(&TextButtonStyle).ContentPadding(FMargin(3.f, 7.f))
-									.OnClicked(FOnClicked::CreateUObject(this, &UStartMenu::OnSettingsClicked))
-									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("显示设置"))).Font(MenuFont(14.f))
-										.ColorAndOpacity(Cyan)
-									]
-								]
-								+ SHorizontalBox::Slot().AutoWidth()
-								[
-									SNew(SButton).ButtonStyle(&TextButtonStyle).ContentPadding(FMargin(3.f, 7.f))
-									.OnClicked(FOnClicked::CreateUObject(this, &UStartMenu::OnQuitClicked))
-									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("退出游戏"))).Font(MenuFont(14.f))
-										.ColorAndOpacity(Muted)
-									]
+									SNew(STextBlock).Text(FText::FromString(TEXT("退出游戏"))).Font(MenuFont(14.f))
+									.ColorAndOpacity(Muted)
 								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 21.f, 0.f, 0.f)
