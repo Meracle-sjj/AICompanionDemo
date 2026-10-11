@@ -1,6 +1,6 @@
 # 当前修订 · 1.3.1
 
-**本轮实现已接线，最终验证与发布尚待确认。** 下载可用性以 [v1.3.1 Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)为准，Windows 玩家附件名为 `Player-Win64-v1.3.1.zip`。
+**本轮完成完整 Windows 构建、修复专项复验与两次独立冷启动。** 下载入口见 [v1.3.1 Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)，Windows 玩家附件名为 `Player-Win64-v1.3.1.zip`。
 
 [本轮反馈与修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/4) · [玩家指南](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md)
 

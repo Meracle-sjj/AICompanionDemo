@@ -2,7 +2,7 @@
 
 一份面向**系统策划岗位**的个人可玩作品。玩家与 AI 队友在沙丘战场中协作，通过站位、护卫／歼灭切换、局内构筑、资源消费与 Boss 挑战改变战局。使用 **Unreal Engine 5.6.1、C++、离线 FSM／Utility AI**，游戏运行不调用大模型。
 
-**本页对应 v1.3.1 修订，最终验证与发布尚待确认，下载可用性以[Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)为准。** Windows 玩家附件名为 `Player-Win64-v1.3.1.zip`，完整解压后运行；源码附件供评审，`SHA256SUMS.txt` 用于校验下载文件。
+**本页对应 v1.3.1，已完成完整 Windows 构建、修复专项复验与两次独立冷启动；下载入口见[Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)。** Windows 玩家附件名为 `Player-Win64-v1.3.1.zip`，完整解压后运行；源码附件供评审，`SHA256SUMS.txt` 用于校验下载文件。
 
 本轮根据作者 v1.3 实玩反馈调整队友语音：普通发言依次播放，Boss 出现／死亡及玩家受伤／恢复会立即抢占旧话。宝箱改用常驻 FREE!、接近渐显的锁与价格、无价格的钥匙图标，配合贴坡与轻埋沙；金币和处决改用原创图标与大数字。行走火球补爆炸表现，地刺遗物加入短铡刀音，蠕虫地下声随距离迫近增强，结束页清除战斗飘字。
 

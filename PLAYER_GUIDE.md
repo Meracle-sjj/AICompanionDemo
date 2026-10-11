@@ -1,6 +1,6 @@
 # 玩家指南 · 1.3.1
 
-**本页对应 v1.3.1 修订，最终验证与发布尚待确认，下载可用性以[Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)为准。**
+**本页对应 v1.3.1，已完成完整 Windows 构建、修复专项复验与两次独立冷启动；下载入口见[Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)。**
 
 [1.3.1 修订摘要](CHANGELOG.md) · [本轮反馈与预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/4)
 
