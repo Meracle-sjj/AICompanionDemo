@@ -1,7 +1,7 @@
 ﻿/** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口与感电配对显示。
- * [OUTPUT]: 全AI子弹共用FireShot；感电基础下限/实际伤害飘字、AI穿透折射互斥，Nova各活命中继承玩家状态且地刺独立防重入。
+ * [OUTPUT]: 全AI子弹共用FireShot；感电每0.5秒集中互斥配对/原伤减半/5秒不消费，AI穿透折射互斥，Nova各活命中继承玩家状态。
  * [POS]: Companion火力局部实现；模式被动只由Health乘算，本文件提交原始伤害。
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md */
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AI/CompanionAIController.h"
 #include "AI/Combatant.h"
 #include "AI/EnemyGrunt.h"
@@ -88,7 +88,7 @@ void ACompanionAIController::ApplyHitChain(AActor* DirectVictim, UHealthComponen
 		}
 	}
 
-	// 感电已在各子弹直击入口执行；溅射/处决等次生伤害绝不递归感电。
+	// 感电改由集中半秒节拍执行；子弹/溅射/处决等伤害均不追加传导。
 
 }
 
@@ -101,8 +101,8 @@ void ACompanionAIController::NovaBurst(AActor* InstigatorPawn, const FVector& Ce
 		const float Angle = FMath::DegreesToRadians(i * 45.f);
 		FireShot(InstigatorPawn, Center, FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0), .7f, FColor::Magenta, &ElementHits);
 	}
-	// 全部AI射线先消费旧状态，整次爆射结束后统一挂玩家当前状态。
-	// 重叠走廊不会在后一条射线中吃掉刚挂的新猎印/感电，同目标仅挂一次。
+	// 全部AI射线先结算旧猎印，整次爆射结束后统一挂玩家当前状态。
+	// 重叠走廊不会在后一条射线中吃掉刚挂的新猎印，同目标仅挂一次元素。
 	for (const TPair<TWeakObjectPtr<AActor>, FVector>& Hit : ElementHits)
 	{
 		if (!ElementSource.IsValid() || !Hit.Key.IsValid()) continue;
@@ -193,7 +193,6 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 			break;
 		}
 
-		TriggerShockConduction(Victim, Health, Scale, InstigatorPawn);
 		if (!IsValid(Health)) continue;
 		const float BeforeShotHealth = Health->GetCurrentHealth();
 		const float ShotModeMultiplier = GetModeDamageMultiplier();
@@ -267,7 +266,6 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 				DrawDebugLine(GetWorld(), LastPoint, NextChest, FColor::Magenta, false, 0.25f, 0, 2.f);
 				if (UHealthComponent* NextHealth = Cast<ICombatant>(Next)->GetHealthComponent())
 				{
-					TriggerShockConduction(Next, NextHealth, BounceScale, InstigatorPawn);
 					if (!IsValid(NextHealth)) break;
 					const float BeforeBounceHealth = NextHealth->GetCurrentHealth();
 					NextHealth->ApplyDamage(AttackDamage * BounceScale, InstigatorPawn);
@@ -313,51 +311,81 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 		BeamColor, /*bPersistentLines*/ false, /*LifeTime*/ LifeTime, /*DepthPriority*/ 0, /*Thickness*/ Thickness);
 }
 
-void ACompanionAIController::TriggerShockConduction(AActor* DirectVictim, UHealthComponent* DirectHealth,
-	float ChainScale, AActor* InstigatorPawn)
+// ---------- 持续感电（5秒残留，半秒集中配对） ----------
+
+void ACompanionAIController::TickShockConduction(float DeltaSeconds)
 {
-	AEnemyGrunt* Source=Cast<AEnemyGrunt>(DirectVictim);
-	const float RawDamage=FMath::Max(FMath::Max(ConductionBaseDamage,0.f),AttackDamage*ChainScale*ConductionScale);
-	if (!IsValid(Source)||!IsValid(DirectHealth)||Source->IsDead()||DirectHealth->IsInvulnerable()
-		||Source->GetShockResidue()<=0.f||AttackDamage<=0.f||ChainScale<=0.f||RawDamage<=0.f) return;
-	AEnemyGrunt* Destination=nullptr;
-	float BestSquared=FMath::Square(FMath::Max(ConductionRadius,0.f));
-	for (TActorIterator<AEnemyGrunt> It(GetWorld());It;++It)
+	UWorld* World=GetWorld();
+	if (!World||World->IsPaused()||UGameplayStatics::GetGlobalTimeDilation(this)<.01f) return;
+	const APawn* Hero=UGameplayStatics::GetPlayerPawn(this,0);
+	const UHealthComponent* HeroHealth=Hero?Hero->FindComponentByClass<UHealthComponent>():nullptr;
+	if (!IsValid(GetPawn())||!HeroHealth||HeroHealth->IsDead()) { ConductionPulseAccum=0.f; return; }
+	ConductionPulseAccum+=FMath::Max(DeltaSeconds,0.f);
+	constexpr float PulseInterval=.5f;
+	if (ConductionPulseAccum<PulseInterval) return;
+	// 卡顿不追补多拍，避免同一帧爆发堆积；正常游戏秒固定半秒一拍。
+	ConductionPulseAccum=FMath::Fmod(ConductionPulseAccum,PulseInterval);
+	const float RawDamage=.5f*FMath::Max(FMath::Max(ConductionBaseDamage,0.f),
+		FMath::Max(AttackDamage,0.f)*FMath::Max(ConductionScale,0.f));
+	if (RawDamage<=0.f) return;
+	const auto Ready=[](const TWeakObjectPtr<AEnemyGrunt>& WeakEnemy)
 	{
-		AEnemyGrunt* Other=*It;
-		if (!IsValid(Other)||Other==Source||Other->IsDead()||Other->GetShockResidue()<=0.f) continue;
-		UHealthComponent* OtherHealth=Other->GetHealthComponent();
-		if (!IsValid(OtherHealth)||OtherHealth->IsInvulnerable()) continue;
-		const float Squared=FVector::DistSquared(Source->GetActorLocation(),Other->GetActorLocation());
-		if (Squared<=BestSquared) { BestSquared=Squared; Destination=Other; }
-	}
-	if (!Destination) return; // 无带电配对，不白白消费标记。
-	TWeakObjectPtr<AEnemyGrunt> WeakSource=Source,WeakDestination=Destination;
-	TWeakObjectPtr<UHealthComponent> SourceHealth=DirectHealth,DestinationHealth=Destination->GetHealthComponent();
-	const FVector SourcePoint=Source->GetActorLocation()+FVector(0,0,40);
-	const FVector DestinationPoint=Destination->GetActorLocation()+FVector(0,0,40);
-	// 两端先消费，次生伤害直接走Health；同栈死亡/遗物回调无法重入传导。
-	Source->ConsumeShockResidue(); Destination->ConsumeShockResidue();
-	FActorSpawnParameters Parameters;
-	Parameters.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	if (AShockArcActor* Arc=GetWorld()->SpawnActor<AShockArcActor>(AShockArcActor::StaticClass(),SourcePoint,FRotator::ZeroRotator,Parameters))
-		if (!Arc->Connect(Source,Destination)) Arc->Destroy();
-	float ActualSource=0.f,ActualDestination=0.f;
-	if (WeakSource.IsValid()&&SourceHealth.IsValid()&&!SourceHealth->IsDead())
+		AEnemyGrunt* Enemy=WeakEnemy.Get();
+		const UHealthComponent* Health=Enemy?Enemy->GetHealthComponent():nullptr;
+		return IsValid(Enemy)&&!Enemy->IsDead()&&Enemy->GetShockResidue()>0.f
+			&&IsValid(Health)&&!Health->IsDead()&&!Health->IsInvulnerable();
+	};
+	TArray<TWeakObjectPtr<AEnemyGrunt>> Candidates;
+	for (TActorIterator<AEnemyGrunt> It(World);It;++It)
 	{
-		const float Before=SourceHealth->GetCurrentHealth();
-		SourceHealth->ApplyDamage(RawDamage,InstigatorPawn);
-		if (SourceHealth.IsValid()) ActualSource=FMath::Max(Before-SourceHealth->GetCurrentHealth(),0.f);
+		const TWeakObjectPtr<AEnemyGrunt> Candidate=*It;
+		if (Ready(Candidate)) Candidates.Add(Candidate);
 	}
-	if (WeakDestination.IsValid()&&DestinationHealth.IsValid()&&!DestinationHealth->IsDead()&&!DestinationHealth->IsInvulnerable())
+	// 固定出生身份排序，保证同一拍的配对顺序不取决于容器哈希遍历。
+	Candidates.Sort([](const TWeakObjectPtr<AEnemyGrunt>& A,const TWeakObjectPtr<AEnemyGrunt>& B)
+		{ return A->GetUniqueID()<B->GetUniqueID(); });
+	TSet<TWeakObjectPtr<AEnemyGrunt>> Paired;
+	for (const TWeakObjectPtr<AEnemyGrunt>& WeakSource:Candidates)
 	{
-		const float Before=DestinationHealth->GetCurrentHealth();
-		DestinationHealth->ApplyDamage(RawDamage,InstigatorPawn);
-		if (DestinationHealth.IsValid()) ActualDestination=FMath::Max(Before-DestinationHealth->GetCurrentHealth(),0.f);
+		if (Paired.Contains(WeakSource)||!Ready(WeakSource)) continue;
+		TWeakObjectPtr<AEnemyGrunt> WeakDestination;
+		float BestSquared=FMath::Square(FMath::Max(ConductionRadius,0.f));
+		for (const TWeakObjectPtr<AEnemyGrunt>& Candidate:Candidates)
+		{
+			if (Candidate==WeakSource||Paired.Contains(Candidate)||!Ready(Candidate)) continue;
+			const float Squared=FVector::DistSquared(WeakSource->GetActorLocation(),Candidate->GetActorLocation());
+			if (Squared<=BestSquared) { BestSquared=Squared; WeakDestination=Candidate; }
+		}
+		if (!WeakDestination.IsValid()) continue;
+		Paired.Add(WeakSource); Paired.Add(WeakDestination); // 每敌每拍只允许一条链。
+		TWeakObjectPtr<UHealthComponent> SourceHealth=WeakSource->GetHealthComponent();
+		TWeakObjectPtr<UHealthComponent> DestinationHealth=WeakDestination->GetHealthComponent();
+		const FVector SourcePoint=WeakSource->GetActorLocation()+FVector(0,0,40);
+		const FVector DestinationPoint=WeakDestination->GetActorLocation()+FVector(0,0,40);
+		// 先创建自有寿命的电弧，再结算伤害；任一端致死只冻结电弧，不切断本次显示。
+		FActorSpawnParameters Parameters;
+		Parameters.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (AShockArcActor* Arc=World->SpawnActor<AShockArcActor>(AShockArcActor::StaticClass(),SourcePoint,FRotator::ZeroRotator,Parameters))
+			if (!Arc->Connect(WeakSource.Get(),WeakDestination.Get())) Arc->Destroy();
+		float ActualSource=0.f,ActualDestination=0.f;
+		if (Ready(WeakSource)&&SourceHealth.IsValid())
+		{
+			const float Before=SourceHealth->GetCurrentHealth();
+			SourceHealth->ApplyDamage(RawDamage,GetPawn());
+			if (SourceHealth.IsValid()) ActualSource=FMath::Max(Before-SourceHealth->GetCurrentHealth(),0.f);
+		}
+		// Health广播可能改变其他目标状态，第二端及后续配对逐个复验弱引用与免伤。
+		if (Ready(WeakDestination)&&DestinationHealth.IsValid()&&IsValid(GetPawn()))
+		{
+			const float Before=DestinationHealth->GetCurrentHealth();
+			DestinationHealth->ApplyDamage(RawDamage,GetPawn());
+			if (DestinationHealth.IsValid()) ActualDestination=FMath::Max(Before-DestinationHealth->GetCurrentHealth(),0.f);
+		}
+		const FColor Color=FColor::FromHex(TEXT("9BD7FF"));
+		DrawDebugString(World,SourcePoint+FVector(0,0,65),FString::Printf(TEXT("感电 -%.1f"),ActualSource),nullptr,Color,.45f,false,1.f);
+		DrawDebugString(World,DestinationPoint+FVector(0,0,65),FString::Printf(TEXT("感电 -%.1f"),ActualDestination),nullptr,Color,.45f,false,1.f);
+		UE_LOG(LogAICompanionDemo,Log,TEXT("[Element] 持续感电 pair=%s/%s raw=%.3f 两端actual=%.3f/%.3f"),
+			*GetNameSafe(WeakSource.Get()),*GetNameSafe(WeakDestination.Get()),RawDamage,ActualSource,ActualDestination);
 	}
-	const FColor Color=FColor::FromHex(TEXT("9BD7FF"));
-	DrawDebugString(GetWorld(),SourcePoint+FVector(0,0,65),FString::Printf(TEXT("感电 -%.1f"),ActualSource),nullptr,Color,.65f,false,1.f);
-	DrawDebugString(GetWorld(),DestinationPoint+FVector(0,0,65),FString::Printf(TEXT("感电 -%.1f"),ActualDestination),nullptr,Color,.65f,false,1.f);
-	UE_LOG(LogAICompanionDemo,Log,TEXT("[Element] 感电配对 raw=%.3f 两端actual=%.3f/%.3f"),RawDamage,ActualSource,ActualDestination);
 }
 

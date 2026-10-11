@@ -2,8 +2,9 @@
  * [INPUT]: 依赖 AIModule 的 MoveToActor/PathFollowingComponent/AIPerceptionComponent/AISenseConfig_Sight/AISense_Sight、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息/DrawDebugLine/LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、本模块 HealthComponent（玩家血量行与残血分）、本模块 Audio/SFXLibrary（Shot_Companion/Hit_Enemy/Explosion 事件音效）
  * [OUTPUT]: 对外提供 M3 行为实现——UpdateBrain 决策体（状态迁移 + ENTER/SWITCH 审计日志 + 走射行动：FireTimer 与寻路并行，站桩已废）、EvaluateTargets 三维评分器（威胁 = 距离近似 + 咬人仇恨覆盖，修复贴脸混战时距离分满格失明的退化）、DrawScoreboard 屏幕评分板、HandlePerceptionUpdated 感知回调、FireAtTarget 射击节拍、FeedMovementInput当前路径段馈送与同目标MoveTo去重（1.1）；M3.75 增补 Bark 台词播报（六类事件钩点——09-27 换目标播报退役，击杀播报挂连杀闸 5s/10 杀；全局+分类双冷却；09-26 换装头顶 3D 气泡、09-27 配音经 PlayVoice 空间化在队友身上）；E5 增补 ActivateFrenzy/RestoreFireRate（暂态狂怒攻速：开火间隔系数槽 + 弹道紫，定时自恢复——TemporaryPickup 触发）；**火力结算层候选集一律 CollectAliveCombatants 契约收集**（走廊命中/溅射/折射弹跳——09-30 召唤师案定罪 TActorIterator<AEnemyGrunt> 类型扫描把 ABossBase 排除在命中集外=弹道穿体不掉血；冰/电残留仍限定EnemyGrunt；猎印按ICombatant叠层/消费，覆盖Boss家族）
  *  火力/感电配对已抽到CompanionCombatShots；本文件保留Q护卫/歼灭切换与决策。伤害/治疗加成由Health唯一入口消费helper，弹路不重复乘算。
+ *  v1.3 Tick推进持续传导；Bark语音只入世界队列，真实起播才产生同录音字幕/历史。
  * [POS]: Source/AICompanionDemo/AI 的决策核心实现；驱动CompanionCharacter、经ICombatant感知与攻击；2026-10-08移除常驻AI目标/状态调试行；1.2五秒巡检记录真实MoveTo结果、导航/路径/移动状态，不代替玩家输入或绕过导航失败。
- * [PROTOCOL]: 变更时更新此头部，然后检查../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "CompanionAIController.h"
@@ -639,6 +640,7 @@ void ACompanionAIController::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	if (!GetWorld() || GetWorld()->IsPaused() || UGameplayStatics::GetGlobalTimeDilation(this) < .01f) { return; }
+	TickShockConduction(DeltaSeconds);
 	FeedMovementInput(DeltaSeconds);
 
 	// Q 键边沿检测切换模式（零资产依赖：IsInputKeyDown 直读玩家输入，demo 单键的最小实现；
@@ -688,24 +690,22 @@ void ACompanionAIController::Bark(const FString& Line, const FName Category, con
 	{
 		return;
 	}
-	LastBarkGlobalTime = Now;
-	LastBarkTime.Add(Category, Now);
-
-	// 头顶 3D 聊天气泡（09-26 夜轮，用户定调"说话没有气泡吸引注意"——DrawDebugString 日志观感退役）：
-	// Screen 空间覆盖层（检索定稿 WoW/ESO 语义），展示/生命周期归 UI/SpeechBubble，这里只递词；[Bark] 日志留痕供审计回放
-	if (ACompanionCharacter* Companion = Cast<ACompanionCharacter>(GetPawn()))
-	{
-		Companion->ShowSpeechBubble(Line);
-	}
-	// 配音（09-27 豆包 seed-audio 冷峻女声）：语音与文字同源——空间化在队友身上（09-27 用户定调"音箱放到
-	// AI 身上"：队友离远了喊话自然变小变远，PlayVoice 3D 衰减），槽位 ini 配置，空槽静默只出字
+	// 语音只入世界队列，正式起播才发布这条录音自己的字幕与历史。
 	if (Voice != EGameSFX::None)
 	{
 		if (const APawn* VoicedPawn = GetPawn())
 		{
-			USFXLibrary::PlayVoice(GetWorld(), Voice, VoicedPawn->GetActorLocation() + FVector(0.f, 0.f, 60.f));
+			if (!USFXLibrary::TryPlayVoice(GetWorld(), Voice,
+				VoicedPawn->GetActorLocation() + FVector(0.f, 0.f, 60.f))) return;
 		}
+		else return;
 	}
-	URunEventLog::Publish(GetWorld(), TEXT("队友"), Line, Category);
+	else
+	{
+		if (ACompanionCharacter* Companion = Cast<ACompanionCharacter>(GetPawn())) Companion->ShowSpeechBubble(Line);
+		URunEventLog::Publish(GetWorld(), TEXT("队友"), Line, Category);
+	}
+	LastBarkGlobalTime = Now;
+	LastBarkTime.Add(Category, Now);
 	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Companion][Bark] %s"), *Line);
 }

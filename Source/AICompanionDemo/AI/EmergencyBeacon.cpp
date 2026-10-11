@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 EmergencyBeacon.h 的组件契约、Engine 的 StaticMesh/PointLight/MaterialInstanceDynamic、DrawDebugHelpers（拾取闪光）、Kismet 的 GetPlayerPawn、本模块 AICompanionDemoCharacter 的解锁口（UnlockRecall）、本模块 Audio/SFXLibrary（Recall 事件音效——信标拾取复用）
- * [OUTPUT]: 对外提供 AEmergencyBeacon 的实现——Tick 双段（待机浮动自转 / 玩家入圈 Collect）；Collect = 角色解锁 C 键召回 + 青色光柱教学闪 + 头顶飘字 + 自毁
+ * [OUTPUT]: 对外提供 AEmergencyBeacon 的实现——Tick 双段（待机浮动自转 / 玩家入圈 Collect）；Collect = 角色首次解锁/重复降低召回CD + 青色光柱教学闪 + 头顶飘字 + 自毁
  * [POS]: AI/ 拾取物家族实现第四系：**拾取即解锁能力**新语义（蛋糕=即时消耗 / 经验金币=账本入账 / 信标=技能解锁）；一审固定交互点方案已废
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -132,9 +132,10 @@ void AEmergencyBeacon::Collect()
 		UGameplayStatics::GetPlayerPawn(GetWorld(), 0));
 	if (PlayerChar)
 	{
+		const bool bAlreadyUnlocked = PlayerChar->IsRecallUnlocked();
 		PlayerChar->UnlockRecall();
 		DrawDebugString(GetWorld(), PlayerChar->GetActorLocation() + FVector(0.f, 0.f, 200.f),
-			TEXT("获得紧急呼叫！按 C 召回 AI 队友"), PlayerChar, FColor::Cyan, 2.5f, false, 1.2f);
+			bAlreadyUnlocked ? *FString::Printf(TEXT("召回冷却 %.0f 秒"), PlayerChar->GetRecallCooldownTotal()) : TEXT("获得紧急呼叫！按 C 召回 AI 队友"), PlayerChar, FColor::Cyan, 2.5f, false, 1.2f);
 	}
 
 	// 青色光柱谢幕 + 拾取闪光（传送仪式感的预告）

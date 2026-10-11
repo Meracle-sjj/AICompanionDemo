@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 Engine 的 USoundBase（TSoftObjectPtr 软引用槽位——素材由用户从 Epic/Fab 官方渠道导入，代码零内容耦合）与 UWorld、Kismet 的 SpawnSound2D（2D 全局播放——演示玩法无空间化需求）
- * [OUTPUT]: EGameSFX事件槽、USFXLibrary(Config=Game)与PlaySFX/PlayVoice/TryPlayVoice；药剂/钥匙/首次信标拾取语音共用每世界5秒CD；TryPlayVoice只在成功创建播放组件时返回true，玩家攻击解锁使用独立语音槽；空槽静默返回
+ * [INPUT]: USoundBase软引用槽、世界语音队列、Kismet 2D/空间/附属音频与原BGM/潜地循环声源。
+ * [OUTPUT]: EGameSFX槽与统一固定字幕；全部语音交每世界FIFO，TryPlayVoice成功入队返回true；BGM/潜地循环独立于语音
  *  信标首次解锁/成功召回沿用现役两条资源路径，v2声源为冷峻自然女声；台词分别为“我一直在你身边。”“我从未离开过你”。
  * [POS]: Audio/ 的音效基建唯一文件；全部游戏事件经 PlaySFX 收口发声——事件方不知道音效是否存在，素材到位与否只改 ini、代码零改动
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,6 +15,9 @@
 
 class USoundBase;
 class UWorld;
+class UAudioComponent;
+class USceneComponent;
+enum class ERunEventKind : uint8;
 
 /** 全游戏音效事件清单——挂接点见各业务文件的 PlaySFX 调用行 */
 UENUM(BlueprintType)
@@ -82,6 +85,14 @@ enum class EGameSFX : uint8
 	Voice_BeaconRecall,   // 我从未离开过你（成功召回）
 	BossImpact,          // 虫钻地/破土与巨像敲地：独立真实爆炸采样，不共用溅射音量
 	Voice_PlayerAttackUnlock, // 玩家首次找回自动攻击能力；独立固定台词，不占拾取语音CD
+	Voice_BeaconRepeat,
+	Voice_BossSummonerAppear,
+	Voice_BossSummonerDefeated,
+	Voice_BossGolemAppear,
+	Voice_BossGolemDefeated,
+	Voice_BossWurmAppear,
+	Voice_BossWurmDefeated,
+	WurmBurrowLoop,
 	None                 // 哨兵：无语音（Bark 默认值——PlaySFX 对它静默）
 };
 
@@ -102,10 +113,15 @@ public:
 	 *  距离衰减至听不清（400cm 内全响，线性衰减 4000cm 静默，运行时构造衰减零资产）；槽空静默 */
 	static void PlayVoice(UWorld* World, EGameSFX Event, const FVector& Location);
 
-	/** Returns true only after a real 3D AudioComponent is created; false includes cooldown/empty slot/load failure. */
+	/** 返回true表示成功入本世界串行队列；前一句未完成时保持待播。 */
 	static bool TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Location);
+	static FString GetVoiceLine(EGameSFX Event);
+	static ERunEventKind GetVoiceKind(EGameSFX Event);
+	static FName GetVoiceEventId(EGameSFX Event);
+	/** 蠕虫持有返回的附属组件；出土/死亡/EndPlay显式停止并销毁。 */
+	static UAudioComponent* StartWurmBurrowAudio(UWorld* World, USceneComponent* AttachTo);
 
-	/** 拾取语音共享冷却剩余秒数；跟随当前世界游戏时间，新世界自然重置。 */
+	/** 最后一次拾取语音入队后的观察窗口；保留旧审计接口，不再据此丢弃新语音。 */
 	UFUNCTION(BlueprintPure, Category = "SFX|Pickup", meta = (WorldContext = "WorldContextObject"))
 	static float GetPickupVoiceCooldownRemaining(const UObject* WorldContextObject);
 
@@ -216,14 +232,18 @@ public:
 	TSoftObjectPtr<USoundBase> WarlockBeamCharge;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamChargeVolume = 0.8f;
+	float WarlockBeamChargeVolume = 0.4f;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
+	float WarlockBeamChargePitch = .7f;
 
 	/** 妖术师射线结算 */
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss")
 	TSoftObjectPtr<USoundBase> WarlockBeamFire;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamFireVolume = 0.9f;
+	float WarlockBeamFireVolume = 0.45f;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
+	float WarlockBeamFirePitch = .7f;
 
 	// ---------- 语音槽（09-27 配音轮）：Bark 台词配音，人声 1.0 优先于一切音效（响度=信息优先级） ----------
 
@@ -419,6 +439,18 @@ public:
 	TSoftObjectPtr<USoundBase> Voice_PlayerAttackUnlock;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice", meta = (ClampMin = "0.0", ClampMax = "2.0"))
 	float Voice_PlayerAttackUnlock_Volume = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BeaconRepeat;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BossSummonerAppear;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BossSummonerDefeated;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BossGolemAppear;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BossGolemDefeated;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BossWurmAppear;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice") TSoftObjectPtr<USoundBase> Voice_BossWurmDefeated;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Voice", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float EventVoiceVolume = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss") TSoftObjectPtr<USoundBase> WurmBurrowLoop;
+	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float WurmBurrowVolume = .75f;
 	// ---------- BGM（09-26）：循环常驻，点"开始游戏"起播 ----------
 
 	/** BGM 曲目（SoundWave 需 Looping=true——导入脚本已设） */

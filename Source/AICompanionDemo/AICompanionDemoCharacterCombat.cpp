@@ -1,6 +1,6 @@
-﻿/** [INPUT]: Player auto-fire, live Combatant targets, element residue and relic primary-hit hook.
- * [OUTPUT]: 每个玩家主弹/穿透单位可单跳折射，感电赠叉共享该单跳；整发目标去重、分支不递归；元素及Nova状态同入口，遗物主攻仅一次。
- * [POS]: Player combat implementation separated from input/lifecycle. [PROTOCOL]: Update module AGENTS. */
+﻿/** [INPUT]: 玩家自动射击、ICombatant活敌、元素残留与遗物主攻回调。
+ * [OUTPUT]: 玩家感电赠叉从枪口按15度散射（已有散射时30度），独立于折射；5秒挂电、整发去重且分支不递归，遗物主攻仅一次。
+ * [POS]: 玩家战斗局部实现，与输入/生命周期分离。 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AICompanionDemoCharacter.h"
 #include "AICompanionDemo.h"
 #include "AI/Combatant.h"
@@ -96,20 +96,33 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 			DrawDebugLine(GetWorld(), Start, Hit ? SideHit.ImpactPoint : SideEnd, Color, false, .1f, 0, 1.5f);
 		}
 	}
-	// 玩家低伤弹允许穿透+折射，每个穿透主单位各产生一次非递归单跳。
-	// 感电赠叉与已购折射共享单跳，已购折射把赠叉4m范围提升为8m；不额外叠第二条叉。
-	if (bPlayerPrism || bShockShotUnlocked)
+	// 感电的额外弹道与主弹同时从枪口散开，空射也保留清楚的分叉形状；不追踪/弹跳。
+	// 已有三向散射时让赠叉再偏到30度，避免与现成15度侧弹完全重合。
+	if (bShockShotUnlocked)
+	{
+		const float ForkYaw = bPlayerScatter ? 30.f : 15.f;
+		const FVector ForkEnd = Start + Dir.RotateAngleAxis(ForkYaw, FVector::UpVector) * PlayerShotRange;
+		FHitResult ForkHit;
+		FCollisionQueryParams ForkParams(SCENE_QUERY_STAT(PlayerShockFork), false, this);
+		const bool bForkHit = GetWorld()->SweepSingleByChannel(ForkHit, Start, ForkEnd, FQuat::Identity,
+			ECC_Visibility, FCollisionShape::MakeSphere(12.f), ForkParams);
+		FColor ForkColor = FColor::FromHex(TEXT("C9A6FF"));
+		if (bForkHit) DealHit(ForkHit.GetActor(), ForkHit.ImpactPoint,
+			PlayerShotDamage * FMath::Clamp(PlayerPrismScale, .1f, 1.f), ForkColor);
+		DrawDebugLine(GetWorld(), Start, bForkHit ? ForkHit.ImpactPoint : ForkEnd, ForkColor, false, .18f, 0, 2.5f);
+	}
+	// 玩家折射仍独立允许穿透协同，每个穿透主单位各产生一次非递归单跳。
+	if (bPlayerPrism)
 	{
 		for (const FDirectHit& RootHit : DirectHits)
 		{
 			TArray<AActor*> Candidates;
 			CollectAliveCombatants(GetWorld(), Candidates);
 			AActor* Next = nullptr;
-			float BestSquared = FMath::Square(bPlayerPrism ? 800.f : 400.f);
+			float BestSquared = FMath::Square(800.f);
 			for (AActor* Candidate : Candidates)
 			{
-				if (!IsValid(Candidate) || PayloadTargets.Contains(Candidate)
-					|| (!bPlayerPrism && !Cast<AEnemyGrunt>(Candidate))) continue;
+				if (!IsValid(Candidate) || PayloadTargets.Contains(Candidate)) continue;
 				UHealthComponent* NextHealth = Cast<ICombatant>(Candidate)->GetHealthComponent();
 				if (!IsValid(NextHealth) || NextHealth->IsInvulnerable()) continue;
 				const float Squared = FVector::DistSquared(RootHit.SourceCenter, Candidate->GetActorLocation());
@@ -172,7 +185,7 @@ float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float 
 	// 感电用固定闪电标记表达残留；真正连接电弧仅在AI子弹配对两个带电活敌时生成。
 	if (bShockShotUnlocked)
 	{
-		GruntVictim->ApplyShockResidue(3.f);
+		GruntVictim->ApplyShockResidue(5.f);
 		InOutShotColor = FColor::FromHex(TEXT("C9A6FF"));
 	}
 	return FinalDamage;

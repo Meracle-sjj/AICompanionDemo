@@ -1,10 +1,10 @@
 /**
  * [INPUT]: BossBase死亡/探地/免伤契约，球形命中与火系共享MID，WurmBodyVisual独立岩甲外观，落点爆实现见BossWurmEffects.cpp
- * [OUTPUT]: 7000共享血量的七节蠕虫，默认体量2.5倍、头半径325cm；Sky双侧落火→Dive入地爆→Burrow免伤潜行及红圈→Erupt破土爆；原球为命中代理，外观继承尺寸，地下钳制覆盖体节半径
+ * [OUTPUT]: 7000共享血量的七节蠕虫，默认体量2.5倍、头半径325cm；Sky→Dive→Burrow总3s（迫近2s+红圈1s、随头钻岩声）→Erupt；原球为命中代理。
  *  猎印继承BossBase；杂兵死亡反馈经真实Health，潜地先累积；岩甲落火及火区所有权在BossWurmHazards.cpp统一维护。
  *  存活/死亡路径均推进碎屑与地面爆闪硬寿命，死亡/EndPlay清理火系与焦痕；入/出土硬引用专用UV炭黑贴花，6s退场/后2s渐淡，最多4件。活体入场/死亡/EndPlay通过Encounter同步限额与远景。
  * [POS]: AI/蠕虫运动、状态与攻击真源；保持已验收数值/碰撞/时序，岩甲资产缺失退回原球；死亡尸节仍由Debris牵引，外观清理及EndPlay由独立视图负责
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "BossWurm.h"
@@ -40,6 +40,8 @@ namespace
 
 ABossWurm::ABossWurm()
 {
+	// 暂停帧只治理循环音，玩法Tick在Super之前早退，避免冻结世界仍有钻岩声。
+	PrimaryActorTick.bTickEvenWhenPaused = true;
 	BossName = TEXT("沙狱蠕虫");
 	BossIndex = 3;
 	MeleeDamage = 15.f;          // 保底参数（近战全程挂起——攻击全自绘）
@@ -125,6 +127,8 @@ void ABossWurm::BeginPlay()
 
 void ABossWurm::Tick(float DeltaSeconds)
 {
+	RefreshBurrowAudio();
+	if (!GetWorld() || GetWorld()->IsPaused() || UGameplayStatics::GetGlobalTimeDilation(this) < .01f) return;
 	Super::Tick(DeltaSeconds);
 	TickGroundEffects(DeltaSeconds);
 
@@ -181,6 +185,7 @@ void ABossWurm::Tick(float DeltaSeconds)
 
 void ABossWurm::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopBurrowAudio();
 	NotifyEncounterPresence(true);
 	ClearFireHazards();
 	ClearGroundEffects();
@@ -217,6 +222,7 @@ FString ABossWurm::DebugBodyVisualState() const
 
 void ABossWurm::EnterState(EWurmState Next)
 {
+	if (Next != EWurmState::Burrow) StopBurrowAudio();
 	State = Next;
 	StateTime = 0.f;
 
@@ -248,6 +254,7 @@ void ABossWurm::EnterState(EWurmState Next)
 		bEruptRingShown = false;
 		HealthComponent->SetInvulnerable(9999.f);   // 地下=天然打不到+免伤双保险
 		GroundProbeCd = 0.f;
+		RefreshBurrowAudio();
 		break;
 
 	case EWurmState::Erupt:
@@ -347,7 +354,9 @@ void ABossWurm::TickBurrow(float DeltaSeconds)
 	const FVector PlayerLoc = PlayerPawn->GetActorLocation();
 	FWurmSegment& Head = Segments[0];
 
-	if (StateTime < BurrowDashTime)
+	const float UndergroundDuration = FMath::Max(BurrowDuration, .1f);
+	const float DashTime = FMath::Max(UndergroundDuration - FMath::Clamp(EruptWarnTime, 0.f, UndergroundDuration), 0.f);
+	if (StateTime < DashTime)
 	{
 		// ---------- Phase A：无圈快移（压迫段——先到再亮圈） ----------
 		GroundProbeCd -= DeltaSeconds;
@@ -380,7 +389,7 @@ void ABossWurm::TickBurrow(float DeltaSeconds)
 		Head.Pos += (FlatTarget - Head.Pos).GetClampedToMaxSize(BurrowSpeed * DeltaSeconds);
 		DrawTelegraphRing();
 
-		if (StateTime >= BurrowDashTime + EruptWarnTime)
+		if (StateTime >= UndergroundDuration)
 		{
 			EnterState(EWurmState::Erupt);
 			return;
@@ -592,6 +601,7 @@ void ABossWurm::TickDebris(float DeltaSeconds)
 
 void ABossWurm::HandleDeath(UHealthComponent* HealthComp)
 {
+	StopBurrowAudio();
 	NotifyEncounterPresence(true);
 	// 所有火焰/独立爆闪/焦痕立即回收，不等自动结束或冻结后的时钟。
 	ClearFireHazards();

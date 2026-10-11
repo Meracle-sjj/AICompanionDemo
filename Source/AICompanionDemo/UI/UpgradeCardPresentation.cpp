@@ -1,8 +1,8 @@
 ﻿/**
  * [INPUT]: UpgradeCardPresentation.h、32成长展示ID/9遗物的独立标题/短说明；已有UpgradeCards/BossRelics纹理路径；Flip无外部纹理
- * [OUTPUT]: 选择页/HUD共用41项稳定ID，原29升级ID保留；新增本体速射/陪伴疾行，Flip明确本次转换；猎印真实动态说明由宿主覆盖静态短句
+ * [OUTPUT]: 选择页/HUD共用41项稳定ID；感电明确枪口散射/5秒不消费/半秒10伤，过载20或27.5%；动态说明由宿主覆盖静态短句
  * [POS]: UI/ 无状态展示资料实现；不加载 UObject，不决定卡池稀有度或融合资格
- * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "UpgradeCardPresentation.h"
@@ -31,9 +31,9 @@ namespace
 		{ TEXT("RadianceBond"), TEXT("融合·辉耀结界"), TEXT("融合"), TEXT("辉耀圈内双方持续回血\n无需贴近。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_RadianceBond_v1.T_Upgrade_RadianceBond_v1") },
 		{ TEXT("HealNova"), TEXT("回响脉冲"), TEXT("羁绊"), TEXT("治疗积累到阈值\n绿域持续伤敌后爆发。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_HealNova_v1.T_Upgrade_HealNova_v1") },
 		{ TEXT("FrostShotPlayer"), TEXT("寒霜弹·本体版"), TEXT("元素"), TEXT("你的冰弹使敌人减速\n命中灼烧目标伤害翻倍。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_FrostShotPlayer_v1.T_Upgrade_FrostShotPlayer_v1") },
-		{ TEXT("ShockShot"), TEXT("感电弹"), TEXT("元素"), TEXT("每个主命中赠70%分叉\n两端传导至少20伤或本弹30%。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_ShockShot_v1.T_Upgrade_ShockShot_v1") },
+		{ TEXT("ShockShot"), TEXT("感电弹"), TEXT("元素"), TEXT("枪口赠70%散射，带电5s\n每0.5s两端至少10伤，不消费。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_ShockShot_v1.T_Upgrade_ShockShot_v1") },
 		{ TEXT("HuntMark"), TEXT("猎杀印记"), TEXT("元素"), TEXT("你的命中叠加印记\n队友命中引爆额外伤害。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_HuntMark_v1.T_Upgrade_HuntMark_v1") },
-		{ TEXT("ShockOverload"), TEXT("感电过载"), TEXT("深化"), TEXT("两端基础传导提升至40\n或本弹55%伤害，取高。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_ShockOverload_v1.T_Upgrade_ShockOverload_v1") },
+		{ TEXT("ShockOverload"), TEXT("感电过载"), TEXT("深化"), TEXT("每0.5s两端至少20伤\n或队友原伤27.5%，取高。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_ShockOverload_v1.T_Upgrade_ShockOverload_v1") },
 		{ TEXT("MarkMaster"), TEXT("猎杀大师"), TEXT("深化"), TEXT("印记上限至少 5 层\n保留成长，每层处决22伤。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_MarkMaster_v1.T_Upgrade_MarkMaster_v1") },
 		{ TEXT("FrostDeep"), TEXT("深度冻结"), TEXT("深化"), TEXT("你的冰弹减速 60%\n持续 4s。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_FrostDeep_v1.T_Upgrade_FrostDeep_v1") },
 		{ TEXT("PlayerScatter"), TEXT("玩家散射"), TEXT("弹道"), TEXT("你的射击分裂三向\n侧弹造成 70% 伤害。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_PlayerScatter_v1.T_Upgrade_PlayerScatter_v1") },
@@ -46,8 +46,8 @@ namespace
 		{ TEXT("Flip"), TEXT("Flip · 转交队友"), TEXT("本次操作"), TEXT("改抽本次AI升级池\n不领取、不改变下次归属。"), nullptr },
 		{ TEXT("BloodLink"), TEXT("血誓共鸣"), TEXT("召唤师遗物"), TEXT("距队友8m内，弹道实际伤害\n的25%转化为你的生命。"), TEXT("/Game/UI/BossRelics/T_Relic_BloodLink_v1.T_Relic_BloodLink_v1") },
 		{ TEXT("SpiritFrenzy"), TEXT("不灭执念"), TEXT("召唤师遗物"), TEXT("队友每20s狂暴5s\n狂暴药剂持续时间+50%。"), TEXT("/Game/UI/BossRelics/T_Relic_SpiritFrenzy_v1.T_Relic_SpiritFrenzy_v1") },
-		{ TEXT("MovingFireball"), TEXT("逐焰灵核"), TEXT("召唤师遗物"), TEXT("累计步行15m射出火球\n命中爆炸：3m内30伤。"), TEXT("/Game/UI/BossRelics/T_Relic_MovingFireball_v1.T_Relic_MovingFireball_v1") },
-		{ TEXT("StoneSpikes"), TEXT("裂地獠牙"), TEXT("巨像遗物"), TEXT("主攻20%地刺，附5s流血\n每0.5s3伤；命中减速。"), TEXT("/Game/UI/BossRelics/T_Relic_StoneSpikes_v1.T_Relic_StoneSpikes_v1") },
+		{ TEXT("MovingFireball"), TEXT("逐焰灵核"), TEXT("召唤师遗物"), TEXT("行走15m一球，闪烁3必中球\n直击30／范围20，互斥。"), TEXT("/Game/UI/BossRelics/T_Relic_MovingFireball_v1.T_Relic_MovingFireball_v1") },
+		{ TEXT("StoneSpikes"), TEXT("裂地獠牙"), TEXT("巨像遗物"), TEXT("主攻20%地刺：50伤\n附5s流血，每0.5s10伤。"), TEXT("/Game/UI/BossRelics/T_Relic_StoneSpikes_v1.T_Relic_StoneSpikes_v1") },
 		{ TEXT("SeismicStrike"), TEXT("撼岳重击"), TEXT("巨像遗物"), TEXT("每6s主攻震爆：35伤\n震退命中点4.5m内敌人。"), TEXT("/Game/UI/BossRelics/T_Relic_SeismicStrike_v1.T_Relic_SeismicStrike_v1") },
 		{ TEXT("StoneCarapace"), TEXT("磐岩逆甲"), TEXT("巨像遗物"), TEXT("永久减伤15%\n受击向伤害来源反击10伤。"), TEXT("/Game/UI/BossRelics/T_Relic_StoneCarapace_v1.T_Relic_StoneCarapace_v1") },
 		{ TEXT("VolcanicRounds"), TEXT("熔核爆弹"), TEXT("蠕虫遗物"), TEXT("每次主攻附带火焰爆炸\n命中点2.5m内额外12伤。"), TEXT("/Game/UI/BossRelics/T_Relic_VolcanicRounds_v1.T_Relic_VolcanicRounds_v1") },

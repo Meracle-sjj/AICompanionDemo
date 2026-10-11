@@ -1,8 +1,8 @@
 /**
  * [INPUT]: 依赖 TemporaryPickup.h 的组件契约、Engine 的 StaticMesh/MaterialInstanceDynamic（/Engine 基础几何 + "Color" 参数染色）、DrawDebugString（拾取飘字）、EngineUtils（TActorIterator 效果征集）、Kismet 的 GetPlayerPawn、本模块 XpPickup/CompanionAIController/CompanionCharacter/HealthComponent（三效果征集目标+台词出口）、本模块 Audio/SFXLibrary（Pickup_Rush 事件音效）
- * [OUTPUT]: 磁吸三段式与三效果分派；三系真实收集台词同步气泡与RunEventLog，语音在SFXLibrary与其他拾取共用5秒CD；效果和事件音效不受语音冷却影响；碰撞全关，45s无人拾取自毁
+ * [OUTPUT]: 磁吸三段式与三效果分派；三系语音统一入FIFO，起播才显示录音同源字幕/历史；效果和短音立即执行；碰撞全关，45s无人拾取自毁
  * [POS]: AI/ 的暂态刺激节拍实现；掉落方 EnemyGrunt 只管生成与随机定型，效果各自直达作用面——生成与效果职责分离（XpPickup 同款哲学）
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "TemporaryPickup.h"
@@ -213,35 +213,23 @@ void ATemporaryPickup::ApplyRushVisual()
 
 void ATemporaryPickup::Collect()
 {
-	// 气泡仍提示当前拾取；语音经SFXLibrary共享5秒CD，药剂效果/短事件音效照常执行。
-	auto BuddySay = [](UWorld* World, const FString& Line)
-	{
-		for (TActorIterator<ACompanionCharacter> It(World); It; ++It)
-		{
-			It->ShowSpeechBubble(Line);
-			URunEventLog::Publish(World, TEXT("队友"), Line, TEXT("Pickup"));
-			break;
-		}
-	};
+	// 拾取语音依次入世界队列，起播时才显示该录音对应的字幕。
 
 	switch (RushType)
 	{
 	case ERushType::MagnetStorm:
 		ApplyMagnetStorm();
-		BuddySay(GetWorld(), TEXT("磁暴展开——战利品都过来！"));
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Pickup_Magnet);   // [SFX] 磁吸风暴独立音（09-27 用户点名）
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Voice_Magnet);    // [Voice] 药剂台词（09-29 TTS 同源）
 		break;
 	case ERushType::Frenzy:
 		ApplyFrenzy();
-		BuddySay(GetWorld(), TEXT("火力全开，都交给我！"));
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Pickup_Rush);     // [SFX] 狂怒/圣盾共用槽
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Voice_Frenzy);    // [Voice] 药剂台词
 		break;
 	case ERushType::Aegis:
 	default:
 		ApplyAegis();
-		BuddySay(GetWorld(), TEXT("圣盾加身，五秒无敌！"));
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Pickup_Rush);
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Voice_Aegis);     // [Voice] 药剂台词
 		break;

@@ -4,7 +4,8 @@
  * [POS]: AI/ Boss 家族基类实现：占位近战行为波 2-4 由三 Boss 特色逻辑替换（召唤师护盾轮/巨像地刺/蠕虫钻地）
  *  猎印统一叠层/消费与UPROPERTY世界数字组件，免伤时不新叠，死亡只隐藏以保留当次主伤害后的消费。
  *  BeginPlay/死亡/EndPlay通知玩家刷新世界活Boss远景，存活判断与镜头计时仍归宿主Character。
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ *  三Boss真实BeginPlay/死亡直接入队专属语音，绕过闲聊节流；字幕/颜色由播放队列绑定。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "BossBase.h"
@@ -13,6 +14,10 @@
 #include "AICompanionDemoGameMode.h"
 #include "AICompanionDemoCharacter.h"
 #include "AI/WaveDirector.h"
+#include "AI/BossSummoner.h"
+#include "AI/BossColossus.h"
+#include "AI/BossWurm.h"
+#include "Audio/SFXLibrary.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
@@ -95,6 +100,10 @@ void ABossBase::BeginPlay()
 
 	// 身份可在BeginPlay后注入；HUD每次轮询读取真实名字，不依赖widget创建时序。
 	if (HealthBarComp) { HealthBarComp->SetVisibility(false); }
+	const EGameSFX Voice = IsA<ABossSummoner>() ? EGameSFX::Voice_BossSummonerAppear
+		: IsA<ABossColossus>() ? EGameSFX::Voice_BossGolemAppear
+		: IsA<ABossWurm>() ? EGameSFX::Voice_BossWurmAppear : EGameSFX::None;
+	if (Voice != EGameSFX::None) USFXLibrary::PlaySFX(GetWorld(), Voice);
 }
 
 void ABossBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -225,6 +234,12 @@ void ABossBase::ResolveGroundZ(FVector& Loc)
 
 void ABossBase::HandleDeath(UHealthComponent* /*HealthComp*/)
 {
+	if (bDeathHandled) return;
+	bDeathHandled = true;
+	const EGameSFX Voice = IsA<ABossSummoner>() ? EGameSFX::Voice_BossSummonerDefeated
+		: IsA<ABossColossus>() ? EGameSFX::Voice_BossGolemDefeated
+		: IsA<ABossWurm>() ? EGameSFX::Voice_BossWurmDefeated : EGameSFX::None;
+	if (Voice != EGameSFX::None) USFXLibrary::PlaySFX(GetWorld(), Voice);
 	// 所有Boss共享活体远景；同帧排除此宿主，不能提前恢复另一场仍在进行的Boss战。
 	if (AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)))
 		Hero->RefreshBossEncounterCamera(this);

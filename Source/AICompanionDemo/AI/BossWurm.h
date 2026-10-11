@@ -2,12 +2,12 @@
  * [INPUT]: BossBase死亡/探地/免伤契约、球形命中代理、WurmBodyVisual岩甲外观、同资产岩甲落火、Vfx/SFX、导演的有效杂兵死亡通知
  * [OUTPUT]: 对外提供 ABossWurm——Boss3「沙狱蠕虫」v2 岩浆飞天蠕虫（2026-10-06 用户裁决重做，替代 09-30 钻地瞬移初版）：
  *   Sky 盘旋（节链全露空中绕玩家转圈+周期掉火球自由落体→落地留火区 3s）→ Dive 俯冲扎地（头节直冲玩家，链式依次没入）
- *   → Burrow 潜行（免伤+地下快移+红圈 telegraph 定格玩家脚下 1s）→ Erupt 破土跃天（范围爆炸 600cm/25 伤+土屑迸射+垂直冲回飞行高度续接盘旋）；
+ *   → Burrow 潜行3s（地下快移2s+定点红圈1s，循环钻岩隆隆声随头迫近；暂停静音、离土/死亡/EndPlay立即清理）→ Erupt 破土跃天（范围爆炸600cm/25伤）；
  *   七节球形代理共享7000总血，默认头半径325cm、整体较原130cm放大2.5倍；每节Visibility Block命中，自制岩甲/熔核继承代理比例，缺资产保留原球。潜行按半径埋深；死亡随尸节移动并显式清理
  *   有效杂兵死亡默认反馈35伤；潜地/暂停只累计，易伤后经Health统一结算；存活/死亡每帧推进碎屑寿命，最多64件，死亡清空火系威胁
  *   BeginPlay/死亡/EndPlay同步限额/远景；入土/破土每事件只播一次1.8s首爆采样、0.55s强震；火区自有Niagara与爆闪硬寿命，专用UV炭黑贴花最多4件无伤焦痕6s退场/后2s渐淡。
  * [POS]: AI/ Boss 家族成员三（波 4 终章）：最终 Boss——"天上盘旋轰炸、破土瞬爆"的垂直威胁体；死亡演节链失引坠落（覆写 PerformDeathPresentation）
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
@@ -24,6 +24,7 @@ class UWurmBodyVisual;
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UDecalComponent;
+class UAudioComponent;
 
 /** 蠕虫体节：球 mesh 组件+链式逻辑位置（组件由 Actor OwnedComponents 持有，UPROPERTY 双保险防 GC——巨像石刺同款） */
 USTRUCT()
@@ -121,11 +122,16 @@ public:
 	void NotifyMobKilled(UHealthComponent* MobHealth);
 	UFUNCTION(BlueprintPure, Category = "Debug|Wurm")
 	FString DebugHazardState() const;
+	UFUNCTION(BlueprintPure, Category = "Debug|Wurm")
+	FString DebugBurrowAudioState() const;
 	/** 编辑器受控落火口，复用真实生成/生命周期；不修改其寿命或落地判定。 */
 	UFUNCTION(BlueprintCallable, Category = "Debug|Wurm")
 	void DebugDropFireRock(const FVector& Location);
 	UPROPERTY(EditAnywhere, Category = "Wurm|Balance", meta = (ClampMin = "0.0"))
 	float MobDeathDamage = 35.f;
+	/** 包含最后红圈预告的地下总时长；默认2秒迫近+1秒红圈。 */
+	UPROPERTY(EditAnywhere, Category = "Wurm|Burrow", meta = (ClampMin = "0.1"))
+	float BurrowDuration = 3.f;
 
 protected:
 	void NotifyEncounterPresence(bool bLeaving = false);
@@ -149,6 +155,8 @@ protected:
 	void TickDive(float DeltaSeconds);
 	void TickBurrow(float DeltaSeconds);
 	void TickErupt(float DeltaSeconds);
+	void RefreshBurrowAudio();
+	void StopBurrowAudio();
 
 	/** 链式跟随：身体节逐节追前节保持间距（头节的蜿蜒自动涌现为全身 S 形），写回组件 */
 	void FollowChain();
@@ -226,6 +234,7 @@ protected:
 	/** 头节岩浆点光（物理光照照明——KeyLight 同款哲学，随 Actor=头节移动） */
 	UPROPERTY(VisibleAnywhere, Category = "Wurm|Body")
 	TObjectPtr<class UPointLightComponent> MagmaLight;
+	UPROPERTY(Transient) TObjectPtr<UAudioComponent> BurrowAudio;
 
 	// ---------- 状态机现场 ----------
 	EWurmState State = EWurmState::Burrow;
@@ -316,6 +325,9 @@ private:
 	int32 FireRocksRetired = 0;
 	int32 FireZonesRetired = 0;
 	bool bApplyingMobDamage = false;
+	bool bBurrowAudioPaused = false;
+	int32 BurrowAudioStarts = 0;
+	int32 BurrowAudioStops = 0;
 	/** 红圈期标记（Burrow 态 Phase B 起亮） */
 	bool bEruptRingShown = false;
 
@@ -328,7 +340,4 @@ private:
 	/** 身体接触伤害冷却余量 */
 	float BodyTouchCd = 0.f;
 
-	/** 无圈潜行段时长（Burrow 态 Phase A——先快移后亮圈；十三批 0.35→0.9：扎地与红圈拉开时距，
-	 *  消除"入土时出现红圈"的归因混淆——寂静 0.9s 后亮圈，红圈清晰归属"即将破土"） */
-	static constexpr float BurrowDashTime = 0.9f;
 };

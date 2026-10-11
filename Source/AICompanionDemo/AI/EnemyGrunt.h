@@ -1,9 +1,9 @@
 /**
  * [INPUT]: 依赖 Engine 的 ACharacter/CharacterMovementComponent（重力行走）/SkeletalMeshComponent 的 PlayAnimation 与 SetAnimationMode、AnimSequenceBase 的 GetPlayLength（动画时长自报）、AIModule 的 AISense_Sight（视觉源注册）、Kismet 的 GetPlayerPawn（猎手目标查询）、本模块 HealthComponent 的 SetMaxHealth（变体血量定型）、本模块 XpPickup（死亡掉落类）、本模块 TemporaryPickup（E5 暂态掉落类）
  * [OUTPUT]: 对外提供 AEnemyGrunt——拟人猎手敌人二代：胶囊互撞、贴地行走、**追击全自驱寻路（历 D12 MoveToActor→D16 输入常开→D17 归一：FindPathToActorSynchronously 每 0.5s 算路存路点串，HuntPlayer 沿"路径下一路点"喂输入——加速度与绕障同源，滑步案与双驱动打架案双根治；无控制器，bRunPhysicsWithNoController 主开关）**、贴脸挥拳节拍（攻击动画与伤害同拍，伤害走 HealthComponent 唯一入口；出拳双闸门：|ΔZ|≤150 层高 + ObjectType LOS——隐形敌人案根治，穿层/隔板绝不挥拳）、ragdoll 布娃娃死亡 + 定时自毁；实现 ICombatant 供队友评分器跨形体识别；M3.75 增补：EGruntVariant 三变体（Standard 基线/Rusher 快而脆/Brute 慢而硬，ApplyVariant 出生定型——移速/血量/伤害/间隔/体型/色调/经验值/蛋糕掉率八项参数集，数据差异不造新类）+ XpPickup 经验掉落（喂 XpValue，收集上报的组合根在 GameMode）+ HealthPickup 柠檬蛋糕概率掉落（蛮兵必掉，收集直接作用于玩家血量）+ 滑行呆移探针（bEnableMoveProbe，1Hz 取证器，确认修复后关）
- *  猎印/狂暴显示各有组件；感电残留以动态ShockMarkVisual固定闪电字形同步，两端配对消费，无散乱常驻电弧；死亡隐藏/EndPlay释放。ApplySummonedWarlock一次定型紫色双倍攻速召唤物，无常规掉落。
+ *  猎印/狂暴显示各有组件；感电5秒残留以动态ShockMarkVisual固定闪电字形同步，半秒持续配对不消费；死亡隐藏/EndPlay释放。ApplySummonedWarlock一次定型紫色双倍攻速召唤物，无常规掉落。
  * [POS]: AI/ 的敌对方实体（替代球体 EnemyTarget 的猎手位置，WaveDirector 的生成目标）；外观与动画构造期 C++ 内联装配（与队友 BP 的已验证组合同款：SKM_Manny_Simple + ABP_Unarmed——2026-09-07 用户要求配置零人工的取舍，BP 子类可覆盖），球类保留作回归安全网
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
@@ -156,12 +156,11 @@ public:
 	void RefreshBurnResidue(float Duration = 1.5f) { BurnResidue = Duration; }
 	float GetBurnResidue() const { return BurnResidue; }
 
-	/** 玩家子弹挂电，固定闪电标记与3秒残留同源；两已带电目标配对才消费。 */
+	/** 玩家子弹挂电，固定闪电标记与5秒残留同源；持续配对不消费，重复命中刷新至5秒。 */
 	UFUNCTION(BlueprintCallable, Category="Enemy|Elements")
-	void ApplyShockResidue(float Duration = 3.f);
+	void ApplyShockResidue(float Duration = 5.f);
 	UFUNCTION(BlueprintPure, Category="Enemy|Elements")
 	float GetShockResidue() const { return IsDead() ? 0.f : ShockResidue; }
-	void ConsumeShockResidue();
 	UFUNCTION(BlueprintPure, Category="Debug|Elements") FString DebugShockState() const;
 	/** 仅真实冰弹刷新；火伤融化消费残留，不清持续减速。 */
 	void RefreshFrostResidue(float Duration = 1.5f) { FrostResidue = FMath::Max(FrostResidue, Duration); }

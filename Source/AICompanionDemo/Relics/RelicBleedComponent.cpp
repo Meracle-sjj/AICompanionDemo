@@ -1,8 +1,8 @@
 /**
  * [INPUT]: RelicBleedComponent契约、活ICombatant血量、ParagonGrux真实血滴及游戏暂停状态。
- * [OUTPUT]: 默认5s/0.5s每拍3伤的可刷新流血；最多8份短命真实血滴；真实扣血/拍数/剩余时间只读验收。
+ * [OUTPUT]: 可刷新流血由遗物真实参数传入，v1.3默认5s/0.5s每跳10；最多8份短命血滴，真实扣血/拍数/剩余时间只读验收。
  * [POS]: 地刺次生伤害只调用Health.ApplyDamage；不调用NotifyPrimaryAttack或元素/猎印链。
- * [PROTOCOL]: 变更时更新此头部；成员地图由主agent统一维护。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "RelicBleedComponent.h"
 #include "AI/Combatant.h"

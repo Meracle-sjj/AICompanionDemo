@@ -6,8 +6,9 @@
  *   死亡经 HandleDeath 上报 WaveDirector 计数+死亡表现（DeathPresentationAnim 优先，ragdoll 兜底——站尸 3s 观感案根治）
  *   共享猎杀印记状态与世界数字徽记：ICombatant玩家叠层/队友消费，1–2金黄、3+红；无敌不叠，死亡隐藏但保留同击消费顺序
  *   BeginPlay/死亡/EndPlay按世界活Boss刷新玩家共享1.6倍远景，多家族宿主不会提前恢复。
+ *   真实子类入场与幂等死亡向统一语音队列发专属事件；队列拥有字幕与播放时序。
  * [POS]: AI/ 的 Boss 家族基类（波 1 骨架）：召唤师/裂地巨像/沙狱蠕虫三 Boss 的公共载体——特色行为（召唤/地刺/钻地）由子类或波次填充
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
@@ -96,4 +97,5 @@ protected:
 
 	FString BossName = TEXT("BOSS");
 	int32 BossIndex = 1;
+	bool bDeathHandled = false;
 };

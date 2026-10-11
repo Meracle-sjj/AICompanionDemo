@@ -189,7 +189,7 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Upgrade|Element")
 	bool bFrostShotUnlocked = false;
 
-	/** 感电弹解锁旗：命中挂感电 3s——AI 子弹配对两带电目标，每端至少20点传导并保留30%比例成长 */
+	/** 感电弹解锁旗：命中刷新5秒感电；队友每半秒配对两目标，每端基础10点或攻击15%，玩家额外枪口散射 */
 	UPROPERTY(VisibleAnywhere, Category = "Upgrade|Element")
 	bool bShockShotUnlocked = false;
 
@@ -243,7 +243,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Upgrade|Blink")
 	void PerformDash();
 
-	/** 紧急呼叫解锁（信标拾取侧调用）：C 键召回自此可用 */
+	/** 信标拾取：首次解锁C，重复总/剩余CD减5秒、总CD下限5秒 */
 	UFUNCTION(BlueprintCallable, Category = "Abilities|Recall")
 	void UnlockRecall();
 

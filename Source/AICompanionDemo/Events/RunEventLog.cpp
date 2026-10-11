@@ -1,15 +1,16 @@
 /**
- * [INPUT]: RunEventLog's record contract, Game/PIE world time and game-thread publishers.
- * [OUTPUT]: Appends factual text, evicts the oldest entries above 100 and increments a HUD revision.
- * [POS]: Events/ implementation; no timers, actors, audio, presentation or invented events.
- * [PROTOCOL]: Update Events/AGENTS.md when the record contract or lifetime changes.
+ * [INPUT]: RunEventLog记录契约、Game/PIE世界时间和游戏线程发布者。
+ * [OUTPUT]: 追加真实文本/Kind，超过100条淘汰最旧项，递增HUD刷新版本。
+ * [POS]: Events/数据实现，不拥有计时器/Actor/音频/界面或虚构事件。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "Events/RunEventLog.h"
 
 #include "AICompanionDemo.h"
 #include "Engine/World.h"
 
-void URunEventLog::Publish(UWorld* World, const FString& Speaker, const FString& Text, const FName EventId)
+void URunEventLog::Publish(UWorld* World, const FString& Speaker, const FString& Text, const FName EventId,
+	const ERunEventKind Kind)
 {
 	if (!IsValid(World) || Text.IsEmpty()) return;
 	check(IsInGameThread());
@@ -22,6 +23,7 @@ void URunEventLog::Publish(UWorld* World, const FString& Speaker, const FString&
 	Entry.Speaker = Speaker;
 	Entry.Text = Text;
 	Entry.EventId = EventId;
+	Entry.Kind = Kind;
 	Journal->Entries.Add(MoveTemp(Entry));
 	if (Journal->Entries.Num() > MaxEntries)
 	{

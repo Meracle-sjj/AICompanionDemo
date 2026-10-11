@@ -1,11 +1,14 @@
 /**
- * [INPUT]: 依赖 SpeechBubble.h 的组件契约、Slate 的 SBorder/STextBlock（Widgets/Layout、Widgets/Text）、FSlateRoundedBoxBrush（零资产圆角底板——CompanionHud 同款实证）、FCoreStyle 默认字体、FPlatformTime
- * [OUTPUT]: 对外提供 USpeechBubble 的实现——ShowLine 置词+重置时钟（树未建时落 PendingLine 袋，RebuildWidget 末尾补挂——09-28 空气泡案根治）；单行排版（AutoWrapText=false，09-28 碎行案）；NativeTick 三段插值（浮现上浮 8px/淡出 0.25s），完毕后 opacity 归零静默待命（下词复用）
+ * [INPUT]: 依赖 SpeechBubble.h 的组件契约、Slate 的 SBorder/STextBlock（Widgets/Layout、Widgets/Text）、FSlateRoundedBoxBrush（零资产圆角底板——CompanionHud 同款实证）、FCoreStyle 默认字体、未暂停的Slate播放时钟
+ * [OUTPUT]: 对外提供 USpeechBubble 的实现——ShowLine 置词+重置时钟（树未建时落 PendingLine 袋，RebuildWidget 末尾补挂——09-28 空气泡案根治）；620px画布/584px换行约束与事件类别配色；NativeTick 三段插值（浮现上浮 8px/淡出 0.25s），完毕后 opacity 归零静默待命（下词复用）
  * [POS]: UI/ 四件套实现之一：世界空间展示层（挂 WidgetComponent，Screen 模式）；Bark 台词的"气泡感"正装——替代 DrawDebugString 的日志观感
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "SpeechBubble.h"
+#include "RunEventStyle.h"
+#include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/SBoxPanel.h"
@@ -22,11 +25,12 @@ namespace
 	constexpr float kRiseOffset = 8.f;   // 浮现上浮距离（px）
 }
 
-void USpeechBubble::ShowLine(const FString& Line, float Duration)
+void USpeechBubble::ShowLine(const FString& Line, float Duration, ERunEventKind Kind)
 {
 	if (LineText.IsValid())
 	{
 		LineText->SetText(FText::FromString(FString::Printf(TEXT("「%s」"), *Line)));
+		LineText->SetColorAndOpacity(RunEventColor(Kind));
 	}
 	else
 	{
@@ -35,10 +39,11 @@ void USpeechBubble::ShowLine(const FString& Line, float Duration)
 		// SetVisibility(true) 已亮底板 = 空气泡。词先落袋，RebuildWidget 末尾补挂完整生命周期。
 		PendingLine = Line;
 		PendingDuration = Duration;
+		PendingKind = Kind;
 		return;
 	}
 	HoldDuration = Duration;
-	ShowTime = FPlatformTime::Seconds();
+	ElapsedSeconds = 0.f;
 	bShowing = true;
 }
 
@@ -60,7 +65,7 @@ TSharedRef<SWidget> USpeechBubble::RebuildWidget()
 			.Font(BubbleFont)
 			.ColorAndOpacity(FSlateColor(kBubbleText))
 			.ShadowOffset(FVector2D(1.5f, 1.5f))
-			.AutoWrapText(false)   // 09-28 碎行案：420px 宽度下引擎按字硬断成 2-3 字碎行（「放开/我的主/人！」）——台词全部 ≤13 字，单行居中是 WoW 名牌正装；将来超长词再议主动按标点断句
+			.AutoWrapText(true).WrapTextAt(584.f)
 			.Text(FText::GetEmpty())
 		];
 
@@ -68,7 +73,7 @@ TSharedRef<SWidget> USpeechBubble::RebuildWidget()
 	if (!PendingLine.IsEmpty())
 	{
 		const FString Line = MoveTemp(PendingLine);
-		ShowLine(Line, PendingDuration);
+		ShowLine(Line, PendingDuration, PendingKind);
 	}
 	return Tree;
 }
@@ -83,9 +88,10 @@ void USpeechBubble::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		return;
 	}
 
-	// 真实时钟差分（世界 TimeDilation=0 冻结期 UMG 世界时钟 dt=0——铁律禁 UMG 动画）
-	const double Now = FPlatformTime::Seconds();
-	const float Elapsed = static_cast<float>(Now - ShowTime);
+	// Slate播放时钟与实际音频一致；暂停或奖励冻结时显式停计，避免字幕先于声音消失。
+	if (!GetWorld() || GetWorld()->IsPaused() || UGameplayStatics::GetGlobalTimeDilation(this) < .01f) { return; }
+	ElapsedSeconds += InDeltaTime;
+	const float Elapsed = ElapsedSeconds;
 
 	if (Elapsed < kRiseInSeconds)
 	{

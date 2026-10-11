@@ -2,7 +2,7 @@
  * [INPUT]: UMG/Slate、UpgradeCardPresentation路径与稀有度；导演快照、Health/Character只读口、CompanionAIController真实模式与增益参数、世界活Boss身份和血量
  * [OUTPUT]: 常驻统计/强化/紫魂倒计时、血量/XP四槽、小图；Q当前护卫/歼灭增益；中央上方Boss真血条，0.15s独立刷新、死亡移除
  * [POS]: UI/ 三件套之一（G1 + HUD v2，与 DeathScreen/StartMenu 姊妹）：GameMode 组合根装配；配色语言沿用拾取物家族（金=账本、青=成长、红=血）
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
@@ -150,6 +150,7 @@ private:
 	/** 右上小地图（09-28：Slate 自绘+战争迷雾，Tab 放大） */
 	TSharedPtr<SMinimapCanvas> Minimap;
 	TSharedPtr<class SBox> MinimapBox;   /** 尺寸硬限（150/400 切换）——防 SOverlay 槽拉伸白块案 */
+	TSharedPtr<SBox> MinimapHint;
 	bool bMinimapZoomed = false;
 	/** 当前世界只采一次Landscape高度；33²含两端，分帧48条/轮询。MAX_flt为无有效地形首击。 */
 	static constexpr int32 MinimapTerrainN = 33;

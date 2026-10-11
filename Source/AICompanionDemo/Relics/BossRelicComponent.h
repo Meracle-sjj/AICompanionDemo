@@ -1,8 +1,8 @@
 /**
  * [INPUT]: ActorComponent/HealthComponent；主攻、队友直击、真实受击与成功闪烁由共享宿主接线。
- * [OUTPUT]: 九遗物参数/效果与只读JSON；周期狂暴供HUD；地刺附可刷新流血，闪现射线独立地刺入口不重复主攻震爆/火爆。
+ * [OUTPUT]: 九遗物参数/效果与只读JSON；步行火球与闪烁落点三颗追踪球，直击30/邻敌20互斥；地刺50与每跳10可刷新流血。
  * [POS]: Relics/唯一玩法所有者；次生只写Health，死亡/EndPlay幂等销毁球/火圈/石刺及两种临时VFX，不延长正常寿命。
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #pragma once
 
@@ -45,6 +45,8 @@ public:
 	float GetPotionFrenzyDurationMultiplier() const;
 	/** 接管临时火浪等Actor的提前清理；保持原LifeSpan，死后迟到登记立即销毁。 */
 	void TrackTransientVfx(AActor* Fx);
+	/** 友方球爆闪自有硬寿命，玩家死亡/EndPlay也提前清理。 */
+	void TrackTransientNiagara(UNiagaraComponent* Fx, float Life);
 	UFUNCTION(BlueprintPure, Category="BossRelics") FString DescribeRelic(EBossRelicId Id) const;
 	UFUNCTION(BlueprintPure, Category="BossRelics") FString DebugState() const;
 	UFUNCTION(BlueprintPure, Category="BossRelics") bool IsFlameWardActive() const;
@@ -62,13 +64,14 @@ public:
 	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="1")) float FireballTravelDistance = 1500.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="0")) float FireballDamage = 30.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="1")) float FireballRadius = 300.f;
+	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="0")) float BlinkFireballSplashDamage = 20.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0",ClampMax="1")) float SpikeChance = .2f;
-	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0")) float SpikeDamage = 15.f;
+	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0")) float SpikeDamage = 50.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="1")) float SpikeRadius = 180.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0.1")) float SpikeSlowDuration = 2.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0.05",ClampMax="1")) float SpikeSpeedFactor = .6f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0.1")) float SpikeBleedDuration = 5.f;
-	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0")) float SpikeBleedDamage = 3.f;
+	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0")) float SpikeBleedDamage = 10.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0.1")) float SpikeBleedInterval = .5f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|SeismicStrike", meta=(ClampMin="0.1")) float SeismicInterval = 6.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|SeismicStrike", meta=(ClampMin="0")) float SeismicDamage = 35.f;
@@ -126,6 +129,7 @@ private:
 	float LatestHealAttempted = 0.f;
 	float LatestHealActual = 0.f;
 	int32 FireballsSpawned = 0;
+	int32 BlinkFireballsSpawned = 0;
 	int32 FrenzyActivations = 0;
 	int32 WardActivations = 0;
 	int32 WardDamageTicks = 0;
@@ -147,6 +151,8 @@ private:
 	void TickPyres();
 	void TickSpikes(float DeltaTime);
 	void SpawnMovingFireball();
+	void SpawnBlinkFireballs(const FVector& Landing);
+	void RegisterFriendlyOrb(ABossOrb* Orb);
 	void ActivatePeriodicFrenzy();
 	void SpawnPyre(const FVector& Location);
 	void SpawnSpikeVisuals(const FVector& Location);

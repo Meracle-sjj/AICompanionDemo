@@ -8,6 +8,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Events/RunEventLog.h"
 #include "GameFramework/Character.h"
 #include "CompanionCharacter.generated.h"
 
@@ -27,11 +28,11 @@ public:
 	ACompanionCharacter();
 	virtual void BeginPlay() override;
 
-	/** 头顶说话气泡（09-26 夜轮）：Controller::Bark 台词的展示口——Screen 空间覆盖层，新词覆盖旧词 */
-	void ShowSpeechBubble(const FString& Line);
+	/** 头顶说话气泡（09-26 夜轮）：Controller::Bark 台词的展示口——Screen 空间覆盖层，接收Audio队列当前词/时长/语义类别 */
+	void ShowSpeechBubble(const FString& Line, float Duration = 4.5f, ERunEventKind Kind = ERunEventKind::General);
 
 private:
-	/** 头顶气泡装载（Screen 模式参数在 BeginPlay 定稿：DrawSize 420×120 / 底中锚定 / 35m 可见） */
+	/** 头顶气泡装载（Screen 模式参数在 BeginPlay 定稿：DrawSize 620×140 / 底中锚定 / Screen空间） */
 	UPROPERTY(VisibleAnywhere, Category = "Companion|UI")
 	UWidgetComponent* SpeechBubble;
 

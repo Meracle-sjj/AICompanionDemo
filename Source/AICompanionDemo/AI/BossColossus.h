@@ -7,10 +7,10 @@
  *   ②锁定圈（玩家位置一次定格 4m 环刺——跑出圈/站环缝双解）
  *   ③放射射线（Boss 为心 8 向射线刺链——玩家在射线夹缝躲避，缝宽∝半径=近身必中，逼迫保持距离）；
  *   数据流统一：telegraph 期生成刺位蓝图 PendingSpikes（位置/判定半径/体量），红圈=判定圆同构绘制，
- *   slam时实体化（0.12s）+逐刺判定同帧+小于虫的0.38s镜头冲击/BossImpact采样；入场欢迎刺无害
+ *   slam时实体化（0.12s）+逐刺判定同帧+0.38s镜头冲击；仅原地愤怒放射模式请求BossImpact，三模式实际计数只读回读；入场欢迎刺无害
  * [POS]: AI/ Boss 家族成员二（波 2）：走位博弈型——与召唤师（清杂）、蠕虫（时机）差异化；
  *   模型待 Grux 资产到位换装（Sevarog 同管线），白 Manny 先顶机制测试
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
@@ -63,6 +63,8 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	UFUNCTION(BlueprintPure, Category = "Debug|Boss")
+	FString DebugSlamState() const;
 
 protected:
 	// ---------- 红圈阵（模式 0，压轴）：玩家为心的圈阵——圈间缝=落脚点 ----------
@@ -125,6 +127,8 @@ private:
 	/** 攻击状态机：逼近 → Telegraph（画蓝图刺位的红圈脉冲）→ Slam（实体化+判定同帧）→ Cooldown → 轮换 */
 	void TickSlam(float DeltaSeconds, const FVector& PlayerLoc);
 	void ExecuteSlam();
+	int32 SlamExecutionCounts[3] = {0, 0, 0};
+	int32 BossImpactRequests = 0;
 
 	// ---------- Grux 动画三态机（四十七轮换装：Idle/Run 基础态按速度自动切换+瞬态叠断） ----------
 	/** 基础动画按速度切换（态未变不重启——防每帧 PlayAnimation 重置循环） */

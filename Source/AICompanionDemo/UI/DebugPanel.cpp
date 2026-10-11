@@ -2,10 +2,11 @@
  * [INPUT]: DebugPanel契约、Slate分区/滚动/按钮与真实字体Measure，GameMode测试转发、导演当前升级名称
  * [OUTPUT]: 青蓝测试控制台与常驻55×40 F1键帽/两行动作状态提示，展开/收起均可见且HitTestInvisible；只拆GameMode原提示，未知文本完整保留，原全文/显示几何可回读；不接输入或另存玩法状态
  * [POS]: UI/ 界面层实现件：仅测试模式挂载（正常模式零痕迹）——验收提速专用面板
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "DebugPanel.h"
+#include "InputKeycap.h"
 
 #include "AICompanionDemoGameMode.h"
 #include "AI/WaveDirector.h"
@@ -257,26 +258,7 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 					[
 						SAssignNew(TestInputKeycap, SBox).WidthOverride(55.f).HeightOverride(40.f)
 						[
-							SNew(SBorder).BorderImage(WhiteBrush).Padding(FMargin(0.f, 0.f, 0.f, 4.f))
-							.BorderBackgroundColor_Lambda([this]()
-							{
-								return FSlateColor(ReadTestInputPrompt(Host.Get()).bBlocked
-									? FLinearColor(0.18f, 0.23f, 0.25f) : FLinearColor(0.10f, 0.29f, 0.34f));
-							})
-							[
-								SNew(SBorder).BorderImage(WhiteBrush).Padding(0.f)
-								.HAlign(HAlign_Center).VAlign(VAlign_Center)
-								.BorderBackgroundColor_Lambda([this]()
-								{
-									return FSlateColor(ReadTestInputPrompt(Host.Get()).bBlocked
-										? FLinearColor(0.35f, 0.42f, 0.46f) : FLinearColor(0.68f, 0.90f, 0.97f));
-								})
-								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("F1")))
-									.Font(FCoreStyle::GetDefaultFontStyle("Bold", 20))
-									.ColorAndOpacity(FLinearColor(0.015f, 0.08f, 0.105f)).AutoWrapText(false)
-								]
-							]
+							MakeInputKeycap(TEXT("F1"), TAttribute<bool>::CreateLambda([this]() { return !ReadTestInputPrompt(Host.Get()).bBlocked; }))
 						]
 					]
 					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)

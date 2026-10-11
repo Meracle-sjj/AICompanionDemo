@@ -1,12 +1,13 @@
 /**
  * [INPUT]: CompanionHud.h、导演快照、共享图卡、Slate与Health/Character只读口；队友控制器当前模式、世界活Boss血条局部实现
- * [OUTPUT]: 六列图标/紫魂秒数、四操作槽/血量/XP/小图；右下Q模式与中央上方Boss真血条，0.15s轮询不拥有效果账本
+ * [OUTPUT]: 六列图标/紫魂秒数、四操作槽/血量/XP/小图与仅缩小时显示的共用TAB键帽；右下Q模式与中央上方Boss真血条，0.15s轮询不拥有效果账本
  * [POS]: UI/ 三件套实现之一：常驻层（Z 序默认，菜单与死亡屏盖其上）；HUD v2——圆角面板统一视觉语言，配色沿用拾取物家族（金=账本、青=成长、红=血）
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "CompanionHud.h"
 #include "HudSkillIcon.h"
+#include "InputKeycap.h"
 
 #include "AI/WaveDirector.h"
 #include "AICompanionDemo.h"
@@ -113,6 +114,7 @@ void UCompanionHud::ReleaseSlateResources(bool bReleaseChildren)
 	KeySlot = FSkillSlotWidgets();
 	Minimap.Reset();
 	MinimapBox.Reset();
+	MinimapHint.Reset();
 	bMinimapZoomed = false;
 	bMinimapTerrainUploaded = false;
 	bCardIconsBuilt = false;
@@ -223,11 +225,22 @@ TSharedRef<SWidget> UCompanionHud::RebuildWidget()
 		.HAlign(HAlign_Right).VAlign(VAlign_Top)
 		.Padding(0.f, 14.f, 14.f, 0.f)
 		[
-			SAssignNew(MinimapBox, SBox)
-			.WidthOverride(150.f)
-			.HeightOverride(150.f)
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 			[
-				SAssignNew(Minimap, SMinimapCanvas)
+				SAssignNew(MinimapBox, SBox).WidthOverride(150.f).HeightOverride(150.f)
+				[SAssignNew(Minimap, SMinimapCanvas)]
+			]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.f, 7.f, 0.f, 0.f)
+			[
+				SAssignNew(MinimapHint, SBox).WidthOverride(150.f)
+				.Visibility_Lambda([this]() { return bMinimapZoomed ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(55.f).HeightOverride(40.f)[MakeInputKeycap(TEXT("TAB"))]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(9.f, 0.f)
+					[SNew(STextBlock).Text(FText::FromString(TEXT("键放大"))).Font(HudFont(14.f, true)).ColorAndOpacity(FLinearColor(.89f, .96f, .98f))]
+				]
 			]
 		]
 		// 顶层留白容器：五区排布

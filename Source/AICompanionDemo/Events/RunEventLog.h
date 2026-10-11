@@ -1,14 +1,23 @@
 /**
- * [INPUT]: UWorldSubsystem lifetime and factual gameplay text published by event owners.
- * [OUTPUT]: URunEventLog stores the latest 100 ordered records for one Game/PIE world.
- * [POS]: Events/ shared read-only source for the HUD history; owns no actors or gameplay state.
- * [PROTOCOL]: Update Events/AGENTS.md when the record contract or lifetime changes.
+ * [INPUT]: UWorldSubsystem生命周期与真实事件所有者发布的游戏文本。
+ * [OUTPUT]: 每世界最近100条有序记录及特殊字幕配色用Kind语义。
+ * [POS]: Events/HUD历史共享只读真源，不持有Actor或推进玩法。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "RunEventLog.generated.h"
+
+UENUM(BlueprintType)
+enum class ERunEventKind : uint8
+{
+	General,
+	AttackUnlock,
+	BossAppear,
+	BossDefeated
+};
 
 USTRUCT()
 struct FRunEventEntry
@@ -20,16 +29,18 @@ struct FRunEventEntry
 	UPROPERTY() FString Speaker;
 	UPROPERTY() FString Text;
 	UPROPERTY() FName EventId = NAME_None;
+	UPROPERTY() ERunEventKind Kind = ERunEventKind::General;
 };
 
-/** A bounded journal that shares one run world's lifetime; EventId is metadata, not a deduplication key. */
+/** 与本局世界同生命周期的有界记录；EventId仅标记来源，不作为去重键。 */
 UCLASS()
 class AICOMPANIONDEMO_API URunEventLog : public UWorldSubsystem
 {
 	GENERATED_BODY()
 
 public:
-	static void Publish(UWorld* World, const FString& Speaker, const FString& Text, const FName EventId = NAME_None);
+	static void Publish(UWorld* World, const FString& Speaker, const FString& Text, const FName EventId = NAME_None,
+		ERunEventKind Kind = ERunEventKind::General);
 	const TArray<FRunEventEntry>& GetEntries() const { return Entries; }
 	int64 GetRevision() const { return Revision; }
 	virtual void Deinitialize() override;

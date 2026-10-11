@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: UE构建目标与现役游戏模块依赖。
+ * [OUTPUT]: AICompanionDemo模块的Core/AI/UMG/Slate/AudioMixer/Niagara等编译链接边界。
+ * [POS]: Source/构建契约；玩法实现只消费这些现有依赖，不另引入在线运行服务。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;

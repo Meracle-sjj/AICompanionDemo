@@ -1,8 +1,8 @@
 /**
- * [INPUT]: EnemyGrunt元素状态、HuntMark/Enrage/Shock显示组件、既有灼烧表现；宿主Tick/主弹挂电/AI配对消费
- * [OUTPUT]: 元素残留独立衰减、固定感电闪电标记同步、猎印叠层/消费；不再以散乱电弧表达常驻标记
+ * [INPUT]: EnemyGrunt元素状态、HuntMark/Enrage/Shock显示组件、既有灼烧表现；宿主游戏Delta/暂停流速门、主弹挂电/队友集中持续配对
+ * [OUTPUT]: 5秒感电刷新后自然衰减而不消费、固定闪电标记同步、猎印叠层/消费；暂停/<.01冻结残留，死亡隐藏，电弧寿命独立
  * [POS]: AI/EnemyGrunt的局部实现拆分；状态与生命周期仍属于AEnemyGrunt，不新增游戏规则所有者
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "EnemyGrunt.h"
 #include "Vfx/HuntMarkVisual.h"
@@ -12,6 +12,7 @@
 #include "Vfx/VfxLibrary.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 void AEnemyGrunt::SetEnraged(bool bInEnraged) { if (EnrageVisual) EnrageVisual->SetEnraged(bInEnraged); }
 bool AEnemyGrunt::IsEnraged() const { return EnrageVisual && EnrageVisual->IsEnraged(); }
@@ -26,6 +27,8 @@ FString AEnemyGrunt::DebugEnragedState() const
 
 void AEnemyGrunt::TickElementResidue(float DeltaSeconds)
 {
+	// ---------- 与持续配对/电弧相同的游戏暂停门 ----------
+	if (!GetWorld() || GetWorld()->IsPaused() || UGameplayStatics::GetGlobalTimeDilation(this) < .01f) return;
 	BurnResidue = FMath::Max(BurnResidue - DeltaSeconds, 0.f);
 	ShockResidue = FMath::Max(ShockResidue - DeltaSeconds, 0.f);
 	FrostResidue = FMath::Max(FrostResidue - DeltaSeconds, 0.f);
@@ -63,11 +66,6 @@ void AEnemyGrunt::ApplyShockResidue(float Duration)
 		ShockVisual->RegisterComponent();
 	}
 	ShockVisual->SetShocked(true);
-}
-void AEnemyGrunt::ConsumeShockResidue()
-{
-	ShockResidue=0.f;
-	if (ShockVisual) ShockVisual->SetShocked(false);
 }
 FString AEnemyGrunt::DebugShockState() const
 {

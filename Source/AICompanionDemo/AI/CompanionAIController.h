@@ -2,8 +2,8 @@
  * [INPUT]: 依赖 AIModule 的 AAIController/MoveToActor/PathFollowingComponent/AIPerception(Sight)、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息与 LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、HAL 的 FPlatformTime（台词双闸门时钟）、本模块 HealthComponent（M3 评分的威胁/残血数据面）
  * [OUTPUT]: 对外提供 ACompanionAIController——队友大脑 M3 版：Follow/Engage 双状态手写 FSM（D3）+ **双作战模式**（Guard 护卫=移动层永远跟玩家走射护主 / Berserk 战斗狂人=追击评分最优目标；Q 键 Tick 边沿切换，共享评分器与火力层——元策略层）+ 感知对齐（26m 视距全向视锥，UPROPERTY 可调，信息对等原则）+ utility 评分器 EvaluateTargets（距离/威胁/残血三维，威胁含"咬人仇恨覆盖拉满"，权重护主主导 0.6/0.3/0.1 + SwitchCost 切换惩罚）+ 伤害通道 HandlePlayerDamaged（玩家受击广播 → 凶手注入候选集）+ 屏幕评分板 DrawScoreboard（[咬] 仇恨标记，可解释北极星的核心交付）+ M3.75 生命感层：Bark 台词播报（七类事件触发一句话人格，全局+分类双冷却，头顶跟随字幕）+ 步态输入读当前路径段（不重扫已走路点）与方向平滑；同目标活跃路径不重发MoveTo+ E5 暂态狂怒攻速 ActivateFrenzy（开火间隔×0.5 弹道紫，定时自恢复——TemporaryPickup 触发）；暴露 Follow/Perception/Combat/Mode/Utility/Bark 六组 EditAnywhere 参数
  * [POS]: Source/AICompanionDemo/AI 的决策核心；驱动CompanionCharacter，面向ICombatant感知/决策/攻击；1.2移动诊断保留实际MoveTo结果并供五秒日志读取，导航失败仍停步；评分板只在显式开启时展示。
- *  狂暴读真实FrenzyTimer；Q被动由Health乘一次，弹路显示实际扣血。感电每端基础20、过载40与比例成长取高；Nova命中后继承玩家状态及独立地刺口。
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ *  狂暴读真实FrenzyTimer；Q被动由Health乘一次，弹路显示实际扣血。感电5秒不消费，0.5秒集中互斥配对、原伤减半；Nova命中后继承玩家状态及独立地刺口。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #pragma once
@@ -109,10 +109,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Companion|Combat", meta = (ClampMin = "1.0"))
 	float AttackDamage = 10.f;
 
-	/** 两端传导采用max(基础伤害,本弹原始伤害×比例)，模式只在Health乘一次；过载基础20→40、比例.3→.55。 */
+	/** 传导基数；现役每拍统一0.5×max(基础,队友原始伤害×比例)，基础20/过载40减半为10/20，模式只在Health乘一次。 */
 	UPROPERTY(EditAnywhere, Category = "Companion|Element", meta = (ClampMin = "0.0"))
 	float ConductionBaseDamage = 20.f;
-	/** 高火力下保留比例成长，低伤或衰减弹也不会把默认20点传导缩成零头。 */
+	/** 比例基数.3/过载.55；每拍原伤统一减半，即15%/27.5%的比例成长。 */
 	UPROPERTY(EditAnywhere, Category = "Companion|Element", meta = (ClampMin = "0.05", ClampMax = "2.0"))
 	float ConductionScale = 0.3f;
 	/** 两个已带电活敌的配对距离；未找到配对时保留标记至自然到期。 */
@@ -161,8 +161,9 @@ public:
 	/** 命中链统一入口（09-24 弹道融合，用户定调"弹道和弹道之间应该有融合"）：溅射+寒霜——
 	 *  直击/穿透段/折射跳/闪现轰击全部经此触发；链内溅射伤害不再递归触发链（无雪崩） */
 	void ApplyHitChain(AActor* DirectVictim, UHealthComponent* DirectHealth, const FVector& ChainPoint, float ChainScale, AActor* InstigatorPawn);
-	/** 仅AI子弹实际直击调用；传导伤害不递归本入口，辉耀/遗物不会触发。 */
-	void TriggerShockConduction(AActor* DirectVictim, UHealthComponent* DirectHealth, float ChainScale, AActor* InstigatorPawn);
+	/** 每0.5游戏秒集中配对仍带电的活杂兵；每敌每拍最多一条链，不消费残留，不经AI子弹/次生伤害重入。 */
+	void TickShockConduction(float DeltaSeconds);
+	float ConductionPulseAccum = 0.f;
 
 	/** 高爆弹头（火力卡，视觉系）：命中点范围溅射 + 橙色大爆闪——群杂的葬礼（用户 2026-09-13 提案） */
 	UPROPERTY(EditAnywhere, Category = "Companion|Upgrade")

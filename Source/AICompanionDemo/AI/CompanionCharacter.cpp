@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 CompanionCharacter.h 的组件契约、Engine 的胶囊/移动组件与 UWidgetComponent（UMG）、UI/SpeechBubble 的气泡 widget、Kismet 的 GetPlayerController
- * [OUTPUT]: 对外提供 ACompanionCharacter 构造——放置即接管（AIControllerClass + AutoPossessAI）+ 头顶气泡组件（Screen 模式：420×120/底中锚定/35m 剔除/无碰撞）与 ShowSpeechBubble（惰性 CreateWidget——BeginPlay 期 PlayerController 可能未就绪）
+ * [OUTPUT]: 对外提供 ACompanionCharacter 构造——放置即接管（AIControllerClass + AutoPossessAI）+ 头顶气泡组件（Screen 模式：620×140/底中锚定/事件配色/无碰撞）与 ShowSpeechBubble（惰性 CreateWidget——BeginPlay 期 PlayerController 可能未就绪）
  * [POS]: Source/AICompanionDemo/AI 的成员，M1 跟随主体；与玩家 AICompanionDemoCharacter 平行不继承（玩家类绑相机弹簧臂与输入，队友职责隔离）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -57,7 +57,7 @@ void ACompanionCharacter::BeginPlay()
 	// 气泡组件参数（Screen 模式检索定稿）：DrawSize 必须显式（默认 0 即不可见）；底中锚定向上生长；
 	// 无碰撞不挡线（5.6 UWidgetComponent 无 MaxDrawDistance 属性——检索报告此处失实，Screen 模式随角色投影无需剔除）
 	SpeechBubble->SetWidgetSpace(EWidgetSpace::Screen);
-	SpeechBubble->SetDrawSize(FVector2D(420.f, 120.f));
+	SpeechBubble->SetDrawSize(FVector2D(620.f, 140.f));
 	SpeechBubble->SetPivot(FVector2D(0.5f, 1.0f));
 	SpeechBubble->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SpeechBubble->SetVisibility(false);   // ShowSpeechBubble 首词才亮
@@ -67,7 +67,7 @@ void ACompanionCharacter::BeginPlay()
 		*GetNameSafe(this), *GetActorLocation().ToCompactString(), *GetNameSafe(GetController()));
 }
 
-void ACompanionCharacter::ShowSpeechBubble(const FString& Line)
+void ACompanionCharacter::ShowSpeechBubble(const FString& Line, float Duration, ERunEventKind Kind)
 {
 	// 惰性建 widget（纯 C++ 类零蓝图资产）：BeginPlay 期 PlayerController 可能未就绪，首次台词必在开演后
 	if (!BubbleWidget)
@@ -84,6 +84,6 @@ void ACompanionCharacter::ShowSpeechBubble(const FString& Line)
 	}
 	if (BubbleWidget)
 	{
-		BubbleWidget->ShowLine(Line);
+		BubbleWidget->ShowLine(Line, Duration, Kind);
 	}
 }

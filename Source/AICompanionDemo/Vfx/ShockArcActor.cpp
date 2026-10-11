@@ -1,7 +1,7 @@
 /** [INPUT]: ShockArcActor、SplineComponent世界坐标点、NiagaraDataInterfaceSpline真实绑定优先级。
- * [OUTPUT]: 九点首尾精确连接两怪胸口；有效User参数逐名绑定自有Spline，否则使用已核RootActor回退。
+ * [OUTPUT]: 九点首尾连接两怪胸口；死亡/失效端点冻结最后坐标至0.35秒到期，有效User参数逐名绑定自有Spline。
  * [POS]: 单次短命显示；所有Niagara覆盖参数属于本组件，原System/DI不改。
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md */
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "ShockArcActor.h"
 #include "AI/Combatant.h"
 #include "Components/SplineComponent.h"
@@ -70,7 +70,9 @@ bool AShockArcActor::Connect(AActor* From, AActor* To)
 {
 	FromActor=From; ToActor=To;
 	if (!Living(FromActor) || !Living(ToActor) || !LightningSystem) return false;
-	SetActorLocation((Chest(From)+Chest(To))*.5f);
+	LastFromPoint=Chest(From); LastToPoint=Chest(To);
+	bFromFrozen=false; bToFrozen=false;
+	SetActorLocation((LastFromPoint+LastToPoint)*.5f);
 	UpdatePath();
 	Lightning->SetAsset(LightningSystem);
 	bBindingReady=BindSplineInterfaces();
@@ -91,8 +93,18 @@ bool AShockArcActor::Connect(AActor* From, AActor* To)
 
 void AShockArcActor::UpdatePath()
 {
-	if (!FromActor.IsValid() || !ToActor.IsValid()) return;
-	const FVector From=Chest(FromActor.Get()),To=Chest(ToActor.Get());
+	// ---------- 端点快照：敌人致死/销毁后保留完整本拍电弧 ----------
+	if (!bFromFrozen)
+	{
+		if (Living(FromActor)) LastFromPoint=Chest(FromActor.Get());
+		else bFromFrozen=true;
+	}
+	if (!bToFrozen)
+	{
+		if (Living(ToActor)) LastToPoint=Chest(ToActor.Get());
+		else bToFrozen=true;
+	}
+	const FVector From=LastFromPoint,To=LastToPoint;
 	SetActorLocation((From+To)*.5f);
 	FVector Side=FVector::CrossProduct((To-From).GetSafeNormal(),FVector::UpVector).GetSafeNormal();
 	if (Side.IsNearlyZero()) Side=FVector::RightVector;
@@ -112,7 +124,6 @@ void AShockArcActor::UpdatePath()
 void AShockArcActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!Living(FromActor)||!Living(ToActor)) { Destroy(); return; }
 	if (GetWorld()->IsPaused()||UGameplayStatics::GetGlobalTimeDilation(this)<.01f) return;
 	Age+=DeltaSeconds; Remaining-=DeltaSeconds;
 	if (Remaining<=0.f) { Destroy(); return; }
@@ -129,8 +140,9 @@ FString AShockArcActor::DebugArcState() const
 	const FVector B=ArcPath->GetLocationAtSplinePoint(ArcPath->GetNumberOfSplinePoints()-1,ESplineCoordinateSpace::World);
 	FString Names;
 	for (const FName Name:BindingNames) { if (!Names.IsEmpty()) Names+=TEXT(";"); Names+=Name.ToString(); }
-	return FString::Printf(TEXT("{\"points\":%d,\"remaining\":%.4f,\"active\":%s,\"binding_ready\":%s,\"spline_di_count\":%d,\"user_bindings\":\"%s\",\"root_spline_fallback\":%s,\"start\":[%.3f,%.3f,%.3f],\"end\":[%.3f,%.3f,%.3f],\"start_error\":%.5f,\"end_error\":%.5f}"),
+	return FString::Printf(TEXT("{\"points\":%d,\"remaining\":%.4f,\"active\":%s,\"binding_ready\":%s,\"spline_di_count\":%d,\"user_bindings\":\"%s\",\"root_spline_fallback\":%s,\"start\":[%.3f,%.3f,%.3f],\"end\":[%.3f,%.3f,%.3f],\"start_error\":%.5f,\"end_error\":%.5f,\"from_frozen\":%s,\"to_frozen\":%s}"),
 		ArcPath->GetNumberOfSplinePoints(),Remaining,Lightning&&Lightning->IsActive()?TEXT("true"):TEXT("false"),bBindingReady?TEXT("true"):TEXT("false"),
 		SplineInterfaceCount,*Names,BindingNames.Num()==0?TEXT("true"):TEXT("false"),A.X,A.Y,A.Z,B.X,B.Y,B.Z,
-		FromActor.IsValid()?FVector::Dist(A,Chest(FromActor.Get())):-1.f,ToActor.IsValid()?FVector::Dist(B,Chest(ToActor.Get())):-1.f);
+		FVector::Dist(A,LastFromPoint),FVector::Dist(B,LastToPoint),
+		bFromFrozen?TEXT("true"):TEXT("false"),bToFrozen?TEXT("true"):TEXT("false"));
 }

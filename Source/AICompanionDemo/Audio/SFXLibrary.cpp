@@ -1,18 +1,21 @@
 /**
  * [INPUT]: 依赖 SFXLibrary.h 的槽位契约、Kismet/GameplayStatics 的 SpawnSound2D/SpawnSoundAtLocation、Engine/World、Engine/SoundAttenuation（运行时构造衰减——空间化语音零资产）
- * [OUTPUT]: PlaySFX/PlayVoice/TryPlayVoice共用槽位解析与拾取语音5秒冷却；TryPlayVoice真实创建组件才返回true，旧void入口兼容；玩家攻击解锁有独立槽，弱世界键隔离不同局
+ * [OUTPUT]: 全语音按世界FIFO，固定录音字幕同源；妖术师降调，BGM每世界幂等，潜地循环空间附属
  * [POS]: Audio/ 的音效基建实现文件，与 SFXLibrary.h 一体两面；业务文件只认两个静态入口，不感知本文件存在
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "Audio/SFXLibrary.h"
+#include "Audio/CompanionVoiceSubsystem.h"
 
 #include "AudioDevice.h"
 #include "Components/AudioComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
+#include "Sound/SoundWave.h"
 
 namespace
 {
@@ -54,6 +57,14 @@ namespace
 		case EGameSFX::Voice_BeaconActivate: Sound = Slots->Voice_BeaconActivate; Volume = Slots->Voice_BeaconActivateVolume; break;
 		case EGameSFX::Voice_BeaconRecall: Sound = Slots->Voice_BeaconRecall; Volume = Slots->Voice_BeaconRecallVolume; break;
 		case EGameSFX::Voice_PlayerAttackUnlock: Sound = Slots->Voice_PlayerAttackUnlock; Volume = Slots->Voice_PlayerAttackUnlock_Volume; break;
+		case EGameSFX::Voice_BeaconRepeat: Sound = Slots->Voice_BeaconRepeat; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::Voice_BossSummonerAppear: Sound = Slots->Voice_BossSummonerAppear; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::Voice_BossSummonerDefeated: Sound = Slots->Voice_BossSummonerDefeated; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::Voice_BossGolemAppear: Sound = Slots->Voice_BossGolemAppear; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::Voice_BossGolemDefeated: Sound = Slots->Voice_BossGolemDefeated; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::Voice_BossWurmAppear: Sound = Slots->Voice_BossWurmAppear; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::Voice_BossWurmDefeated: Sound = Slots->Voice_BossWurmDefeated; Volume = Slots->EventVoiceVolume; break;
+		case EGameSFX::WurmBurrowLoop: Sound = Slots->WurmBurrowLoop; Volume = Slots->WurmBurrowVolume; break;
 		case EGameSFX::Shot_Companion:   Sound = Slots->Shot_Companion;      Volume = Slots->Shot_CompanionVolume;    break;
 		case EGameSFX::Hit_Enemy:        Sound = Slots->Hit_Enemy;           Volume = Slots->Hit_EnemyVolume;         break;
 		case EGameSFX::EnemyDie:         Sound = Slots->EnemyDie;            Volume = Slots->EnemyDieVolume;          break;
@@ -134,7 +145,7 @@ namespace
 
 void USFXLibrary::PlaySFX(UWorld* World, EGameSFX Event)
 {
-	if (!World || (IsPickupVoice(Event) && PickupVoiceRemaining(World) > 0.f))
+	if (!World)
 	{
 		return;
 	}
@@ -151,10 +162,15 @@ void USFXLibrary::PlaySFX(UWorld* World, EGameSFX Event)
 
 	if (USoundBase* Loaded = Sound.LoadSynchronous())
 	{
-		if (Volume > 0.f && UGameplayStatics::SpawnSound2D(World, Loaded, Volume))
+		if (!GetVoiceLine(Event).IsEmpty())
 		{
-			CommitPickupVoice(World, Event);
+			if (UCompanionVoiceSubsystem* Queue = World->GetSubsystem<UCompanionVoiceSubsystem>())
+				if (Queue->Enqueue(Loaded, Event, Volume, FVector::ZeroVector, false)) CommitPickupVoice(World, Event);
+			return;
 		}
+		const float Pitch = Event == EGameSFX::WarlockBeamCharge ? Slots->WarlockBeamChargePitch
+			: Event == EGameSFX::WarlockBeamFire ? Slots->WarlockBeamFirePitch : 1.f;
+		if (Volume > 0.f) UGameplayStatics::SpawnSound2D(World, Loaded, Volume, Pitch);
 	}
 }
 
@@ -165,7 +181,7 @@ void USFXLibrary::PlayVoice(UWorld* World, EGameSFX Event, const FVector& Locati
 
 bool USFXLibrary::TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Location)
 {
-	if (!World || (IsPickupVoice(Event) && PickupVoiceRemaining(World) > 0.f))
+	if (!World || GetVoiceLine(Event).IsEmpty())
 	{
 		return false;
 	}
@@ -180,11 +196,13 @@ bool USFXLibrary::TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Loc
 
 	if (USoundBase* Loaded = Sound.LoadSynchronous())
 	{
-		if (Volume > 0.f && UGameplayStatics::SpawnSoundAtLocation(World, Loaded, Location, FRotator::ZeroRotator,
-			Volume, 1.f, 0.f, VoiceAttenuation(), nullptr, true))
+		if (UCompanionVoiceSubsystem* Queue = World->GetSubsystem<UCompanionVoiceSubsystem>())
 		{
-			CommitPickupVoice(World, Event);
-			return true;
+			if (Queue->Enqueue(Loaded, Event, Volume, Location, true))
+			{
+				CommitPickupVoice(World, Event);
+				return true;
+			}
 		}
 	}
 	return false;
@@ -197,21 +215,100 @@ float USFXLibrary::GetPickupVoiceCooldownRemaining(const UObject* WorldContextOb
 
 void USFXLibrary::PlayBGM(UWorld* World)
 {
-	// 循环起播（幂等：静态组件指针在播即跳过）；槽空静默
-	static TWeakObjectPtr<UAudioComponent> LiveBGM;
-	if (World && !LiveBGM.IsValid())
+	static TMap<TWeakObjectPtr<UWorld>, TWeakObjectPtr<UAudioComponent>> LiveBGM;
+	for (auto It = LiveBGM.CreateIterator(); It; ++It)
+		if (!It.Key().IsValid() || !It.Value().IsValid()) It.RemoveCurrent();
+	if (!World) return;
+	TWeakObjectPtr<UAudioComponent>& Live = LiveBGM.FindOrAdd(World);
+	if (Live.IsValid() && Live->IsPlaying()) return;
+	if (Live.IsValid()) { Live->DestroyComponent(); Live.Reset(); }
+	const USFXLibrary* Slots = GetDefault<USFXLibrary>();
+	if (USoundBase* Loaded = Slots->BGM_Track.LoadSynchronous())
 	{
-		const USFXLibrary* Slots = GetDefault<USFXLibrary>();
-		if (Slots->BGM_Track.ToSoftObjectPath().IsValid())
+		if (USoundWave* Track = Cast<USoundWave>(Loaded)) Track->bLooping = true;
+		if (UAudioComponent* Comp = UGameplayStatics::SpawnSound2D(World, Loaded, Slots->BGM_Volume))
 		{
-			if (USoundBase* Loaded = Slots->BGM_Track.LoadSynchronous())
-			{
-				if (UAudioComponent* Comp = UGameplayStatics::SpawnSound2D(World, Loaded, Slots->BGM_Volume))
-				{
-					Comp->bIsMusic = true;
-					LiveBGM = Comp;
-				}
-			}
+			Comp->bIsMusic = true;
+			Live = Comp;
 		}
+	}
+}
+
+UAudioComponent* USFXLibrary::StartWurmBurrowAudio(UWorld* World, USceneComponent* AttachTo)
+{
+	if (!World || !IsValid(AttachTo) || AttachTo->GetWorld() != World) return nullptr;
+	const USFXLibrary* Slots = GetDefault<USFXLibrary>();
+	USoundBase* Sound = Slots->WurmBurrowLoop.LoadSynchronous();
+	if (!Sound || Slots->WurmBurrowVolume <= 0.f) return nullptr;
+	if (USoundWave* Loop = Cast<USoundWave>(Sound)) Loop->bLooping = true;
+	return UGameplayStatics::SpawnSoundAttached(Sound, AttachTo, NAME_None, FVector::ZeroVector,
+		FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true, Slots->WurmBurrowVolume,
+		1.f, 0.f, VoiceAttenuation(), nullptr, false);
+}
+
+FName USFXLibrary::GetVoiceEventId(EGameSFX Event)
+{
+	if (GetVoiceLine(Event).IsEmpty()) return NAME_None;
+	return FName(*StaticEnum<EGameSFX>()->GetNameStringByValue(static_cast<int64>(Event)));
+}
+
+ERunEventKind USFXLibrary::GetVoiceKind(EGameSFX Event)
+{
+	if (Event == EGameSFX::Voice_PlayerAttackUnlock) return ERunEventKind::AttackUnlock;
+	if (Event == EGameSFX::Voice_BossSummonerAppear || Event == EGameSFX::Voice_BossGolemAppear
+		|| Event == EGameSFX::Voice_BossWurmAppear) return ERunEventKind::BossAppear;
+	if (Event == EGameSFX::Voice_BossSummonerDefeated || Event == EGameSFX::Voice_BossGolemDefeated
+		|| Event == EGameSFX::Voice_BossWurmDefeated) return ERunEventKind::BossDefeated;
+	return ERunEventKind::General;
+}
+
+FString USFXLibrary::GetVoiceLine(EGameSFX Event)
+{
+	switch (Event)
+	{
+	case EGameSFX::Voice_Discover: return TEXT("发现敌人，交给我！");
+	case EGameSFX::Voice_Kill: return TEXT("威胁已清除。");
+	case EGameSFX::Voice_Clear: return TEXT("威胁解除。");
+	case EGameSFX::Voice_PlayerHurt: return TEXT("放开我的伙伴！");
+	case EGameSFX::Voice_PlayerLow: return TEXT("你撑住，我顶上！");
+	case EGameSFX::Voice_ModeGuard: return TEXT("护卫协议，掩护优先。");
+	case EGameSFX::Voice_ModeBerserk: return TEXT("全部交给我！");
+	case EGameSFX::Voice_Magnet: return TEXT("磁暴展开，战利品都过来！");
+	case EGameSFX::Voice_Frenzy: return TEXT("火力全开，都交给我！");
+	case EGameSFX::Voice_Aegis: return TEXT("圣盾加身，五秒无敌！");
+	case EGameSFX::Voice_ChestOpen: return TEXT("补给开启。");
+	case EGameSFX::Voice_LockedChest: return TEXT("运气不错。");
+	case EGameSFX::Voice_Recovered: return TEXT("生命体征恢复，很好。");
+	case EGameSFX::Voice_TreasureKey: return TEXT("钥匙到手，找带锁的箱子。");
+	case EGameSFX::Voice_BeaconActivate: return TEXT("我一直在你身边。");
+	case EGameSFX::Voice_BeaconRecall: return TEXT("我从未离开过你");
+	case EGameSFX::Voice_PlayerAttackUnlock: return TEXT("看来你找回了一些自己的能力");
+	case EGameSFX::CardVoice_Blink: return TEXT("空间折叠，出发。");
+	case EGameSFX::CardVoice_Scatter: return TEXT("现在可以攻击到更多敌人了。");
+	case EGameSFX::CardVoice_Pierce: return TEXT("这一枪，谁也挡不住。");
+	case EGameSFX::CardVoice_Prism: return TEXT("光线会替我找到你。");
+	case EGameSFX::CardVoice_RapidFire: return TEXT("射速提升，火力压制。");
+	case EGameSFX::CardVoice_Heavy: return TEXT("每一发都更重了。");
+	case EGameSFX::CardVoice_Explosive: return TEXT("让我们来制造一些爆炸。");
+	case EGameSFX::CardVoice_Frost: return TEXT("把它们冻在原地。");
+	case EGameSFX::CardVoice_Radiance: return TEXT("光之领域，随我展开。");
+	case EGameSFX::CardVoice_BuddyHeal: return TEXT("靠近我，就能活下去。");
+	case EGameSFX::CardVoice_HealNova: return TEXT("治愈之力，亦可杀敌。");
+	case EGameSFX::CardVoice_GlassCannon: return TEXT("防御？我们不需要防御。");
+	case EGameSFX::CardVoice_BloodSacrifice: return TEXT("力量，总有代价。");
+	case EGameSFX::CardVoice_Vigor: return TEXT("结构强化完毕。");
+	case EGameSFX::CardVoice_SwiftMove: return TEXT("移动模块，提速。");
+	case EGameSFX::CardVoice_Barrage: return TEXT("弹幕覆盖，一个不留。");
+	case EGameSFX::CardVoice_BlinkBomb: return TEXT("落点，即是爆点。");
+	case EGameSFX::CardVoice_RadianceOverload: return TEXT("领域扩张至极限。");
+	case EGameSFX::CardVoice_RadianceBond: return TEXT("光域之内，皆受庇护。");
+	case EGameSFX::Voice_BeaconRepeat: return TEXT("我好像离你更近一些了。");
+	case EGameSFX::Voice_BossSummonerAppear: return TEXT("抓住他幽紫结界消散的时机！");
+	case EGameSFX::Voice_BossSummonerDefeated: return TEXT("结界碎了，召唤也结束了。");
+	case EGameSFX::Voice_BossGolemAppear: return TEXT("可别在他狂怒的时候接近。");
+	case EGameSFX::Voice_BossGolemDefeated: return TEXT("他的狂怒，到此为止。");
+	case EGameSFX::Voice_BossWurmAppear: return TEXT("这就是最后的挑战了吗？");
+	case EGameSFX::Voice_BossWurmDefeated: return TEXT("最后的挑战，也被我们跨过去了。");
+	default: return FString();
 	}
 }

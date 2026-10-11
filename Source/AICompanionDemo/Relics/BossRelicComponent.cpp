@@ -1,11 +1,12 @@
-﻿/**
+/**
  * [INPUT]: 本组件数据契约、ICombatant/Health、EnemyGrunt 普通减速与冰火残留、CompanionAIController 狂怒、
  *  BossOrb::LaunchFriendly、Vfx/SFX及Niagara组件回传、Engine Cone/BasicShapeMaterial、Character::LaunchCharacter。
- * [OUTPUT]: 九遗物实际结算；主攻与Nova共用受保护地刺实现，射线不触发主攻震爆/火爆；单层流血5s/0.5s3伤，狂暴HUD读真实Timer。
+ * [OUTPUT]: 九遗物结算；行走火球保留、闪烁落点三球持续追踪并直击30/邻敌20互斥；地刺50与5s/0.5s每跳10可刷新流血，狂暴HUD读真实Timer。
  * [POS]: Relics/运行时实现；仅敌人Health次生伤害，统一重入闸；死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "BossRelicComponent.h"
+#include "AICompanionDemo.h"
 #include "RelicBleedComponent.h"
 
 #include "AI/BossOrb.h"
@@ -25,6 +26,7 @@
 #include "Materials/MaterialInterface.h"
 #include "NiagaraComponent.h"
 #include "Templates/UnrealTemplate.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Vfx/VfxLibrary.h"
 
@@ -74,7 +76,7 @@ bool UBossRelicComponent::AcquireRelic(EBossRelicId Id)
 	if (Id == EBossRelicId::FlameWard) NextWardAt = Clock + FMath::Max(WardInterval, .1f);
 	if (Id == EBossRelicId::SeismicStrike) SeismicReadyAt = Clock + FMath::Max(SeismicInterval, .1f);
 	if (Id == EBossRelicId::MovingFireball) PreviousLocation = GetOwner()->GetActorLocation();
-	UE_LOG(LogTemp, Log, TEXT("[BossRelic] acquired=%s %s"), *RelicIdName(Id).ToString(), *DescribeRelic(Id));
+	UE_LOG(LogAICompanionDemo, Log, TEXT("[BossRelic] acquired=%s %s"), *RelicIdName(Id).ToString(), *DescribeRelic(Id));
 	return true;
 }
 
@@ -132,14 +134,59 @@ void UBossRelicComponent::SpawnMovingFireball()
 	if (ABossOrb* Orb = GetWorld()->SpawnActor<ABossOrb>(Origin, Direction.Rotation(), Params))
 	{
 		Orb->LaunchFriendly(Direction, FireballDamage, FireballRadius, GetOwner());
-		while (FriendlyOrbs.Num() >= 8)
+		RegisterFriendlyOrb(Orb);
+		UE_LOG(LogAICompanionDemo, Log, TEXT("[BossRelic] MovingFireball count=%d remainder=%.1f"), FireballsSpawned, TravelAccumulated);
+	}
+}
+
+void UBossRelicComponent::RegisterFriendlyOrb(ABossOrb* Orb)
+{
+	if (!IsValid(Orb)) return;
+	FriendlyOrbs.RemoveAll([](const TWeakObjectPtr<ABossOrb>& Existing) { return !Existing.IsValid(); });
+	while (FriendlyOrbs.Num() >= 8)
+	{
+		if (FriendlyOrbs[0].IsValid()) FriendlyOrbs[0]->Destroy();
+		FriendlyOrbs.RemoveAt(0);
+	}
+	FriendlyOrbs.Add(Orb);
+	++FireballsSpawned;
+}
+
+void UBossRelicComponent::SpawnBlinkFireballs(const FVector& Landing)
+{
+	TArray<AActor*> Enemies;
+	CollectAliveCombatants(GetWorld(), Enemies);
+	TArray<AActor*> Available = Enemies;
+	for (int32 Index = 0; Index < 3 && OwnerAlive(); ++Index)
+	{
+		if (Available.IsEmpty()) Available = Enemies;
+		AActor* Target = nullptr;
+		int32 TargetIndex = INDEX_NONE;
+		double BestDistance = TNumericLimits<double>::Max();
+		for (int32 CandidateIndex = 0; CandidateIndex < Available.Num(); ++CandidateIndex)
 		{
-			if (FriendlyOrbs[0].IsValid()) FriendlyOrbs[0]->Destroy();
-			FriendlyOrbs.RemoveAt(0);
+			AActor* Candidate = Available[CandidateIndex];
+			const ICombatant* Enemy = IsValid(Candidate) ? Cast<ICombatant>(Candidate) : nullptr;
+			if (!Enemy || Enemy->IsDead() || Candidate->IsActorBeingDestroyed() || !Enemy->GetHealthComponent()) continue;
+			const double Distance = FVector::DistSquared(Landing, Candidate->GetActorLocation());
+			if (Distance < BestDistance) { BestDistance = Distance; Target = Candidate; TargetIndex = CandidateIndex; }
 		}
-		FriendlyOrbs.Add(Orb);
-		++FireballsSpawned;
-		UE_LOG(LogTemp, Log, TEXT("[BossRelic] MovingFireball count=%d remainder=%.1f"), FireballsSpawned, TravelAccumulated);
+		if (TargetIndex != INDEX_NONE) Available.RemoveAtSwap(TargetIndex);
+		const float Angle = Index * 2.f * PI / 3.f;
+		const FVector Origin = Landing + FVector(FMath::Cos(Angle) * 100.f, FMath::Sin(Angle) * 100.f, 80.f);
+		const FVector Direction = Target ? (Target->GetActorLocation() - Origin).GetSafeNormal() : GetOwner()->GetActorForwardVector();
+		FActorSpawnParameters Params;
+		Params.Owner = GetOwner();
+		Params.Instigator = Cast<APawn>(GetOwner());
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (ABossOrb* Orb = GetWorld()->SpawnActor<ABossOrb>(Origin, Direction.Rotation(), Params))
+		{
+			Orb->LaunchFriendlyHoming(Target, FireballDamage, BlinkFireballSplashDamage, FireballRadius, GetOwner());
+			RegisterFriendlyOrb(Orb);
+			++BlinkFireballsSpawned;
+			UE_LOG(LogAICompanionDemo, Log, TEXT("[BossRelic] BlinkFireball spawned=%d target=%s direct=%.1f splash=%.1f"),
+				BlinkFireballsSpawned, *GetPathNameSafe(Target), FireballDamage, BlinkFireballSplashDamage);
+		}
 	}
 }
 
@@ -156,7 +203,7 @@ void UBossRelicComponent::ActivatePeriodicFrenzy()
 	if (bActivated)
 	{
 		++FrenzyActivations;
-		UE_LOG(LogTemp, Log, TEXT("[BossRelic] SpiritFrenzy count=%d duration=%.2f"), FrenzyActivations, FrenzyDuration);
+		UE_LOG(LogAICompanionDemo, Log, TEXT("[BossRelic] SpiritFrenzy count=%d duration=%.2f"), FrenzyActivations, FrenzyDuration);
 	}
 }
 
@@ -191,7 +238,7 @@ void UBossRelicComponent::TickPeriodic()
 		WardEndsAt = Start + FMath::Max(WardDuration, .1f);
 		NextWardDamageAt = Start + FMath::Max(WardDamageInterval, .1f);
 		++WardActivations;
-		UE_LOG(LogTemp, Log, TEXT("[BossRelic] FlameWard count=%d duration=%.2f"), WardActivations, WardDuration);
+		UE_LOG(LogAICompanionDemo, Log, TEXT("[BossRelic] FlameWard count=%d duration=%.2f"), WardActivations, WardDuration);
 		DamageWardTicks();
 	}
 	if (IsFlameWardActive())
@@ -407,10 +454,14 @@ void UBossRelicComponent::FireAreaDamage(const FVector& Center, float Radius, fl
 void UBossRelicComponent::NotifyBlink(const FVector& Start, const FVector& End)
 {
 	PreviousLocation = End; // 任意成功闪烁都排除于行走计数，是否持有火圈无关。
-	if (bProcessingEffect || !CanTrigger() || !HasRelic(EBossRelicId::BlinkPyre)) return;
+	if (bProcessingEffect || !CanTrigger()) return;
 	TGuardValue<bool> Guard(bProcessingEffect, true);
-	SpawnPyre(Start);
-	SpawnPyre(End);
+	if (HasRelic(EBossRelicId::MovingFireball)) SpawnBlinkFireballs(End);
+	if (HasRelic(EBossRelicId::BlinkPyre))
+	{
+		SpawnPyre(Start);
+		SpawnPyre(End);
+	}
 }
 
 void UBossRelicComponent::SpawnPyre(const FVector& Location)
@@ -548,6 +599,24 @@ void UBossRelicComponent::SpawnTrackedVfx(uint8 Kind, const FVector& Point, floa
 	}
 }
 
+void UBossRelicComponent::TrackTransientNiagara(UNiagaraComponent* Fx, float Life)
+{
+	if (!IsValid(Fx)) return;
+	if (!OwnerAlive()) { Fx->DestroyComponent(); return; }
+	TransientNiagaraVfx.RemoveAll([](const TWeakObjectPtr<UNiagaraComponent>& Existing) { return !Existing.IsValid(); });
+	TransientNiagaraVfx.AddUnique(Fx);
+	TWeakObjectPtr<UNiagaraComponent> WeakFx(Fx);
+	FTimerHandle LifeHandle;
+	GetWorld()->GetTimerManager().SetTimer(LifeHandle, [WeakFx]()
+	{
+		if (UNiagaraComponent* Component = WeakFx.Get())
+		{
+			Component->DeactivateImmediate();
+			if (IsValid(Component)) Component->DestroyComponent();
+		}
+	}, FMath::Max(Life, .01f), false);
+}
+
 void UBossRelicComponent::HandleOwnerDeath(UHealthComponent* Health)
 {
 	ClearRuntime();
@@ -583,7 +652,7 @@ FString UBossRelicComponent::DescribeRelic(EBossRelicId Id) const
 	{
 	case EBossRelicId::BloodLink: return FString::Printf(TEXT("队友距你 %.0f 米内时，直击实际伤害的 %.0f%% 恢复你的生命。"), BloodLinkRange / 100.f, BloodLinkHealingRatio * 100.f);
 	case EBossRelicId::SpiritFrenzy: return FString::Printf(TEXT("每 %.0f 秒使队友紫色狂暴 %.0f 秒；狂暴药剂持续时间增加 %.0f%%。"), FrenzyInterval, FrenzyDuration, (PotionFrenzyMultiplier - 1.f) * 100.f);
-	case EBossRelicId::MovingFireball: return FString::Printf(TEXT("累计行走 %.0f 米发射一颗同款爆炸火球；爆炸造成 %.0f 伤害，半径 %.1f 米。闪烁不计距离。"), FireballTravelDistance / 100.f, FireballDamage, FireballRadius / 100.f);
+	case EBossRelicId::MovingFireball: return FString::Printf(TEXT("累计行走 %.0f 米发射一颗爆炸火球，造成 %.0f 范围伤害；闪烁落点生成三颗追踪必中火球，直击 %.0f、周围 %.0f 伤害，二者不叠加。爆炸半径 %.1f 米；闪烁不计行走距离。"), FireballTravelDistance / 100.f, FireballDamage, FireballDamage, BlinkFireballSplashDamage, FireballRadius / 100.f);
 	case EBossRelicId::StoneSpikes: return FString::Printf(TEXT("主攻命中有 %.0f%% 概率唤出地刺，半径 %.1f 米造成 %.0f 伤害，并使存活敌人流血 %.0f 秒，每 %.1f 秒造成 %.0f 伤害；重复地刺刷新流血，不叠层。普通敌人速度降至 %.0f%%，持续 %.0f 秒。"), SpikeChance * 100.f, SpikeRadius / 100.f, SpikeDamage, SpikeBleedDuration, SpikeBleedInterval, SpikeBleedDamage, SpikeSpeedFactor * 100.f, SpikeSlowDuration);
 	case EBossRelicId::SeismicStrike: return FString::Printf(TEXT("每 %.0f 秒准备一次震爆；下一次主攻命中时，半径 %.1f 米造成 %.0f 伤害并击飞普通敌人。"), SeismicInterval, SeismicRadius / 100.f, SeismicDamage);
 	case EBossRelicId::StoneCarapace: return FString::Printf(TEXT("永久减伤 %.0f%%；实际受击时，对伤害来源敌人反伤 %.0f。"), CarapaceReduction * 100.f, ThornsDamage);
@@ -609,8 +678,8 @@ FString UBossRelicComponent::DebugState() const
 	int32 LiveActors = 0, LiveNiagara = 0;
 	for (const TWeakObjectPtr<AActor>& Fx : TransientVfx) if (Fx.IsValid()) ++LiveActors;
 	for (const TWeakObjectPtr<UNiagaraComponent>& Fx : TransientNiagaraVfx) if (Fx.IsValid()) ++LiveNiagara;
-	return FString::Printf(TEXT("{\"ownedIDs\":[%s],\"ownedMask\":%d,\"clock\":%.3f,\"stopped\":%s,\"distanceAccumulatedCm\":%.3f,\"fireballsSpawned\":%d,\"liveFireballs\":%d,\"liveTrackedVfx\":%d,\"liveTrackedVfxActors\":%d,\"liveTrackedVfxNiagara\":%d,\"frenzyActivations\":%d,\"frenzyDuration\":%.3f,\"potionDurationMultiplier\":%.3f,\"frenzyNextIn\":%.3f,\"frenzyActiveRemaining\":%.3f,\"wardActivations\":%d,\"wardActive\":%s,\"wardRemaining\":%.3f,\"wardDamageTicks\":%d,\"pyreCount\":%d,\"pyreDamageTicks\":%d,\"spikeActivations\":%d,\"liveSpikeMeshes\":%d,\"seismicActivations\":%d,\"seismicReadyIn\":%.3f,\"volcanicActivations\":%d,\"thornsActivations\":%d,\"meltReactions\":%d,\"latestBloodDamage\":%.3f,\"latestHealAttempted\":%.3f,\"latestHealActual\":%.3f}"),
-		*IDs, OwnedMask, Clock, bStopped ? TEXT("true") : TEXT("false"), TravelAccumulated, FireballsSpawned, LiveOrbs, LiveActors + LiveNiagara, LiveActors, LiveNiagara,
+	return FString::Printf(TEXT("{\"ownedIDs\":[%s],\"ownedMask\":%d,\"clock\":%.3f,\"stopped\":%s,\"distanceAccumulatedCm\":%.3f,\"fireballsSpawned\":%d,\"blinkFireballsSpawned\":%d,\"liveFireballs\":%d,\"liveTrackedVfx\":%d,\"liveTrackedVfxActors\":%d,\"liveTrackedVfxNiagara\":%d,\"frenzyActivations\":%d,\"frenzyDuration\":%.3f,\"potionDurationMultiplier\":%.3f,\"frenzyNextIn\":%.3f,\"frenzyActiveRemaining\":%.3f,\"wardActivations\":%d,\"wardActive\":%s,\"wardRemaining\":%.3f,\"wardDamageTicks\":%d,\"pyreCount\":%d,\"pyreDamageTicks\":%d,\"spikeActivations\":%d,\"liveSpikeMeshes\":%d,\"seismicActivations\":%d,\"seismicReadyIn\":%.3f,\"volcanicActivations\":%d,\"thornsActivations\":%d,\"meltReactions\":%d,\"latestBloodDamage\":%.3f,\"latestHealAttempted\":%.3f,\"latestHealActual\":%.3f}"),
+		*IDs, OwnedMask, Clock, bStopped ? TEXT("true") : TEXT("false"), TravelAccumulated, FireballsSpawned, BlinkFireballsSpawned, LiveOrbs, LiveActors + LiveNiagara, LiveActors, LiveNiagara,
 		FrenzyActivations, FrenzyDuration, GetPotionFrenzyDurationMultiplier(), GetSpiritFrenzyCooldownRemaining(), GetSpiritFrenzyActiveRemaining(),
 		WardActivations, IsFlameWardActive() ? TEXT("true") : TEXT("false"), FMath::Max(WardEndsAt - Clock, 0.), WardDamageTicks, Pyres.Num(), PyreDamageTicks,
 		SpikeActivations, Spikes.Num(), SeismicActivations, HasRelic(EBossRelicId::SeismicStrike) ? FMath::Max(SeismicReadyAt - Clock, 0.) : 0.,
