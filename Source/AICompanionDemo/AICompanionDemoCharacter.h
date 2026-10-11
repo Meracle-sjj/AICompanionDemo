@@ -4,7 +4,7 @@
  * [INPUT]: 依赖 Health/HealthComponent（玩家血量——敌人攻击与评分器"玩家安全"维度的数据基础）、Enhanced Input（移动/视角/跳跃）、SpringArm/Camera（第三人称相机装配）
  * [OUTPUT]: 对外提供 AAICompanionDemoCharacter 玩家抽象基类（UCLASS(abstract)，BP 子类现役）：相机装配 + Health 挂载 + 玩家侧能力全集——C1 闪烁（Shift 传送语义）、C 键紧急呼叫（信标拾取解锁）、持钥状态（锁箱开锁资格）、Lv.6 自动射击（**被动强化**：自动锁定最近活敌节拍开火，玩家只管走位）、**回响脉冲 2.0（10-07 蔓延领域重做：HandleHealApplied 订阅 OnHealApplied 治疗意图——辉耀结界(bHealNovaCountWhenFull)持有者满血治疗也计数；FireHealNova 启动 2s 蔓延态，绿球自玩家脚下展开至 7m、过程每0.1s对当时球内敌人1伤（10DPS不变）、卡帧按历史半径补拍，短命绿飘字/命中闪光；终点爆25伤+双层爆闪+冲击环+瞬时绿光+蠕虫撞地同款Explosion音——TickHealNova/NovaDamageRing/FinishHealNova状态机局部实现在AICompanionDemoCharacterHealNova.cpp）**、治疗反馈光效（绿飘字+脉冲圈+屏幕绿闪，0.6s 节流）与濒死恢复台词（<30% 挂旗回升穿 70% 喊话）、受击反馈 HandleHurt（镜头震动自持 + DamageFlash 脉冲）、闪现轰击融合回调、HUD 技能栏读数口（六件只读）
  *  同批契约：默认BossRelicComponent、主攻/真实受击/成功闪烁事件；闪烁5s、召回20s，首次信标与成功召回各自必须2D语音；战斗实现拆至CharacterCombat。
- *  猎印命中按ICombatant叠层，覆盖EnemyGrunt和BossBase家族；冰/电残留仍按EnemyGrunt契约处理。
+ *  猎印命中按ICombatant叠层，覆盖EnemyGrunt和BossBase家族；冰/电残留仍按EnemyGrunt契约处理。ApplyElementPayload可回传本次主伤害语义，Health据实际量统一反馈而不依赖被元素覆盖的弹色。
  *  Boss远景/震屏实现在CharacterWurmCamera：捕获实际弹簧臂基线，任意活Boss期间平滑1.6倍，虫0.55s强震/巨像较小短震；保留碰撞/控制旋转，暂停清偏移、死亡/Ending/EndPlay复原。
  * [POS]: 模块根的玩家载体，与 AI/CompanionCharacter（队友）平行、无继承关系；GameMode 生成玩家，敌人伤害经其 HealthComponent 进全项目唯一伤害口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -23,6 +23,7 @@ class UInputAction;
 class UHealthComponent;
 class UPointLightComponent;
 class AEnemyGrunt;
+enum class ECombatDamageKind : uint8;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -220,7 +221,7 @@ public:
 
 	/** 元素弹头挂载统一入口（09-30 用户裁决"三线继承元素"——弹道形态与元素弹头正交）：融化/冰霜/感电/印记
 	 *  全在此结算；普通弹路及Nova零伤状态挂载共用。减速也保留在融化/零伤挂载，返回融化等最终伤害 */
-	float ApplyElementPayload(AActor* VictimActor, float BaseDamage, FColor& InOutShotColor, const FVector& FxLocation);
+	float ApplyElementPayload(AActor* VictimActor, float BaseDamage, FColor& InOutShotColor, const FVector& FxLocation, ECombatDamageKind* OutDamageKind = nullptr);
 
 	/** 召回冷却（秒）：防无脑瞬移的节拍阀 */
 	UPROPERTY(EditAnywhere, Category = "Upgrade|Blink", meta = (ClampMin = "5.0"))

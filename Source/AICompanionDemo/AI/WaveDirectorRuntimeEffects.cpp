@@ -1,8 +1,8 @@
 /**
  * [INPUT]: 导演的地图/祭坛/首领奖励与领域治疗状态。
- * [OUTPUT]: 原运行效果及调度方法完整保留，原游戏时钟/伤害归属不变。
+ * [OUTPUT]: 原运行效果及调度方法完整保留，原游戏时钟/伤害归属不变；辉耀伤害显式提交类别与命中前落点，由Health发实际量/模式快照反馈。
  * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
- * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "WaveDirector.h"
 #include "Relics/BossRelicComponent.h"
@@ -222,7 +222,8 @@ void AWaveDirector::TickRadiance()
 			{
 				if (!Health->IsDead())
 				{
-					Health->ApplyDamage(static_cast<float>(RadianceDamagePerTick), /*Instigator*/ Companion);
+					Health->ApplyCombatDamage(static_cast<float>(RadianceDamagePerTick), /*Instigator*/ Companion,
+						{ECombatDamageKind::Radiance, Enemy->GetActorLocation() + FVector(0.f, 0.f, 70.f)});
 					// 灼烧残留（09-29 元素反应）：每拍刷新 1.5s 判定面——玩家冰弹命中残留体=融化（×2）
 					if (AEnemyGrunt* BurningGrunt = Cast<AEnemyGrunt>(Enemy))
 					{
@@ -232,10 +233,6 @@ void AWaveDirector::TickRadiance()
 					// 青绿色小火花在敌人胸口，每跳一闪：伤害来源的可视辨识（辉耀=青，激光=黄，爆射=品红）
 					DrawDebugSphere(GetWorld(), Enemy->GetActorLocation() + FVector(0.f, 0.f, 40.f),
 						7.f, 6, FColor::Turquoise, false, 0.35f, 0, 1.f);
-					// 灼烧飘字（09-24 用户点名"辉耀伤害没跳数字"）：青色小字——持续伤害可读，
-					// 与直击黄/折射银/溅射橙同属"来源分色"语言
-					DrawDebugString(GetWorld(), Enemy->GetActorLocation() + FVector(0.f, 0.f, 70.f),
-						FString::Printf(TEXT("-%d"), RadianceDamagePerTick), nullptr, FColor::Turquoise, 0.45f, false, 0.8f);
 				}
 			}
 		}

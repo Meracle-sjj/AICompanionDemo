@@ -1,6 +1,6 @@
 # 资源来源与分发说明
 
-本文对应 v1.3.1；本轮新声音与原 BGM 已核实进入完整 Windows 玩家包，下载入口见[Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)。作品包含素材复用、AI 辅助生成与程序制作，保留相应权利归属。本轮新增原创数学合成的短铡刀音与新版低频碎岩循环、四条沿原参考录音生成的豆包固定配音，以及代码矢量图标；原 BGM 继续沿用作者此前明确的分发确认。
+本文对应当前版本 v1.3.2：完整 Windows 构建、限定专项与两次独立启动／正常退出通过，新妖术师两条短声与原 BGM 已核对实际资源收录。下载入口为 [v1.3.2 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.2)。作品包含素材复用、AI 辅助生成与程序制作，保留相应权利归属。v1.3.2 新增两条原创数学合成 PCM 与八族代码矢量伤害图样，未新增外部音频采样、图标或字体资源；原 BGM 继续沿用作者此前明确的分发确认，人耳听感另验。本轮预期见 [GitHub #5](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)。
 
 ## 主要来源
 
@@ -13,9 +13,9 @@
 | Niagara 火／爆炸／电特效包 | `Fire_EXP_Vol01_Free`、`_SplineVFX`；工程另保留 `F_FreeFlameFx_Pack` | [火与爆炸候选官方页](https://www.fab.com/listings/2adf4e4e-5f1d-4543-9e8c-192fe3c9a8ed)、[Spline VFX 官方页](https://www.fab.com/listings/2b923e61-b02d-4cc9-bd0b-b067c9e6056e)；准确来源对应与取得时许可待补，保留目录不代表全部进入成品 |
 | Kenney 音效 | 拾取与 UI 声音，来自 [Impact Sounds](https://kenney.nl/assets/impact-sounds)、[RPG Audio](https://kenney.nl/assets/rpg-audio)、[Interface Sounds](https://kenney.nl/assets/interface-sounds) | 官方页标注 CC0 |
 | qubodup · Explosive.flac | Boss 爆炸音效，[原上传页](https://freesound.org/people/qubodup/sounds/189778/) | 页面标注 CC0；使用 HQ MP3 预览转码，并裁剪为首爆采样 |
-| 程序音效与几何 | 数学波形／噪声音效，沙漠砂岩和蠕虫几何；v1.3.1 新增短铡刀音与新版低频碎岩循环 | 两条新声由固定种子、带限噪声及撞击／正弦波形原创合成，不使用第三方音频采样；材质引用的第三方纹理仍适用原许可 |
+| 程序音效与几何 | 数学波形／噪声音效，沙漠砂岩和蠕虫几何；v1.3.1 短铡刀音与低频碎岩循环，v1.3.2 妖术师蓄力／发射两条短 PCM | 由数学波形和噪声原创合成，不使用第三方音频采样；本轮两声不是新 TTS 或外部下载音频，人耳听感另验。材质引用的第三方纹理仍适用原许可 |
 | 初始箱光晕与光点 | 原创局部 UV 代码公式生成环晕与星光材质，组件参数设为柔和紫色 | 沿用原创美术实现，宝箱原模型来源不变；没有为本项新增外部图片、贴图、模型或音频 |
-| 宝箱与数值反馈图标 | FREE! 标记、锁／钥匙、金币／刀图标由项目代码绘制，字体使用引擎默认粗体 | 本轮未下载额外图标或字体资产；矢量表现不改变宝箱模型、引擎字体或其他素材的来源 |
+| 宝箱与数值反馈图标 | FREE!、锁／钥匙、金币及伤害图样由项目代码绘制；v1.3.2 使用八族原创伤害矢量，字体沿用引擎默认粗体 | 未下载额外图标、图片或字体资产；矢量表现不改变宝箱模型、引擎字体或其他素材的来源 |
 | AI 辅助插画 | 升级、Boss 遗物、开始页与结束页插画 | AI 辅助生成／编辑，属于插画；与实际游戏画面、人工手绘及 Epic 模型分别说明 |
 | 豆包 seed-audio-1.0 | 队友固定台词与预合成语音，[官方产品说明](https://docs.volcengine.com/docs/DoubaoVoice/ProductOverview-9?lang=zh) | v1.3.1 新增折射一句与成功前三箱三句，沿用原队友角色录音作为生成参考；字幕按实际新录音路由，不宣称已通过人耳同人确认。游戏运行不调用 TTS；账户适用的专用条款与输出分发凭证仍按既有记录保留，参见[产品与服务协议](https://docs.volcengine.com/docs/Legalagreements/Productsandservicesagreement?lang=zh) |
 

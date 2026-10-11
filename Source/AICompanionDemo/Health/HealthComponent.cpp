@@ -1,19 +1,21 @@
 /**
- * [INPUT]: 依赖本模块 HealthComponent.h 的契约、Engine 的 TimerManager（圣盾定时）、本模块 AICompanionDemo.h 的 LogAICompanionDemo（E5 圣盾留痕）
+ * [INPUT]: HealthComponent/CombatDamageFeedback、真实AI归属与遗物减伤、既有UI/CombatFeedbackSubsystem、圣盾Timer。
  * [OUTPUT]: 对外提供 UHealthComponent 的实现——伤害/治疗钳制与三委托广播时序（先受击带凶手 → 血量事件 → 死亡事件；Heal 只走血量事件且死者无效）；E5 增补圣盾无敌（ApplyDamage 全额早退 + 定时自恢复）；LastDamageTaken 快照（09-30 受击阈值入口数据源）
  *  玩家遗物减伤在扣血/致死判定前统一乘算，LastDamageTaken保存实际扣血供反伤；无敌早退不触发遗物反伤。
  *  Q歼灭模式对实际AI来源伤害统一乘当前模式系数；护卫模式仅增强玩家收到的治疗，钳制与治疗意图均使用增强后的值。
- * [POS]: Health/ 的实现文件；被敌人、Boss与玩家挂载，是全项目伤害链路的唯一真源；现役队友未挂载Health
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ * [POS]: Health唯一生命结算；扣血后先复制落点/模式/实际量，再沿原委托与死亡时序推进，反馈不参与账本。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "HealthComponent.h"
 
 #include "AICompanionDemo.h"
 #include "AI/CompanionAIController.h"
+#include "AI/Combatant.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Relics/BossRelicComponent.h"
+#include "UI/CombatFeedbackSubsystem.h"
 
 namespace
 {
@@ -30,6 +32,21 @@ namespace
 			Source = Source->GetOwner();
 		}
 		return nullptr;
+	}
+
+	ECombatDamageSource ResolveFeedbackSource(AActor* Source, const ACompanionAIController* Companion, const AActor* Player)
+	{
+		if (Companion)
+			return Companion->CurrentMode == ECompanionMode::Berserk
+				? ECombatDamageSource::CompanionBerserk : ECombatDamageSource::CompanionGuard;
+		for (int32 Depth = 0; IsValid(Source) && Depth < 8; ++Depth)
+		{
+			if (Player && Source == Player) return ECombatDamageSource::Player;
+			if (Cast<ICombatant>(Source)) return ECombatDamageSource::Hostile;
+			if (Player && Source->GetInstigator() == Player) return ECombatDamageSource::Player;
+			Source = Source->GetOwner();
+		}
+		return ECombatDamageSource::Unknown;
 	}
 }
 
@@ -56,6 +73,12 @@ void UHealthComponent::SetMaxHealth(const float NewMax, const bool bFillCurrent)
 
 void UHealthComponent::ApplyDamage(float Damage, AActor* Instigator)
 {
+	const FVector Location = GetOwner() ? GetOwner()->GetActorLocation() + FVector(0.f, 0.f, 90.f) : FVector::ZeroVector;
+	ApplyCombatDamage(Damage, Instigator, {ECombatDamageKind::Generic, Location});
+}
+
+void UHealthComponent::ApplyCombatDamage(float Damage, AActor* Instigator, const FCombatDamageContext& Context)
+{
 	if (bDead || Damage <= 0.f)
 	{
 		return;
@@ -69,7 +92,9 @@ void UHealthComponent::ApplyDamage(float Damage, AActor* Instigator)
 	}
 
 	const float OldHealth = CurrentHealth;
-	if (const ACompanionAIController* Controller = ResolveDamageCompanion(Instigator))
+	const ACompanionAIController* Controller = ResolveDamageCompanion(Instigator);
+	const ECombatDamageSource SourceSnapshot = ResolveFeedbackSource(Instigator, Controller, UGameplayStatics::GetPlayerPawn(this, 0));
+	if (Controller)
 		Damage *= Controller->GetModeDamageMultiplier();
 	if (const UBossRelicComponent* Relics = GetOwner()->FindComponentByClass<UBossRelicComponent>())
 	{ Damage = Relics->ModifyIncomingDamage(Damage); }
@@ -82,6 +107,8 @@ void UHealthComponent::ApplyDamage(float Damage, AActor* Instigator)
 	// 回血抵消）在 OnHealthChanged 广播期间 Heal 把血拉回——判定读到回血后的正数，死亡被静默吃掉。
 	// 本次伤害致死与否在钳制后即成事实，不受订阅方反应篡改
 	const bool bLethal = CurrentHealth <= 0.f;
+	// 位置与实际量在同步反伤/治疗/死亡回调之前成为值快照；UI不再读取会被回调改变的血量或模式。
+	UCombatFeedbackSubsystem::ShowDamage(GetWorld(), Context, -Delta, SourceSnapshot);
 	OnDamaged.Broadcast(this, Instigator);
 	OnHealthChanged.Broadcast(this, CurrentHealth, Delta);
 

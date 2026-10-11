@@ -1,7 +1,7 @@
 /**
  * [INPUT]: RelicBleedComponent契约、活ICombatant血量、ParagonGrux真实血滴及游戏暂停状态。
  * [OUTPUT]: 可刷新流血由遗物真实参数传入，v1.3默认5s/0.5s每跳10；最多8份短命血滴，真实扣血/拍数/剩余时间只读验收。
- * [POS]: 地刺次生伤害只调用Health.ApplyDamage；不调用NotifyPrimaryAttack或元素/猎印链。
+ * [POS]: 地刺次生伤害只向Health提交流血语义和致死前落点，由统一账本发实际量；不调用NotifyPrimaryAttack或元素/猎印链。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "RelicBleedComponent.h"
@@ -80,15 +80,13 @@ void URelicBleedComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 	{
 		Accumulated = FMath::Max(Accumulated - TickInterval, 0.f);
 		const float Before = TargetHealth->GetCurrentHealth();
-		TargetHealth->ApplyDamage(DamagePerTick, DamageSource.Get());
+		TargetHealth->ApplyCombatDamage(DamagePerTick, DamageSource.Get(), {ECombatDamageKind::Bleed, GetOwner()->GetActorLocation() + FVector(0, 0, 115)});
 		const float Applied = FMath::Max(Before - TargetHealth->GetCurrentHealth(), 0.f);
 		++DamageTicks;
 		TotalDamage += Applied;
 		if (Applied > 0.f && bActive)
 		{
 			SpawnBlood();
-			DrawDebugString(GetWorld(), GetOwner()->GetActorLocation() + FVector(0, 0, 115),
-				FString::Printf(TEXT("流血 -%.0f"), Applied), nullptr, FColor(235, 30, 65), .45f, true, 1.15f);
 		}
 	}
 	if (Remaining <= 0.f) StopBleeding();

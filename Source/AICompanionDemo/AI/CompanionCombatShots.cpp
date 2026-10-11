@@ -1,6 +1,6 @@
 ﻿/** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口、感电显示与UI/CombatFeedbackSubsystem处决反馈。
- * [OUTPUT]: FireShot和真实处决刀图标/实际伤害大数；感电0.5秒互斥配对/减半/5秒不消费，AI穿透折射互斥，Nova继承玩家状态。
- * [POS]: Companion火力局部实现；模式被动只由Health乘算，本文件提交原始伤害。
+ * [OUTPUT]: FireShot、溅射、处决、折射和感电的明确伤害语义；感电0.5秒互斥配对/减半/5秒不消费，AI穿透折射互斥，Nova继承玩家状态。
+ * [POS]: Companion火力局部实现；本文件提交原始伤害、落点和处决层数，Health只乘一次模式并统一发漫画反馈。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AI/CompanionAIController.h"
 #include "AI/Combatant.h"
@@ -16,7 +16,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Relics/BossRelicComponent.h"
 #include "Vfx/ShockArcActor.h"
-#include "UI/CombatFeedbackSubsystem.h"
 
 // ---------- 命中链（09-24 弹道融合） ----------
 
@@ -42,13 +41,8 @@ void ACompanionAIController::ApplyHitChain(AActor* DirectVictim, UHealthComponen
 				if (UHealthComponent* BlastHealth = Cast<ICombatant>(BlastVictim)->GetHealthComponent())
 				{
 					const float BlastDmg = AttackDamage * ChainScale * ExplosionDamageScale;
-					const float BeforeBlastHealth = BlastHealth->GetCurrentHealth();
-					BlastHealth->ApplyDamage(BlastDmg, InstigatorPawn);
-					if (!IsValid(BlastHealth) || !IsValid(BlastVictim)) continue;
-					const float ActualBlastDamage = FMath::Max(BeforeBlastHealth - BlastHealth->GetCurrentHealth(), 0.f);
-					// 伤害飘字：溅射橙色小字（区别于直击黄字）
-					DrawDebugString(GetWorld(), BlastVictim->GetActorLocation() + FVector(0.f, 0.f, 90.f),
-						FString::Printf(TEXT("-%.1f"), ActualBlastDamage), nullptr, FColor::Orange, 0.5f, false, 0.9f);
+					BlastHealth->ApplyCombatDamage(BlastDmg, InstigatorPawn,
+						{ECombatDamageKind::Explosion, BlastVictim->GetActorLocation() + FVector(0.f, 0.f, 90.f)});
 				}
 			}
 		}
@@ -77,10 +71,9 @@ void ACompanionAIController::ApplyHitChain(AActor* DirectVictim, UHealthComponen
 			if (IsValid(DirectHealth))
 			{
 				const float BeforeExecHealth = DirectHealth->GetCurrentHealth();
-				DirectHealth->ApplyDamage(ExecDmg, InstigatorPawn);
+				DirectHealth->ApplyCombatDamage(ExecDmg, InstigatorPawn, {ECombatDamageKind::Execute, ChainPoint + FVector(0.f, 0.f, 60.f), Marks});
 				if (IsValid(DirectHealth)) ActualExecDamage = FMath::Max(BeforeExecHealth - DirectHealth->GetCurrentHealth(), 0.f);
 			}
-			UCombatFeedbackSubsystem::ShowExecute(GetWorld(), ChainPoint + FVector(0.f, 0.f, 60.f), ActualExecDamage, Marks);
 			DrawDebugSphere(GetWorld(), ChainPoint, 40.f, 10, FColor::FromHex(TEXT("FFD24D")), false, 0.25f, 0, 2.f);
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[Element] 处决结算：印记×%d 额外 %.1f 伤 → %s"),
 				Marks, ActualExecDamage, *GetNameSafe(DirectVictim));
@@ -195,12 +188,12 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 		if (!IsValid(Health)) continue;
 		const float BeforeShotHealth = Health->GetCurrentHealth();
 		const float ShotModeMultiplier = GetModeDamageMultiplier();
-		Health->ApplyDamage(AttackDamage * Scale, InstigatorPawn);
+		Health->ApplyCombatDamage(AttackDamage * Scale, InstigatorPawn, {ECombatDamageKind::Projectile, HitPoint + FVector(0.f, 0.f, 28.f)});
 		if (!IsValid(Health)||!IsValid(Victim)) continue;
 		const float ActualShotDamage = FMath::Max(BeforeShotHealth - Health->GetCurrentHealth(), 0.f);
 		LastShotRawDamage = AttackDamage * Scale;
 		LastShotActualDamage = ActualShotDamage;
-		LastShotDisplayedDamage = FMath::RoundToFloat(ActualShotDamage * 10.f) / 10.f;
+		LastShotDisplayedDamage = FMath::RoundToFloat(ActualShotDamage * 100.f) / 100.f;
 		LastShotModeMultiplier = ShotModeMultiplier;
 		LastShotVictim = Victim;
 		if (const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0))
@@ -211,11 +204,6 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 		USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Hit_Enemy);   // [SFX] 命中
 		BeamEnd = bPierceUnlocked ? End : HitPoint;
 		++PiercedCount;
-
-		// 伤害飘字（09-22 G5，用户点名"一定要加"）：命中点上方 -N——输出看得见；首目标黄大字，穿透后续银小字
-		DrawDebugString(GetWorld(), HitPoint + FVector(0.f, 0.f, 28.f),
-			FString::Printf(TEXT("-%.1f"), ActualShotDamage), nullptr,
-			bIsFirst ? FColor::Yellow : FColor::Silver, 0.6f, false, bIsFirst ? 1.3f : 1.0f);
 
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Combat] %s命中 %s，伤害 %.1f，余血 %.1f"),
 			bPierceUnlocked && !bIsFirst ? TEXT("穿透") : TEXT(""),
@@ -267,7 +255,7 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 				{
 					if (!IsValid(NextHealth)) break;
 					const float BeforeBounceHealth = NextHealth->GetCurrentHealth();
-					NextHealth->ApplyDamage(AttackDamage * BounceScale, InstigatorPawn);
+					NextHealth->ApplyCombatDamage(AttackDamage * BounceScale, InstigatorPawn, {ECombatDamageKind::Ricochet, NextChest + FVector(0.f, 0.f, 22.f)});
 					if (!IsValid(NextHealth)||!IsValid(Next)) break;
 					const float ActualBounceDamage = FMath::Max(BeforeBounceHealth - NextHealth->GetCurrentHealth(), 0.f);
 					if (const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0))
@@ -276,9 +264,6 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 						{ Relics->NotifyCompanionHit(InstigatorPawn, ActualBounceDamage); }
 					}
 					DrawDebugSphere(GetWorld(), NextChest, 9.f, 8, FColor::Magenta, false, 0.12f, 0, 1.2f);
-					// 伤害飘字：折射跳银小字（来源与主命中黄字分色）
-					DrawDebugString(GetWorld(), NextChest + FVector(0.f, 0.f, 22.f),
-						FString::Printf(TEXT("-%.1f"), ActualBounceDamage), nullptr, FColor::Silver, 0.6f, false, 1.0f);
 					// 命中链：弹到的目标同样吃溅射+寒霜（链不递归——溅射伤害不二次引爆）
 					ApplyHitChain(Next, NextHealth, NextChest, BounceScale, InstigatorPawn);
 					if (ElementHits && IsValid(Next)) ElementHits->FindOrAdd(TWeakObjectPtr<AActor>(Next)) = NextChest;
@@ -370,19 +355,16 @@ void ACompanionAIController::TickShockConduction(float DeltaSeconds)
 		if (Ready(WeakSource)&&SourceHealth.IsValid())
 		{
 			const float Before=SourceHealth->GetCurrentHealth();
-			SourceHealth->ApplyDamage(RawDamage,GetPawn());
+			SourceHealth->ApplyCombatDamage(RawDamage,GetPawn(),{ECombatDamageKind::Shock,SourcePoint+FVector(0,0,65)});
 			if (SourceHealth.IsValid()) ActualSource=FMath::Max(Before-SourceHealth->GetCurrentHealth(),0.f);
 		}
 		// Health广播可能改变其他目标状态，第二端及后续配对逐个复验弱引用与免伤。
 		if (Ready(WeakDestination)&&DestinationHealth.IsValid()&&IsValid(GetPawn()))
 		{
 			const float Before=DestinationHealth->GetCurrentHealth();
-			DestinationHealth->ApplyDamage(RawDamage,GetPawn());
+			DestinationHealth->ApplyCombatDamage(RawDamage,GetPawn(),{ECombatDamageKind::Shock,DestinationPoint+FVector(0,0,65)});
 			if (DestinationHealth.IsValid()) ActualDestination=FMath::Max(Before-DestinationHealth->GetCurrentHealth(),0.f);
 		}
-		const FColor Color=FColor::FromHex(TEXT("9BD7FF"));
-		DrawDebugString(World,SourcePoint+FVector(0,0,65),FString::Printf(TEXT("感电 -%.1f"),ActualSource),nullptr,Color,.45f,false,1.f);
-		DrawDebugString(World,DestinationPoint+FVector(0,0,65),FString::Printf(TEXT("感电 -%.1f"),ActualDestination),nullptr,Color,.45f,false,1.f);
 		UE_LOG(LogAICompanionDemo,Log,TEXT("[Element] 持续感电 pair=%s/%s raw=%.3f 两端actual=%.3f/%.3f"),
 			*GetNameSafe(WeakSource.Get()),*GetNameSafe(WeakDestination.Get()),RawDamage,ActualSource,ActualDestination);
 	}

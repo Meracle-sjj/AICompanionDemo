@@ -1,5 +1,5 @@
 ﻿/** [INPUT]: 玩家自动射击、ICombatant活敌、元素残留与遗物主攻回调。
- * [OUTPUT]: 玩家感电赠叉从枪口按15度散射（已有散射时30度），独立于折射；5秒挂电、整发去重且分支不递归，遗物主攻仅一次。
+ * [OUTPUT]: 玩家感电赠叉从枪口按15度散射（已有散射时30度），独立于折射；5秒挂电、整发去重且分支不递归，遗物主攻仅一次；弹丸/折射/冰/融化语义交Health实际量入口，不自行发伤害数字。
  * [POS]: 玩家战斗局部实现，与输入/生命周期分离。 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AICompanionDemoCharacter.h"
 #include "AICompanionDemo.h"
@@ -56,26 +56,22 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 	TWeakObjectPtr<AActor> Primary;
 	if (DirectHits.Num()) Primary = DirectHits[0].Victim;
 	const FVector PrimaryPoint = DirectHits.Num() ? DirectHits[0].Point : BeamEnd;
-	const auto DealHit = [this, &PayloadTargets](AActor* Actor, const FVector& Point, float Damage, FColor& Color)
+	const auto DealHit = [this, &PayloadTargets](AActor* Actor, const FVector& Point, float Damage, FColor& Color, ECombatDamageKind Kind)
 	{
 		if (!IsValid(Actor) || PayloadTargets.Contains(Actor)) return false;
 		ICombatant* Combatant = Cast<ICombatant>(Actor);
 		UHealthComponent* VictimHealth = Combatant ? Combatant->GetHealthComponent() : nullptr;
 		if (!Combatant || Combatant->IsDead() || !IsValid(VictimHealth)) return false;
 		PayloadTargets.Add(Actor); // 同一发的主弹/侧弹/贯穿/单跳只算一次元素及伤害。
-		const FVector TextPoint = Point + FVector(0, 0, 30);
-		const float FinalDamage = ApplyElementPayload(Actor, Damage, Color, Point);
-		const float Before = VictimHealth->GetCurrentHealth();
-		VictimHealth->ApplyDamage(FinalDamage, this);
-		const float Actual = IsValid(VictimHealth) ? FMath::Max(Before - VictimHealth->GetCurrentHealth(), 0.f) : 0.f;
-		DrawDebugString(GetWorld(), TextPoint, FString::Printf(TEXT("-%.1f"), Actual), nullptr, Color, .6f, false, 1.f);
+		const float FinalDamage = ApplyElementPayload(Actor, Damage, Color, Point, &Kind);
+		VictimHealth->ApplyCombatDamage(FinalDamage, this, {Kind, Point + FVector(0, 0, 30)});
 		return true;
 	};
 	FColor ShotColor = FColor::White;
 	for (const FDirectHit& Hit : DirectHits)
 	{
 		FColor Color = FColor::White;
-		if (DealHit(Hit.Victim.Get(), Hit.Point, PlayerShotDamage, Color))
+		if (DealHit(Hit.Victim.Get(), Hit.Point, PlayerShotDamage, Color, ECombatDamageKind::Projectile))
 		{
 			ShotColor = Color;
 			USFXLibrary::PlaySFX(GetWorld(), EGameSFX::Hit_Enemy);
@@ -92,7 +88,7 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 			const bool Hit = GetWorld()->SweepSingleByChannel(SideHit, Start, SideEnd, FQuat::Identity,
 				ECC_Visibility, FCollisionShape::MakeSphere(12.f), SideParams);
 			FColor Color = FColor::White;
-			if (Hit) DealHit(SideHit.GetActor(), SideHit.ImpactPoint, PlayerShotDamage * .7f, Color);
+			if (Hit) DealHit(SideHit.GetActor(), SideHit.ImpactPoint, PlayerShotDamage * .7f, Color, ECombatDamageKind::Projectile);
 			DrawDebugLine(GetWorld(), Start, Hit ? SideHit.ImpactPoint : SideEnd, Color, false, .1f, 0, 1.5f);
 		}
 	}
@@ -108,7 +104,7 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 			ECC_Visibility, FCollisionShape::MakeSphere(12.f), ForkParams);
 		FColor ForkColor = FColor::FromHex(TEXT("C9A6FF"));
 		if (bForkHit) DealHit(ForkHit.GetActor(), ForkHit.ImpactPoint,
-			PlayerShotDamage * FMath::Clamp(PlayerPrismScale, .1f, 1.f), ForkColor);
+			PlayerShotDamage * FMath::Clamp(PlayerPrismScale, .1f, 1.f), ForkColor, ECombatDamageKind::Projectile);
 		DrawDebugLine(GetWorld(), Start, bForkHit ? ForkHit.ImpactPoint : ForkEnd, ForkColor, false, .18f, 0, 2.5f);
 	}
 	// 玩家折射仍独立允许穿透协同，每个穿透主单位各产生一次非递归单跳。
@@ -131,7 +127,7 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 			if (!Next) continue;
 			const FVector Point = Next->GetActorLocation() + FVector(0, 0, 40);
 			FColor Color = bShockShotUnlocked ? FColor::FromHex(TEXT("C9A6FF")) : FColor::Magenta;
-			if (DealHit(Next, Point, PlayerShotDamage * FMath::Clamp(PlayerPrismScale, .1f, 1.f), Color))
+			if (DealHit(Next, Point, PlayerShotDamage * FMath::Clamp(PlayerPrismScale, .1f, 1.f), Color, ECombatDamageKind::Ricochet))
 				DrawDebugLine(GetWorld(), RootHit.SourceCenter + FVector(0, 0, 40), Point, Color, false, .18f, 0, 2.f);
 		}
 	}
@@ -139,7 +135,7 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 		if (UBossRelicComponent* Relics = FindComponentByClass<UBossRelicComponent>())
 			Relics->NotifyPrimaryAttack(this, Primary.Get(), PrimaryPoint);
 }
-float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float BaseDamage, FColor& InOutShotColor, const FVector& FxLocation)
+float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float BaseDamage, FColor& InOutShotColor, const FVector& FxLocation, ECombatDamageKind* OutDamageKind)
 {
 	// 元素弹头挂载统一入口（09-30 用户裁决"三线继承元素"——弹道形态与元素弹头正交）：主弹/散射侧弹/
 	// 穿透走廊/折射跳四条命中路径全经此——融化/冰霜/感电/印记一处结算
@@ -161,12 +157,14 @@ float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float 
 	// 冰来源始终刷新独立残留；已燃烧的目标仍可让随后火盾/火圈主动融化。
 	if (bFrostShotUnlocked)
 	{
+		if (OutDamageKind) *OutDamageKind = ECombatDamageKind::Frost;
 		GruntVictim->RefreshFrostResidue(FrostSlowSeconds);
 		GruntVictim->ApplySlow(FrostSlowSeconds, FrostSlowFactor); // Nova零伤挂载与融化命中也保留当前减速。
 	}
 	const bool bMelt = BaseDamage > 0.f && bFrostShotUnlocked && GruntVictim->GetBurnResidue() > 0.f;
 	if (bMelt)
 	{
+		if (OutDamageKind) *OutDamageKind = ECombatDamageKind::Melt;
 		FinalDamage *= 2.f;
 		InOutShotColor = FColor::FromHex(TEXT("9BD7FF"));
 		UVfxLibrary::SpawnVfx(GetWorld(), EVfx::Fire, FxLocation, 0.5f, 0.7f);   // [VFX] 融化火焰

@@ -3,7 +3,8 @@
  * [OUTPUT]: 有纹理落火、Boss自有不随身移动的火区Niagara与0.4s落地爆闪；自然/上限/死亡/EndPlay同步停发并销毁组件，未完成的火花不留给AutoDestroy。
  *  有效杂兵死亡默认35伤，潜地/暂停累计至真实易伤后结算；DebugHazardState分别回读火焰与爆闪组件。
  * [POS]: 蠕虫局部实现；状态机仍归BossWurm，所有伤害经Health，不绕过免伤、不另造计时源。
- * [PROTOCOL]: 变更时同步模块AGENTS和实际验收记录。
+ *  火区灼烧与清杂反馈显式区分类别/受击前落点，由Health提交实际量；不另发原始伤害数字。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "AI/BossWurm.h"
 #include "AI/BossBase.h"
@@ -205,7 +206,7 @@ void ABossWurm::TickFireZones(float DeltaSeconds)
 			Zone.BurnCd = .5f;
 			if (Health && Player && FVector::Dist2D(Player->GetActorLocation(), Zone.Pos) <= FireZoneRadius)
 			{
-				Health->ApplyDamage(FireZoneBurn, this);
+				Health->ApplyCombatDamage(FireZoneBurn, this, {ECombatDamageKind::Burn, Player->GetActorLocation() + FVector(0, 0, 160)});
 				// 玩家反伤可同步杀虫并清空FireZones，不能继续引用旧Zone/索引。
 				if (IsDead()) return;
 			}
@@ -238,7 +239,7 @@ void ABossWurm::ApplyPendingMobDamage()
 	const float Damage = PendingMobDamage;
 	PendingMobDamage = 0.f;
 	const float Before = HealthComponent->GetCurrentHealth();
-	HealthComponent->ApplyDamage(Damage, const_cast<APawn*>(Player));
+	HealthComponent->ApplyCombatDamage(Damage, const_cast<APawn*>(Player), {ECombatDamageKind::MobFeedback, GetActorLocation() + FVector(0, 0, 90)});
 	TotalMobDamageApplied += FMath::Max(Before - HealthComponent->GetCurrentHealth(), 0.f);
 	UE_LOG(LogAICompanionDemo, Log, TEXT("[WurmBalance] 清杂反馈 %.1f，累计实际 %.1f，余血 %.1f"), Damage, TotalMobDamageApplied, HealthComponent->GetCurrentHealth());
 }

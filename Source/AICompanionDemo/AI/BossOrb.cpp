@@ -2,7 +2,8 @@
  * [INPUT]: 依赖 BossOrb.h 的组件契约、Engine 的 StaticMeshComponent（挂点）/PointLightComponent（火光）、NiagaraFunctionLibrary 的 SpawnSystemAttached（火焰弹体）、Vfx/VfxLibrary 的 Fire 命中特效、HealthComponent 的玩家伤害口、Kismet 的 GetPlayerPawn
  * [OUTPUT]: 可见35cm橙核/外围火焰随三维直线飞行；连续球扫玩家实际胶囊与BlockPawn实体，最近接触结算且地形同距优先；6s/宿主/玩家死亡销毁，反伤同栈退场不造火浪，友方保持独立原路径。
  * [POS]: AI/ Boss弹体；显式物理查询避免高处误伤、高速穿透与Visibility忽略Pawn，Niagara不承担伤害几何。
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ *  火球语义和玩家受击落点在扣血前交Health；实际量与敌方来源由唯一账本提交现有漫画层。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "BossOrb.h"
@@ -136,7 +137,7 @@ void ABossOrb::Tick(float DeltaSeconds)
 		TWeakObjectPtr<UHealthComponent> WeakPlayerHealth(PlayerHealth);
 		TWeakObjectPtr<ABossBase> WeakBossOwner(Cast<ABossBase>(GetOwner()));
 		const bool bHadBossOwner = WeakBossOwner.IsValid();
-		PlayerHealth->ApplyDamage(Damage, this);
+		PlayerHealth->ApplyCombatDamage(Damage, this, {ECombatDamageKind::Fireball, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 		if (!WeakThis.IsValid() || IsActorBeingDestroyed() || !WeakPlayerHealth.IsValid() || WeakPlayerHealth->IsDead()
 			|| (bHadBossOwner && (!WeakBossOwner.IsValid() || WeakBossOwner->IsDead() || WeakBossOwner->IsActorBeingDestroyed())))
 		{

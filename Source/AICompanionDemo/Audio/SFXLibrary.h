@@ -1,8 +1,8 @@
 /**
  * [INPUT]: USoundBase软引用槽、世界语音队列、Kismet 2D/空间/附属音频与原BGM/潜地循环声源。
- * [OUTPUT]: 固定字幕/语音策略；普通串行、紧急抢占，拾取录音每世界限三次，前三成功箱专用台词；BGM/潜地循环独立
+ * [OUTPUT]: 固定字幕/语音策略；妖术师两短声专用空间入口与每世界预算；BGM/潜地循环独立
  *  信标首次解锁/成功召回沿用现役两条资源路径，v2声源为冷峻自然女声；台词分别为“我一直在你身边。”“我从未离开过你”。
- * [POS]: Audio/ 的音效基建唯一文件；全部游戏事件经 PlaySFX 收口发声——事件方不知道音效是否存在，素材到位与否只改 ini、代码零改动
+ * [POS]: Audio声音槽位真源；普通音效、固定语音与妖术师空间短声各有明确入口，业务不直接创建组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -16,6 +16,7 @@
 class USoundBase;
 class UWorld;
 class UAudioComponent;
+class AActor;
 class USceneComponent;
 enum class ERunEventKind : uint8;
 
@@ -109,8 +110,10 @@ class AICOMPANIONDEMO_API USFXLibrary : public UObject
 	GENERATED_BODY()
 
 public:
-	/** 全项目音效总入口：按事件读 CDO 槽位并 2D 播放；World 为空/槽位未配置均静默返回 */
+	/** 普通音效按事件2D播放；妖术师两声必须使用携带真实来源的专用空间入口。 */
 	static void PlaySFX(UWorld* World, EGameSFX Event);
+	/** 两类妖术师短声共用本世界并发/成功间隔；不排队，返回值不代表人耳验收。 */
+	static bool PlayWarlockSFX(UWorld* World, EGameSFX Event, AActor* Source, const FVector& Location);
 
 	/** 空间化语音入口（09-27 用户定调"音箱放到 AI 身上"）：3D 定位于 Location——远处队友的喊话
 	 *  距离衰减至听不清（400cm 内全响，线性衰减 4000cm 静默，运行时构造衰减零资产）；槽空静默 */
@@ -245,18 +248,18 @@ public:
 	TSoftObjectPtr<USoundBase> WarlockBeamCharge;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamChargeVolume = 0.4f;
+	float WarlockBeamChargeVolume = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
-	float WarlockBeamChargePitch = .7f;
+	float WarlockBeamChargePitch = 1.f;
 
 	/** 妖术师射线结算 */
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss")
 	TSoftObjectPtr<USoundBase> WarlockBeamFire;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamFireVolume = 0.45f;
+	float WarlockBeamFireVolume = 0.3f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
-	float WarlockBeamFirePitch = .7f;
+	float WarlockBeamFirePitch = 1.f;
 
 	// ---------- 语音槽（09-27 配音轮）：Bark 台词配音，人声 1.0 优先于一切音效（响度=信息优先级） ----------
 

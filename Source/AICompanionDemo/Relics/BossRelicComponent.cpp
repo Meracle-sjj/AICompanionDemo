@@ -1,8 +1,8 @@
 /**
- * [INPUT]: 本组件数据契约、ICombatant/Health、EnemyGrunt 普通减速与冰火残留、CompanionAIController 狂怒、
+ * [INPUT]: 本组件数据契约、ICombatant/Health统一实际扣血反馈、EnemyGrunt 普通减速与冰火残留、CompanionAIController 狂怒、
  *  BossOrb::LaunchFriendly、Vfx/SFX及Niagara组件回传、Engine Cone/BasicShapeMaterial、Character::LaunchCharacter。
  * [OUTPUT]: 九遗物结算；行走火球30范围伤与闪烁三球30/20互斥共用独立爆闪；地刺真实概率触发时仅播一次铡刀短砍音，50与5s/0.5s每跳10流血保持。
- * [POS]: Relics/运行时实现；仅敌人Health次生伤害，统一重入闸；死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
+ * [POS]: Relics/运行时实现；只向Health提交次生伤害类别与落点，不再自行发伤害数值；统一重入闸，死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "BossRelicComponent.h"
@@ -357,7 +357,7 @@ void UBossRelicComponent::TryStoneSpikes(const FVector& ImpactPoint)
 		for (AActor* Enemy : Enemies)
 		{
 			if (FVector::DistSquared2D(Enemy->GetActorLocation(), Ground) > FMath::Square(SpikeRadius)) continue;
-			if (DamageEnemy(Enemy, SpikeDamage) > 0)
+			if (DamageEnemy(Enemy, SpikeDamage, ECombatDamageKind::Spike) > 0)
 			{
 				if (URelicBleedComponent* Bleed = URelicBleedComponent::ApplyTo(Enemy, GetOwner(), SpikeBleedDuration, SpikeBleedDamage, SpikeBleedInterval))
 					AppliedBleeds.AddUnique(Bleed);
@@ -378,7 +378,7 @@ void UBossRelicComponent::NotifyPlayerDamaged(AActor* Source, float ActualDamage
 	{
 		if (ICombatant* Combatant = Cast<ICombatant>(Enemy))
 		{
-			if (!Combatant->IsDead() && DamageEnemy(Enemy, ThornsDamage) > 0)
+			if (!Combatant->IsDead() && DamageEnemy(Enemy, ThornsDamage, ECombatDamageKind::Reflect) > 0)
 			{
 				++ThornsActivations;
 				DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), Enemy->GetActorLocation(), FColor(223, 178, 105), false, .18f, 0, 4.f);
@@ -389,14 +389,14 @@ void UBossRelicComponent::NotifyPlayerDamaged(AActor* Source, float ActualDamage
 	}
 }
 
-float UBossRelicComponent::DamageEnemy(AActor* Target, float Damage)
+float UBossRelicComponent::DamageEnemy(AActor* Target, float Damage, ECombatDamageKind Kind)
 {
 	ICombatant* Combatant = IsValid(Target) ? Cast<ICombatant>(Target) : nullptr;
 	if (!Combatant || Combatant->IsDead() || Damage <= 0 || !OwnerAlive()) return 0.f;
 	UHealthComponent* Health = Combatant->GetHealthComponent();
 	if (!Health) return 0.f;
 	const float Before = Health->GetCurrentHealth();
-	Health->ApplyDamage(Damage, GetOwner());
+	Health->ApplyCombatDamage(Damage, GetOwner(), {Kind, Target->GetActorLocation() + FVector(0, 0, 95)});
 	return FMath::Max(Before - Health->GetCurrentHealth(), 0.f);
 }
 
@@ -407,7 +407,7 @@ void UBossRelicComponent::Blast(const FVector& Center, float Radius, float Damag
 	for (AActor* Enemy : Enemies)
 	{
 		if (FVector::DistSquared2D(Center, Enemy->GetActorLocation()) > FMath::Square(Radius)) continue;
-		if (DamageEnemy(Enemy, Damage) <= 0) continue;
+		if (DamageEnemy(Enemy, Damage, bKnockUp ? ECombatDamageKind::Seismic : ECombatDamageKind::Explosion) <= 0) continue;
 		// Boss 保持现有控制免疫；普通敌人使用真实 CharacterMovement 下一拍击飞。
 		if (bKnockUp)
 			if (AEnemyGrunt* Grunt = Cast<AEnemyGrunt>(Enemy); Grunt && !Grunt->IsDead())
@@ -415,7 +415,6 @@ void UBossRelicComponent::Blast(const FVector& Center, float Radius, float Damag
 				FVector Outward = (Grunt->GetActorLocation() - Center).GetSafeNormal2D();
 				Grunt->LaunchCharacter(Outward * 260.f + FVector(0, 0, SeismicUpSpeed), false, true);
 			}
-		DrawDebugString(GetWorld(), Enemy->GetActorLocation() + FVector(0, 0, 95), FString::Printf(TEXT("%.0f"), Damage), nullptr, FColor(255, 174, 72), .25f, true);
 	}
 	DrawDebugSphere(GetWorld(), Center, Radius, 18, FColor(255, 122, 38), false, .2f, 0, 5.f);
 	DrawDebugSphere(GetWorld(), Center, Radius * .72f, 14, FColor(255, 210, 100), false, .13f, 0, 3.f);
@@ -432,7 +431,7 @@ void UBossRelicComponent::FireAreaDamage(const FVector& Center, float Radius, fl
 		if (FVector::DistSquared2D(Center, Enemy->GetActorLocation()) > FMath::Square(Radius)) continue;
 		AEnemyGrunt* Grunt = Cast<AEnemyGrunt>(Enemy);
 		const bool bMelt = Grunt && Grunt->GetFrostResidue() > 0.f;
-		const float Actual = DamageEnemy(Enemy, Damage * (bMelt ? 2.f : 1.f));
+		const float Actual = DamageEnemy(Enemy, Damage * (bMelt ? 2.f : 1.f), bMelt ? ECombatDamageKind::Melt : ECombatDamageKind::Burn);
 		if (Actual <= 0) continue;
 		if (Grunt)
 		{
@@ -440,9 +439,7 @@ void UBossRelicComponent::FireAreaDamage(const FVector& Center, float Radius, fl
 			Grunt->RefreshBurnResidue(1.5f);
 		}
 		const FVector Point = Enemy->GetActorLocation();
-		DrawDebugString(GetWorld(), Point + FVector(0, 0, 110),
-			bMelt ? FString::Printf(TEXT("融化 %.0f"), Actual) : FString::Printf(TEXT("%.0f"), Actual),
-			nullptr, bMelt ? FColor(112, 225, 255) : FColor(255, 173, 62), .22f, true);
+		if (bMelt) DrawDebugString(GetWorld(), Point + FVector(0, 0, 110), TEXT("融化！"), nullptr, FColor(112, 225, 255), .22f, true);
 		DrawDebugSphere(GetWorld(), Point, bMelt ? 75.f : 30.f, 10, bMelt ? FColor(112, 225, 255) : FColor(255, 173, 62), false, .16f, 0, 3.f);
 		if (bMelt)
 		{

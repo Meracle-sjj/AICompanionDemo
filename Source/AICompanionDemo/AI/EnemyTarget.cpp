@@ -2,6 +2,7 @@
  * [INPUT]: 依赖 EnemyTarget.h 的组件契约、HealthComponent 的 OnHealthChanged/OnDeath、AIModule 的 AISense_Sight（视觉源注册）、Kismet 的 GetPlayerPawn（猎手行为的目标查询）
  * [OUTPUT]: 对外提供 AEnemyTarget 的实现——装配球体/血量/感知源三件套 + HuntPlayer 逼近与攻击节拍（ApplyDamage 携带 Instigator=自己，受击广播即队友的伤害通道信号）+ SnapToGround 持续贴地（水平直移免 sweep，Z 每帧跟地；按 ObjectType 只认 WorldStatic 地面——通道查询把同伴/角色当"地面"抬球瞬移的"球消失"根因修复，球体 ObjectType 相应摘成 WorldDynamic），颜色随血量渐变
  * [POS]: AI/ 的敌对方实现；被 GameMode 代码生成（D6 范式），M3 起主动威胁玩家——队友评分的"威胁分"由此产生
+ *  猎手近战经ApplyCombatDamage提交语义和受击前落点，Health统一发实际量/敌方来源漫画反馈。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -79,7 +80,7 @@ void AEnemyTarget::HuntPlayer(float DeltaSeconds)
 	if (PlayerAttackCooldown >= PlayerAttackInterval)
 	{
 		PlayerAttackCooldown = 0.f;
-		PlayerHealth->ApplyDamage(AttackDamageToPlayer, /*Instigator*/ this);
+		PlayerHealth->ApplyCombatDamage(AttackDamageToPlayer, /*Instigator*/ this, {ECombatDamageKind::Melee, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Enemy] %s 攻击玩家，伤害 %.0f，玩家余血 %.0f"),
 			*GetNameSafe(this), AttackDamageToPlayer, PlayerHealth->GetCurrentHealth());
 	}

@@ -1,10 +1,11 @@
 /**
- * [INPUT]: BossBase组件契约、Health OnDeath/ApplyDamage、玩家查询、GameMode击杀上报；中央上方血条由CompanionHud读取身份/Health
+ * [INPUT]: BossBase组件契约、Health OnDeath/ApplyCombatDamage、玩家查询、GameMode击杀上报；中央上方血条由CompanionHud读取身份/Health
  * [OUTPUT]: 大胶囊/Manny/慢速追击/死亡订阅与谢幕；旧WidgetComponent仅作猎印/子类锚点且永不显示，三Boss共用屏幕HUD血条
  * [POS]: AI/ Boss 家族基类实现：占位近战行为波 2-4 由三 Boss 特色逻辑替换（召唤师护盾轮/巨像地刺/蠕虫钻地）
  *  猎印统一叠层/消费与UPROPERTY世界数字组件，免伤时不新叠，死亡只隐藏以保留当次主伤害后的消费。
  *  BeginPlay/死亡/EndPlay通知玩家刷新世界活Boss远景，存活判断与镜头计时仍归宿主Character。
  *  三Boss真实BeginPlay/死亡直接入队专属语音，绕过闲聊节流；字幕/颜色由播放队列绑定。
+ *  近战提交明确类别与受击前落点；实际量和敌方来源由Health一次提交现有漫画层。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -158,7 +159,7 @@ void ABossBase::Tick(float DeltaSeconds)
 		MeleeCooldown = MeleeInterval;
 		if (UHealthComponent* PlayerHealth = PlayerPawn->FindComponentByClass<UHealthComponent>())
 		{
-			PlayerHealth->ApplyDamage(MeleeDamage, this);
+			PlayerHealth->ApplyCombatDamage(MeleeDamage, this, {ECombatDamageKind::Melee, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] %s 近战 %.0f 伤 → 玩家"), *BossName, MeleeDamage);
 		}
 	}

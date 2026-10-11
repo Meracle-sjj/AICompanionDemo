@@ -4,6 +4,7 @@
  *  猎印继承BossBase；杂兵死亡反馈经真实Health，潜地先累积；岩甲落火及火区所有权在BossWurmHazards.cpp统一维护。
  *  存活/死亡路径均推进碎屑与地面爆闪硬寿命，死亡/EndPlay清理火系与焦痕；入/出土硬引用专用UV炭黑贴花，6s退场/后2s渐淡，最多4件。活体入场/死亡/EndPlay通过Encounter同步限额与远景。
  * [POS]: AI/蠕虫运动、状态与攻击真源；保持已验收数值/碰撞/时序，岩甲资产缺失退回原球；死亡尸节仍由Debris牵引，外观清理及EndPlay由独立视图负责
+ *  触体提交近战语义与受击前落点，实际量和敌方来源由Health统一进入现有漫画层。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -482,7 +483,7 @@ void ABossWurm::TickBodyTouch(float DeltaSeconds)
 			BodyTouchCd = BodyTouchCooldown;
 			if (UHealthComponent* PlayerHealth = PlayerPawn->FindComponentByClass<UHealthComponent>())
 			{
-				PlayerHealth->ApplyDamage(BodyTouchDamage, this);
+				PlayerHealth->ApplyCombatDamage(BodyTouchDamage, this, {ECombatDamageKind::Melee, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 			}
 			UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] 沙狱蠕虫触体 %.0f 伤"), BodyTouchDamage);
 			break;

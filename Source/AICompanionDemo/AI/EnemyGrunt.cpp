@@ -1,9 +1,10 @@
 /**
- * [INPUT]: 依赖 EnemyGrunt.h 的组件契约、HealthComponent 的 OnDeath/ApplyDamage/IsDead/SetMaxHealth、AIModule 的 AISense_Sight（视觉源注册）、Engine 的 CharacterMovementComponent 与 SkeletalMeshComponent（PlayAnimation/SetAnimationMode）、AnimSequenceBase 的 GetPlayLength、TimerManager 的动画回切定时器、Kismet 的 GetPlayerPawn、本模块 XpPickup（死亡掉落生成）、本模块 TemporaryPickup（E5 暂态掉落生成）、本模块 Audio/SFXLibrary（EnemyDie/WarlockBeamCharge/WarlockBeamFire 事件音效）
+ * [INPUT]: EnemyGrunt组件/追击契约，Health的实际伤害与类别落点接口，角色移动/动画/定时器和死亡掉落；Audio/SFXLibrary普通死亡声与携带来源的妖术师空间短声入口。
  * [OUTPUT]: 对外提供 AEnemyGrunt 的实现——重力行走逼近（**追击全自驱寻路**：RefreshChasePath 每 0.5s FindPathToActorSynchronously 算路存路点串 + 沿"路径下一路点"喂输入——加速度与绕障同源，滑步案（PFC 不写加速度，vel=200/accel=0 探针实证）与双驱动打架案（直冲输入顶掉绕障路径=卡斜坡）双根治；无路径直指玩家兜底 + 失败回退窗）+ 贴脸挥拳节拍（动画与伤害同拍，伤害携带 Instigator=自己——玩家受击广播即队友的伤害通道信号）+ ragdoll 布娃娃死亡（切 Ragdoll 碰撞预设 QueryAndPhysics + 全骨骼模拟——mesh 默认 QueryOnly 只模拟不碰撞即"沉地"案根因）+ ApplyVariant 变体定型（三变体参数集：移速/血量/伤害/间隔/体型/"Paint Tint" 色调微差/经验值/蛋糕掉率，逐分支显式赋值保幂等；Standard=M3.5 基线零漂移）+ 死亡掉落 XpPickup（喂 XpValue）与 HealthPickup 柠檬蛋糕（HealDropChance 概率，蛮兵必掉）与 TemporaryPickup E5 暂态道具（RushDropChance 概率，种类随机定型）+ ICombatant 三方法 + **妖术师蓄力地面预警圈（09-29 视觉区分度案：红线战场与穿透红撞车定罪——MOBA 语言"脚下红圈=要挨打"，圈半径判宽+50，来源线降 1px 辅助；结算猩红+白芯与穿透红分家）**
  *  1.1仅Standard基础步速450→405cm/s，其他变体不变；ApplyVariant同步慢速恢复基线。猎印由UPROPERTY持有；狂暴双股贴身紫红火焰由EnrageVisual管理，召唤杂兵出生读导演；死亡先清火焰并报告普通怪事件。
  * [POS]: AI/ 的敌对方实现（球体 EnemyTarget 的继任者，WaveDirector 的生成目标）；球体时代两大物理补丁（SnapToGround 贴地、免 sweep）在 ACharacter 载体上整体作废——胶囊+重力天生正确，但两道 BP 隐式装配必须显式化（构造函数注释含三案根因）：① bRunPhysicsWithNoController（无 Controller 不模拟，悬浮冻结）；② 胶囊 42×96 + mesh 贴地(-90)/前向转正(-90°)（模板配在 BP 里，裸 C++ 缺失即浮空+恒侧身）；③ 胶囊 Visibility=Block（Pawn 预设默认 Ignore，队友 LOS 线穿透即永不开火）
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md；成员地图由主agent统一维护
+ *  v1.3.2：妖术师两声进入每世界短声预算；光束、投掷和拳击仅提交伤害语义，实际漫画数字由Health统一生成。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "EnemyGrunt.h"
@@ -257,13 +258,12 @@ void AEnemyGrunt::HuntPlayer(float DeltaSeconds)
 				// 结算：猩红粗束+白芯沿锁定线扫过——与队友穿透红（10px 纯红）形态分家
 				DrawDebugLine(GetWorld(), BeamStart, BeamTarget, FColor::FromHex(TEXT("FF3C28")), false, 0.35f, 0, 14.f);
 				DrawDebugLine(GetWorld(), BeamStart, BeamTarget, FColor::White, false, 0.35f, 0, 3.f);
-				USFXLibrary::PlaySFX(GetWorld(), EGameSFX::WarlockBeamFire);   // [SFX] 射线结算
+				USFXLibrary::PlayWarlockSFX(GetWorld(), EGameSFX::WarlockBeamFire, this, BeamStart);
 				const float DistToBeam = FMath::PointDistToSegment(PlayerPawn->GetActorLocation(), BeamStart, BeamTarget);
 				if (DistToBeam <= BeamHitWidth && !PlayerHealth->IsDead())
 				{
-					PlayerHealth->ApplyDamage(BeamDamage, /*Instigator*/ this);
-					DrawDebugString(GetWorld(), PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 160.f),
-						FString::Printf(TEXT("-%.0f"), BeamDamage), nullptr, FColor::Red, 0.6f, false, 1.2f);
+					PlayerHealth->ApplyCombatDamage(BeamDamage, this,
+						{ECombatDamageKind::Beam, PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 160.f)});
 				}
 				UE_LOG(LogAICompanionDemo, Warning, TEXT("[Enemy] %s 射线结算（玩家距线 %.0fcm）"), *GetNameSafe(this), DistToBeam);
 			}
@@ -292,7 +292,7 @@ void AEnemyGrunt::HuntPlayer(float DeltaSeconds)
 				}
 			}
 			// 蓄力电弧已撤（09-30 用户裁决"妖术师省掉闪电"——视觉只留红圈+结算粗束；ChargeVfx 结算销毁段保留对空指针无害）
-			USFXLibrary::PlaySFX(GetWorld(), EGameSFX::WarlockBeamCharge);   // [SFX] 蓄力起手（红细线预警=听声辨招）
+			USFXLibrary::PlayWarlockSFX(GetWorld(), EGameSFX::WarlockBeamCharge, this, BeamStart);
 		}
 		// 冷却中/超程：落到正常追击逻辑（下方的近战/游走段）——妖术师也会逼近
 	}
@@ -375,7 +375,8 @@ void AEnemyGrunt::HuntPlayer(float DeltaSeconds)
 				const bool bHit = FMath::FRand() < RangedHitChance;
 				if (bHit)
 				{
-					PlayerHealth->ApplyDamage(RangedDamageToPlayer, /*Instigator*/ this);
+					PlayerHealth->ApplyCombatDamage(RangedDamageToPlayer, this,
+						{ECombatDamageKind::Projectile, PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 160.f)});
 				}
 				UE_LOG(LogAICompanionDemo, Warning, TEXT("[Enemy] %s 高处投掷（支撑面差 %.0f，命中 %s），玩家余血 %.0f"),
 					*GetNameSafe(this), FloorDeltaZ, bHit ? TEXT("是") : TEXT("否"), PlayerHealth->GetCurrentHealth());
@@ -412,7 +413,8 @@ void AEnemyGrunt::HuntPlayer(float DeltaSeconds)
 			GetWorldTimerManager().SetTimer(AttackAnimTimerHandle, this, &AEnemyGrunt::RestoreLocomotionAnim, AnimLength, /*bLoop*/ false);
 		}
 
-		PlayerHealth->ApplyDamage(AttackDamageToPlayer, /*Instigator*/ this);
+		PlayerHealth->ApplyCombatDamage(AttackDamageToPlayer, this,
+			{ECombatDamageKind::Melee, PlayerPawn->GetActorLocation() + FVector(0.f, 0.f, 160.f)});
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Enemy] %s 挥拳攻击玩家，伤害 %.0f，玩家余血 %.0f（敌 Z %.0f / 玩家 Z %.0f）"),
 			*GetNameSafe(this), AttackDamageToPlayer, PlayerHealth->GetCurrentHealth(),
 			GetActorLocation().Z, PlayerPawn->GetActorLocation().Z);

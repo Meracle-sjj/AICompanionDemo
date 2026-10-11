@@ -1,7 +1,7 @@
 /**
  * [INPUT]: BossOrb外观、活ICombatant/Health、玩家遗物清理账本；步行旧路径仍读WorldStatic。
  * [OUTPUT]: 步行直线火球保持每敌30范围结算；闪烁三球直击30/邻敌20互斥；两者共用蠕虫入地橙黄球与Explosion爆闪，墙面也触发步行爆炸。
- * [POS]: AI/友方弹体；玩家死亡/EndPlay回收，命中爆闪交遗物登记硬寿命，不随球Destroy截断。
+ * [POS]: AI/友方弹体；火球/爆炸类别与命中前落点交Health统一反馈，玩家死亡/EndPlay回收，命中爆闪交遗物登记硬寿命，不随球Destroy截断。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "AI/BossOrb.h"
@@ -66,7 +66,7 @@ void ABossOrb::TickFriendly(float DeltaSeconds)
 			if (FVector::DistSquared(Target->GetActorLocation(), End) <= FMath::Square(FriendlyExplosionRadius))
 			{
 				if (UHealthComponent* Health = Target->FindComponentByClass<UHealthComponent>())
-				{ Health->ApplyDamage(Damage, Source); }
+				{ Health->ApplyCombatDamage(Damage, Source, {ECombatDamageKind::Fireball, Target->GetActorLocation() + FVector(0, 0, 90)}); }
 			}
 		}
 		SpawnFriendlyExplosionFx(Source);
@@ -162,7 +162,8 @@ void ABossOrb::ExplodeFriendlyHoming(AActor* Victim, AActor* Source)
 		if (UHealthComponent* Health = Enemy->GetHealthComponent())
 		{
 			const float Before = Health->GetCurrentHealth();
-			Health->ApplyDamage(bDirect ? Damage : FriendlySplashDamage, Source);
+			Health->ApplyCombatDamage(bDirect ? Damage : FriendlySplashDamage, Source,
+				{bDirect ? ECombatDamageKind::Fireball : ECombatDamageKind::Explosion, Target->GetActorLocation() + FVector(0, 0, 90)});
 			const float Actual = IsValid(Health) ? FMath::Max(Before - Health->GetCurrentHealth(), 0.f) : 0.f;
 			UE_LOG(LogAICompanionDemo, Log, TEXT("[BossRelic] BlinkFireball target=%s branch=%s damage=%.3f"),
 				*GetPathNameSafe(Target), bDirect ? TEXT("direct") : TEXT("splash"), Actual);

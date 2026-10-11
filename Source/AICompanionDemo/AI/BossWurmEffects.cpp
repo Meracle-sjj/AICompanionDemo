@@ -2,7 +2,8 @@
  * [INPUT]: BossWurm落点/伤害/探地契约、Character震屏、Health伤害、Niagara与Vfx/SFX、专用M_Wurm_Scorch局部UV材质、PointLight及DrawDebugHelpers
  * [OUTPUT]: 保持破土/入地判定与时序、0.55s强震/单次BossImpact；爆闪硬寿命、不规则软边炭黑焦痕无伤/无光，6s/末2s按ScorchOpacity渐淡/上限4，死亡与EndPlay显式销毁。
  * [POS]: AI/蠕虫落点爆与范围展示实现；状态/轨迹/球代理归BossWurm，岩甲外观归WurmBodyVisual，拆分遵守单文件800行上限
- * [PROTOCOL]: 变更时更新此头部，然后检查 ../AGENTS.md
+ *  出土与入地两口均提交爆炸语义和受击前落点，Health只按实际扣血发一次漫画反馈。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "BossWurm.h"
 #include "Components/DecalComponent.h"
@@ -113,7 +114,7 @@ void ABossWurm::EruptBurst(const FVector& Center)
 		{
 			if (UHealthComponent* PlayerHealth = PlayerPawn->FindComponentByClass<UHealthComponent>())
 			{
-				PlayerHealth->ApplyDamage(EruptDamage, this);
+				PlayerHealth->ApplyCombatDamage(EruptDamage, this, {ECombatDamageKind::Explosion, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 			}
 		}
 		// 独立短震不会污染受击时钟，暂停/死亡/Ending可单独取消。
@@ -187,7 +188,7 @@ void ABossWurm::DiveImpactBurst(const FVector& Center)
 		{
 			if (UHealthComponent* PlayerHealth = PlayerPawn->FindComponentByClass<UHealthComponent>())
 			{
-				PlayerHealth->ApplyDamage(EruptDamage, this);
+				PlayerHealth->ApplyCombatDamage(EruptDamage, this, {ECombatDamageKind::Explosion, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 			}
 		}
 		if (AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(PlayerPawn))

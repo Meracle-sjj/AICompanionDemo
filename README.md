@@ -2,15 +2,19 @@
 
 一份面向**系统策划岗位**的个人可玩作品。玩家与 AI 队友在沙丘战场中协作，通过站位、护卫／歼灭切换、局内构筑、资源消费与 Boss 挑战改变战局。使用 **Unreal Engine 5.6.1、C++、离线 FSM／Utility AI**，游戏运行不调用大模型。
 
-**本页对应 v1.3.1，已完成完整 Windows 构建、修复专项复验与两次独立冷启动；下载入口见[Release 页面](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.1)。** Windows 玩家附件名为 `Player-Win64-v1.3.1.zip`，完整解压后运行；源码附件供评审，`SHA256SUMS.txt` 用于校验下载文件。
+**当前版本 v1.3.2：完整 Windows 构建、限定专项与两次独立启动／正常退出通过。** 统一伤害漫画反馈与妖术师声音调整已接入。
 
-本轮根据作者 v1.3 实玩反馈调整队友语音：普通发言依次播放，Boss 出现／死亡及玩家受伤／恢复会立即抢占旧话。宝箱改用常驻 FREE!、接近渐显的锁与价格、无价格的钥匙图标，配合贴坡与轻埋沙；金币和处决改用原创图标与大数字。行走火球补爆炸表现，地刺遗物加入短铡刀音，蠕虫地下声随距离迫近增强，结束页清除战斗飘字。
+下载入口：[v1.3.2 Release](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.2)，玩家附件名为 `Player-Win64-v1.3.2.zip`。完整解压后运行；源码附件供评审，`SHA256SUMS.txt` 用于校验下载文件。
 
-[v1.3.1 反馈与修订预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/4)保留作者反馈和验收目标。v1.0–v1.3 的标签、附件与反馈轨迹继续保留。
+v1.3.2 将原有金币、处决的漫画大数字延伸到所有实际伤害：弹丸、冰火、闪电、地刺、光束等用八种原创矢量图样与颜色辨识，并标明玩家、敌方、队友护卫／歼灭来源。数字取实际扣血，免伤和零伤害不显示；生命结算、伤害平衡与攻击节拍保持原规则。妖术师改用两条原创低音短声，加入空间衰减和共享叠响上限，减少密集施法的听觉负担。
+
+已发布的 v1.3.1 保留顺序对白与紧急抢占、FREE! 与锁／价格／钥匙提示、贴坡宝箱、行走火球爆炸、地刺短铡刀音、地下碎岩声及结束页清账。
+
+[v1.3.2 反馈与修订预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)保留本轮目标；[v1.3.1 反馈记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/4)和旧版本标签、附件与反馈轨迹继续保留。
 
 **开发周期：国庆节整个假期＋后续 3 天，约 10 天；非假期利用空闲时间开发。**
 
-[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [1.3.1 修订摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
+[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [1.3.2 修订摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
 
 ## 自动战斗中的玩家决策
 
@@ -50,7 +54,9 @@ AI Perception 提供感知，Follow／Engage 状态决定行为，Utility 评分
 
 v1.3 将“带电”表达从一次性标记改为持续状态：玩家每次射击从枪口额外散射一条 70% 伤害侧弹，命中标记持续 5 秒并可刷新；队友每 0.5 秒连接附近两只带电活敌，标记不消费，单次传导伤害减半。电弧在目标死亡后保留短暂世界位置残影，让脆弱敌人的放电也能被看到。
 
-普通队友语音依次播放；六条 Boss 出现／死亡提醒和玩家受伤／恢复两条紧急发言以最新事实为准，立即停止旧话并清除旧待播队列。奖励选卡期间普通对白等待，这八类紧急台词与气泡继续演出；ESC 或切出应用暂停时，全部声音和字幕同步暂停。每种道具固定录音每局最多实际播放三次，成功开启的前三个箱子各有一句台词，之后不再反复播报。字幕和事件记录随录音真正开始而更新，末条滚动跟随、气泡固定换行；解锁射击和 Boss 事件保留特殊颜色。小地图缩小时显示 TAB 键帽提示，放大时隐藏。金币显示实际钱包增量，处决显示实际伤害的两位精度；两者用原创矢量图标和粗体描边数字区分。具体变化见[修订摘要](CHANGELOG.md)。
+普通队友语音依次播放；六条 Boss 出现／死亡提醒和玩家受伤／恢复两条紧急发言以最新事实为准，立即停止旧话并清除旧待播队列。奖励选卡期间普通对白等待，这八类紧急台词与气泡继续演出；ESC 或切出应用暂停时，全部声音和字幕同步暂停。每种道具固定录音每局最多实际播放三次，成功开启的前三个箱子各有一句台词，之后不再反复播报。字幕和事件记录随录音真正开始而更新，末条滚动跟随、气泡固定换行；解锁射击和 Boss 事件保留特殊颜色。小地图缩小时显示 TAB 键帽提示，放大时隐藏。
+
+v1.3.2 的统一数值层显示金币实际入账与伤害实际扣血，伤害保留最多两位小数，并保存命中时的来源和模式；目标死亡后数字仍短暂保留，结束页清空并停止新增。受控检查覆盖实际量、免伤、致死、模式、反伤／流血、密集施法与暂停清理，以及结束页图层隐藏和拒绝新反馈；八图样展示只证明样式。新完整 Windows 包通过资源收录检查和两次独立启动／正常退出。**声音的主观听感仍待作者自然体验，自然整局、全部构筑、长期性能与异机尚未验证。** 本版持续按键操作也未重测。具体变化见[修订摘要](CHANGELOG.md)。
 
 ## 本人职责与代码入口
 
@@ -64,5 +70,6 @@ v1.3 将“带电”表达从一次性标记改为持续状态：玩家每次射
 | [GameMode](Source/AICompanionDemo/AICompanionDemoGameMode.cpp) | 开始、暂停、设置、死亡与结束流程 |
 | [CompanionHud](Source/AICompanionDemo/UI/CompanionHud.cpp) | 选卡、技能账本、小地图与 Boss 血条 |
 | [RunEventLog](Source/AICompanionDemo/Events/RunEventLog.cpp) | 本局事件记录 |
+| [HealthComponent](Source/AICompanionDemo/Health/HealthComponent.cpp)／[CombatFeedbackSubsystem](Source/AICompanionDemo/UI/CombatFeedbackSubsystem.cpp) | 统一生命结算与实际伤害漫画反馈 |
 
 公开源码供设计与代码评审，**不含 Content 资产，无法单独完整复建**。试玩请下载完整 Windows 包；机制图的 PNG／SVG 位于 [Docs/diagrams](Docs/diagrams)。

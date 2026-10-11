@@ -1,12 +1,13 @@
 /**
  * [INPUT]: 依赖 SFXLibrary.h 的槽位契约、Kismet/GameplayStatics 的 SpawnSound2D/SpawnSoundAtLocation、Engine/World、Engine/SoundAttenuation（运行时构造衰减——空间化语音零资产）
- * [OUTPUT]: 固定录音字幕、抢占/三次预算/前三箱策略；地刺铡刀独立槽，地下声独立空间衰减，原BGM幂等
- * [POS]: Audio/ 的音效基建实现文件，与 SFXLibrary.h 一体两面；业务文件只认两个静态入口，不感知本文件存在
+ * [OUTPUT]: 固定录音字幕/预算；妖术师短声交专用世界预算，铡刀/地下声与原BGM独立
+ * [POS]: Audio槽位解析与播放分流；语音/妖术师交各世界所有者，其他事件保持原2D入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "Audio/SFXLibrary.h"
 #include "Audio/CompanionVoiceSubsystem.h"
+#include "Audio/WarlockAudioSubsystem.h"
 
 #include "AudioDevice.h"
 #include "Components/AudioComponent.h"
@@ -171,6 +172,8 @@ void USFXLibrary::PlaySFX(UWorld* World, EGameSFX Event)
 	{
 		return;
 	}
+	// 妖术师不能回退到全局2D叠响；真实来源由专用入口显式传入。
+	if (Event == EGameSFX::WarlockBeamCharge || Event == EGameSFX::WarlockBeamFire) return;
 
 	// CDO 缓存：Config 槽位常驻 CDO，读它零成本（不做实例/生命周期管理——演示项目 KISS）
 	static const USFXLibrary* Slots = GetDefault<USFXLibrary>();
@@ -190,10 +193,21 @@ void USFXLibrary::PlaySFX(UWorld* World, EGameSFX Event)
 				if (Queue->Enqueue(Loaded, Event, Volume, FVector::ZeroVector, false)) CommitPickupVoice(World, Event);
 			return;
 		}
-		const float Pitch = Event == EGameSFX::WarlockBeamCharge ? Slots->WarlockBeamChargePitch
-			: Event == EGameSFX::WarlockBeamFire ? Slots->WarlockBeamFirePitch : 1.f;
-		if (Volume > 0.f) UGameplayStatics::SpawnSound2D(World, Loaded, Volume, Pitch);
+		if (Volume > 0.f) UGameplayStatics::SpawnSound2D(World, Loaded, Volume);
 	}
+}
+
+bool USFXLibrary::PlayWarlockSFX(UWorld* World, EGameSFX Event, AActor* Source, const FVector& Location)
+{
+	if (!World || (Event != EGameSFX::WarlockBeamCharge && Event != EGameSFX::WarlockBeamFire)) return false;
+	const USFXLibrary* Slots = GetDefault<USFXLibrary>();
+	TSoftObjectPtr<USoundBase> Sound;
+	float Volume = 0.f;
+	if (!ResolveSlot(Slots, Event, Sound, Volume) || Volume <= 0.f) return false;
+	USoundBase* Loaded = Sound.LoadSynchronous();
+	UWarlockAudioSubsystem* Budget = World->GetSubsystem<UWarlockAudioSubsystem>();
+	const float Pitch = Event == EGameSFX::WarlockBeamCharge ? Slots->WarlockBeamChargePitch : Slots->WarlockBeamFirePitch;
+	return Budget && Budget->Play(Loaded, Event, Volume, Pitch, Source, Location);
 }
 
 void USFXLibrary::PlayVoice(UWorld* World, EGameSFX Event, const FVector& Location)

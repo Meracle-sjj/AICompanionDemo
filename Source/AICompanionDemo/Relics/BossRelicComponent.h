@@ -1,7 +1,7 @@
 /**
  * [INPUT]: ActorComponent/HealthComponent；主攻、队友直击、真实受击与成功闪烁由共享宿主接线。
  * [OUTPUT]: 九遗物参数/效果与只读JSON；步行火球与闪烁落点三颗追踪球，直击30/邻敌20互斥；地刺50与每跳10可刷新流血。
- * [POS]: Relics/唯一玩法所有者；次生只写Health，死亡/EndPlay幂等销毁球/火圈/石刺及两种临时VFX，不延长正常寿命。
+ * [POS]: Relics/唯一玩法所有者；次生向Health提交明确类别与命中前落点，反馈只取账本实际扣血；死亡/EndPlay幂等销毁球/火圈/石刺及两种临时VFX，不延长正常寿命。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #pragma once
@@ -18,6 +18,7 @@ class UMaterialInstanceDynamic;
 class UNiagaraComponent;
 class ABossOrb;
 class URelicBleedComponent;
+enum class ECombatDamageKind : uint8;
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class AICOMPANIONDEMO_API UBossRelicComponent : public UActorComponent
@@ -159,7 +160,7 @@ private:
 	void TryStoneSpikes(const FVector& ImpactPoint);
 	void Blast(const FVector& Center, float Radius, float Damage, bool bKnockUp);
 	void FireAreaDamage(const FVector& Center, float Radius, float Damage);
-	float DamageEnemy(AActor* Target, float Damage);
+	float DamageEnemy(AActor* Target, float Damage, ECombatDamageKind Kind);
 	FVector GroundPoint(const FVector& Location) const;
 	void CacheGroundRing(const FVector& Center, float Radius, TArray<FVector>& Out) const;
 	void DrawRing(const TArray<FVector>& Ring, const FColor& Color, float Life, float Width) const;

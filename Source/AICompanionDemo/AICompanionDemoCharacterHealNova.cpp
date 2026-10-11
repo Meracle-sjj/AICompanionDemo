@@ -1,8 +1,8 @@
 /**
  * [INPUT]: Character回响解锁/治疗累计/领域参数；HealthComponent的OnHealApplied与真实血量；CollectAliveCombatants敌人契约；PointLight/Timer/DrawDebug与SFXLibrary已存在Explosion槽
- * [OUTPUT]: 玩家回响脉冲治疗触发、2s扩散、0.1s/1伤持续压制、25伤终爆与清理；保留10DPS，卡帧补拍按历史扩散半径，短命绿飘字/命中闪光和跟随光脉冲；终爆只播放一次蠕虫撞地同款Explosion
+ * [OUTPUT]: 玩家回响脉冲治疗触发、2s扩散、0.1s/1伤持续压制、25伤终爆与清理；保留10DPS，卡帧补拍按历史扩散半径，统一Health实际量漫画反馈、命中闪光和跟随光脉冲；终爆只播放一次蠕虫撞地同款Explosion
  * [POS]: 模块根Character能力实现的局部拆分；方法与状态仍归AAICompanionDemoCharacter，主文件仅负责订阅/逐帧调用/死亡清理，未新增玩法所有者
- * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 #include "AICompanionDemoCharacter.h"
@@ -83,7 +83,7 @@ void AAICompanionDemoCharacter::TickHealNova(float DeltaSeconds)
 		const float PulseElapsed = FMath::Clamp(NovaElapsed + NovaDotCountdown, 0.f, ExpandTime);
 		const float PulseRadius = HealNovaMaxRadius * PulseElapsed / ExpandTime;
 		NovaDotCountdown += Interval;
-		// 同一帧仅最后一拍显示浮字；终爆帧只显示终爆，避免补拍/终爆数字互相覆盖。
+		// 同一帧仅最后一拍显示命中闪光；每次真实扣血的数字统一交Health。
 		const float FeedbackLife = NovaDotCountdown > KINDA_SMALL_NUMBER && NovaElapsed < ExpandTime
 			? FMath::Min(FMath::Min(Interval * 0.8f, 0.08f), ExpandTime - NovaElapsed) : 0.f;
 		const int32 Hits = NovaDamageRing(HealNovaDotDamage, PulseRadius, FeedbackLife);
@@ -135,7 +135,7 @@ int32 AAICompanionDemoCharacter::NovaDamageRing(float Damage, float Radius, floa
 		if (UHealthComponent* VictimHealth = Cast<ICombatant>(Victim)->GetHealthComponent())
 		{
 			const float Before = VictimHealth->GetCurrentHealth();
-			VictimHealth->ApplyDamage(Damage, this);
+			VictimHealth->ApplyCombatDamage(Damage, this, {ECombatDamageKind::Pulse, VictimLocation + FVector(0.f, 0.f, 95.f)});
 			const float AppliedDamage = Before - VictimHealth->GetCurrentHealth();
 			if (AppliedDamage <= 0.f)
 			{
@@ -144,9 +144,6 @@ int32 AAICompanionDemoCharacter::NovaDamageRing(float Damage, float Radius, floa
 			++Hits;
 			if (FeedbackLifetime > 0.f)
 			{
-				DrawDebugString(GetWorld(), VictimLocation + FVector(0.f, 0.f, 95.f),
-					FString::Printf(TEXT("-%.0f"), AppliedDamage), nullptr,
-					FColor::FromHex(TEXT("7CFC8A")), FeedbackLifetime, false, 1.0f);
 				DrawDebugSphere(GetWorld(), VictimLocation + FVector(0.f, 0.f, 35.f),
 					24.f, 8, FColor::FromHex(TEXT("E8FFB0")), false,
 					FMath::Min(FeedbackLifetime, 0.08f), 0, 1.5f);

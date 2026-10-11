@@ -11,6 +11,7 @@
  *   暴击体系落地后调低即"大伤才踉跄"分级（数据源 HealthComponent::LastDamageTaken）
  * [POS]: AI/ Boss 家族成员二实现：走位博弈型 Boss——Pending 蓝图统一预警与判定数据源，
  *  读条站桩=巨像的输出破绽窗口（博弈语义闭环）
+ *  三模式地刺共用一次Health语义伤害入口，反馈以实际扣血和受击前落点提交现有漫画层。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -271,7 +272,7 @@ void ABossColossus::ExecuteSlam()
 	{
 		if (UHealthComponent* PlayerHealth = PlayerPawn->FindComponentByClass<UHealthComponent>())
 		{
-			PlayerHealth->ApplyDamage(SlamDamage, this);
+			PlayerHealth->ApplyCombatDamage(SlamDamage, this, {ECombatDamageKind::Spike, PlayerPawn->GetActorLocation() + FVector(0, 0, 160)});
 		}
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] 裂地巨像地刺命中 %.0f 伤（模式 %d 红圈阵/锁定圈/放射）"), SlamDamage, SlamMode);
 	}
