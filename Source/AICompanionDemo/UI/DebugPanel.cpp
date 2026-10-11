@@ -1,6 +1,6 @@
 /**
  * [INPUT]: DebugPanel契约、Slate分区/滚动/按钮与真实字体Measure，GameMode测试转发、导演当前升级名称
- * [OUTPUT]: 青蓝测试控制台与独立F1模式提示，展开/收起均可见；GameMode提供真实锁定/点选文字，鼠标/暂停不在UI另存状态；短标签单行、长名自然高度与按钮焦点契约保持
+ * [OUTPUT]: 青蓝测试控制台与常驻55×40 F1键帽/两行动作状态提示，展开/收起均可见且HitTestInvisible；只拆GameMode原提示，未知文本完整保留，原全文/显示几何可回读；不接输入或另存玩法状态
  * [POS]: UI/ 界面层实现件：仅测试模式挂载（正常模式零痕迹）——验收提速专用面板
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -21,6 +21,45 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+
+namespace
+{
+	struct FTestInputPrompt
+	{
+		FString Original;
+		FString Action;
+		FString State;
+		bool bBlocked = true;
+	};
+
+	FTestInputPrompt ReadTestInputPrompt(const AAICompanionDemoGameMode* Host)
+	{
+		FTestInputPrompt Prompt;
+		Prompt.Original = Host ? Host->GetTestInputHint() : TEXT("F1 切换鼠标模式");
+		FString State;
+		FString Action;
+		if (Prompt.Original.Split(TEXT(" · F1 "), &State, &Action)
+			&& ((State == TEXT("战斗模式 · 鼠标已锁定") && Action == TEXT("切换到点选"))
+				|| (State == TEXT("点选模式 · 鼠标自由 / 视角固定") && Action == TEXT("回到战斗"))))
+		{
+			Prompt.Action = Action;
+			Prompt.State = State.Replace(TEXT(" / "), TEXT(" · "));
+			Prompt.bBlocked = false;
+		}
+		else if (Prompt.Original == TEXT("菜单或奖励选择中 · 完成后恢复鼠标模式"))
+		{
+			Prompt.Action = TEXT("完成后恢复");
+			Prompt.State = TEXT("菜单或奖励选择中 · 暂不可切换");
+		}
+		else
+		{
+			// 宿主新增或未知提示不能被样式拆分丢弃；整句显示在状态行。
+			Prompt.Action = TEXT("鼠标模式提示");
+			Prompt.State = Prompt.Original;
+		}
+		return Prompt;
+	}
+}
 
 void UDebugPanel::BindHost(AAICompanionDemoGameMode* InHost)
 {
@@ -193,7 +232,7 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 0.f)
 					[
 						// 为独立F1提示预留底部高度；收起后该提示仍保持可见。
-						SNew(SBox).HeightOverride(50.f)
+						SNew(SBox).HeightOverride(64.f)
 					]
 				]
 			]
@@ -209,18 +248,60 @@ TSharedRef<SWidget> UDebugPanel::RebuildWidget()
 		[
 			SNew(SBox).WidthOverride(320.f)
 			[
-				SNew(SBorder).BorderImage(WhiteBrush).Padding(FMargin(10.f, 7.f))
+				SAssignNew(TestInputHintPanel, SBorder).BorderImage(WhiteBrush).Padding(FMargin(10.f, 8.f))
 				.BorderBackgroundColor(FLinearColor(0.009f, 0.022f, 0.035f, 0.94f))
 				.Visibility(EVisibility::HitTestInvisible)
 				[
-					SAssignNew(TestInputHint, STextBlock)
-					.Text_Lambda([this]()
-					{
-						const AAICompanionDemoGameMode* GM = Host.Get();
-						return FText::FromString(GM ? GM->GetTestInputHint() : TEXT("F1 切换鼠标模式"));
-					})
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
-					.ColorAndOpacity(FLinearColor(0.57f, 0.90f, 1.f)).AutoWrapText(false).WrapTextAt(300.f)
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 12.f, 0.f)
+					[
+						SAssignNew(TestInputKeycap, SBox).WidthOverride(55.f).HeightOverride(40.f)
+						[
+							SNew(SBorder).BorderImage(WhiteBrush).Padding(FMargin(0.f, 0.f, 0.f, 4.f))
+							.BorderBackgroundColor_Lambda([this]()
+							{
+								return FSlateColor(ReadTestInputPrompt(Host.Get()).bBlocked
+									? FLinearColor(0.18f, 0.23f, 0.25f) : FLinearColor(0.10f, 0.29f, 0.34f));
+							})
+							[
+								SNew(SBorder).BorderImage(WhiteBrush).Padding(0.f)
+								.HAlign(HAlign_Center).VAlign(VAlign_Center)
+								.BorderBackgroundColor_Lambda([this]()
+								{
+									return FSlateColor(ReadTestInputPrompt(Host.Get()).bBlocked
+										? FLinearColor(0.35f, 0.42f, 0.46f) : FLinearColor(0.68f, 0.90f, 0.97f));
+								})
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("F1")))
+									.Font(FCoreStyle::GetDefaultFontStyle("Bold", 20))
+									.ColorAndOpacity(FLinearColor(0.015f, 0.08f, 0.105f)).AutoWrapText(false)
+								]
+							]
+						]
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SAssignNew(TestInputAction, STextBlock)
+							.Text_Lambda([this]() { return FText::FromString(ReadTestInputPrompt(Host.Get()).Action); })
+							.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+							.ColorAndOpacity_Lambda([this]()
+							{
+								return FSlateColor(ReadTestInputPrompt(Host.Get()).bBlocked
+									? FLinearColor(0.63f, 0.69f, 0.73f) : FLinearColor(0.89f, 0.96f, 0.98f));
+							})
+							.AutoWrapText(false).WrapTextAt(233.f)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)
+						[
+							SAssignNew(TestInputHint, STextBlock)
+							.Text_Lambda([this]() { return FText::FromString(ReadTestInputPrompt(Host.Get()).State); })
+							.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+							.ColorAndOpacity(FLinearColor(0.57f, 0.73f, 0.79f)).AutoWrapText(false).WrapTextAt(233.f)
+						]
+					]
 				]
 			]
 		];
@@ -239,6 +320,9 @@ void UDebugPanel::ReleaseSlateResources(bool bReleaseChildren)
 	ExpandedPanel.Reset();
 	CollapsedBar.Reset();
 	LabelWidgets.Reset();
+	TestInputHintPanel.Reset();
+	TestInputKeycap.Reset();
+	TestInputAction.Reset();
 	TestInputHint.Reset();
 	// 成员style保留：旧SObjectWidget树尚可能持有其地址。
 }
@@ -265,9 +349,22 @@ FString UDebugPanel::DebugPanelState() const
 				*Label->GetText().ToString(), Desired, Allotted, DesiredSize.X, AllottedSize.X);
 		}
 	}
-	return FString::Printf(TEXT("collapsed=%d inViewport=%d measured=%d undersized=%d labels=%d upgradeButtons=%d inputHint=%s | %s"),
+	const FTestInputPrompt InputPrompt = ReadTestInputPrompt(Host.Get());
+	const FVector2D KeycapSize = TestInputKeycap ? TestInputKeycap->GetCachedGeometry().GetLocalSize() : FVector2D::ZeroVector;
+	const FVector2D HintSize = TestInputHintPanel ? TestInputHintPanel->GetCachedGeometry().GetLocalSize() : FVector2D::ZeroVector;
+	const FVector2D ActionDesired = TestInputAction ? TestInputAction->GetDesiredSize() : FVector2D::ZeroVector;
+	const FVector2D ActionAllotted = TestInputAction ? TestInputAction->GetCachedGeometry().GetLocalSize() : FVector2D::ZeroVector;
+	const FVector2D StateDesired = TestInputHint ? TestInputHint->GetDesiredSize() : FVector2D::ZeroVector;
+	const FVector2D StateAllotted = TestInputHint ? TestInputHint->GetCachedGeometry().GetLocalSize() : FVector2D::ZeroVector;
+	const bool bHintMeasured = ActionAllotted.Y > 0.f && StateAllotted.Y > 0.f;
+	const bool bHintUndersized = bHintMeasured && (ActionAllotted.X + 0.5f < ActionDesired.X || ActionAllotted.Y + 0.5f < ActionDesired.Y
+		|| StateAllotted.X + 0.5f < StateDesired.X || StateAllotted.Y + 0.5f < StateDesired.Y);
+	return FString::Printf(TEXT("collapsed=%d inViewport=%d measured=%d undersized=%d labels=%d upgradeButtons=%d inputHint=%s inputAction=%s inputState=%s inputBlocked=%d keycap=%.2fx%.2f hint=%.2fx%.2f actionDesired=%.2fx%.2f actionAllotted=%.2fx%.2f stateDesired=%.2fx%.2f stateAllotted=%.2fx%.2f hintMeasured=%d hintUndersized=%d | %s"),
 		bCollapsed, IsInViewport(), Measured, Undersized, LabelWidgets.Num(), RenderedUpgradeCount,
-		TestInputHint ? *TestInputHint->GetText().ToString() : TEXT(""), *Rows);
+		*InputPrompt.Original, TestInputAction ? *TestInputAction->GetText().ToString() : TEXT(""),
+		TestInputHint ? *TestInputHint->GetText().ToString() : TEXT(""), InputPrompt.bBlocked,
+		KeycapSize.X, KeycapSize.Y, HintSize.X, HintSize.Y, ActionDesired.X, ActionDesired.Y, ActionAllotted.X, ActionAllotted.Y,
+		StateDesired.X, StateDesired.Y, StateAllotted.X, StateAllotted.Y, bHintMeasured, bHintUndersized, *Rows);
 }
 
 void UDebugPanel::DebugSetCollapsed(bool bInCollapsed)
