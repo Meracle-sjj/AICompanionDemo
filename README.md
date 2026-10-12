@@ -4,6 +4,8 @@
 
 # AI队友协作生存原型 · AICompanionDemo
 
+**[下载 v1.3.4-preview 试玩版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.4-preview)** · 玩家附件：`Player-Win64-v1.3.4-preview.zip`。本轮包含祭坛渐扩光柱、单元素互斥与声音调整；[v1.3.3 正式版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)继续作为稳定版。
+
 **v1.3.3 本地完整构建与限定验证已完成。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)；玩家附件为 `Player-Win64-v1.3.3.zip`。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。旧版本标签、附件与反馈继续保留。
 
 一份面向**系统策划岗位**的个人可玩作品。玩家与 AI 队友在沙丘战场中协作，通过站位、护卫／歼灭切换、局内构筑、资源消费与 Boss 挑战改变战局。使用 **Unreal Engine 5.6.1、C++、离线 FSM／Utility AI**，游戏运行不调用大模型。
