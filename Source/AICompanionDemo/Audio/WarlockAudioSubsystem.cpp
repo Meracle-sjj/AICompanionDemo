@@ -1,6 +1,6 @@
 /**
  * [INPUT]: WarlockAudioSubsystem契约、玩家Pawn位置、ICombatant::IsDead、Kismet空间起播与组件真实状态。
- * [OUTPUT]: 两声共享2组件硬预算、.5/.2游戏秒成功CD、玩家800+1600cm线性音量与原位空间方向及编辑器真实入口探针。
+ * [OUTPUT]: 两声共享2组件硬预算、.5/.2游戏秒成功CD、玩家1200+1200cm线性音量与原位空间方向及编辑器真实入口探针。
  * [POS]: Audio妖术师专用短声预算；危机距离不受Boss拉远镜头改变，成功组件不等于可听批准，不使用墙钟重触发或未播队列。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -23,8 +23,8 @@ namespace
 	constexpr int32 MaxComponents = 2;
 	constexpr double ChargeInterval = .5;
 	constexpr double FireInterval = .2;
-	constexpr float InnerDistance = 800.f;
-	constexpr float FalloffDistance = 1600.f;
+	constexpr float InnerDistance = 1200.f;
+	constexpr float FalloffDistance = 1200.f;
 
 	float PlayerDistanceGain(const APawn* Player, const FVector& Location)
 	{

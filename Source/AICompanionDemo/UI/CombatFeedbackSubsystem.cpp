@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Health提交的模式/减伤结算后完整伤害/语义/内部归属值快照，既有金币口，Slate粗体描边/矢量与世界投影。
- * [OUTPUT]: 金币整数与全伤害两位四舍五入裁尾零（正值不足0.005显示<0.01）；九族伤害图样按类型着色，火焰亮红带橙黄内焰/流血暗红，暂停冻结/终局清理。
+ * [OUTPUT]: 金币整数与全伤害两位四舍五入裁尾零（正值不足0.005显示<0.01）；白小剑与十族伤害图样，独立融化在原火伤上行绘冰火双图/混色数字，暂停冻结/终局清理。
  * [POS]: 既有UI数值层的渲染与生命周期实现；不读取可变伤害账本或当前模式，不新增HUD/事件队列/图片字体资源。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -28,6 +28,8 @@ namespace
 	const FLinearColor BladeSilver(.88f, .97f, 1.f);
 	const FLinearColor FireRed(1.f, .12f, .025f);
 	const FLinearColor FireCore(1.f, .66f, .06f);
+	const FLinearColor FrostBlue(.60f, .87f, 1.f);
+	const FLinearColor MeltTint = FMath::Lerp(FrostBlue, FireRed, .5f);
 	const FLinearColor BloodRed(.58f, .025f, .065f);
 	const FLinearColor ShockPurple(.77f, .36f, 1.f);
 
@@ -49,11 +51,11 @@ namespace
 
 	void DamageStyle(ECombatDamageKind Kind, ECombatFeedbackIcon& Icon, FLinearColor& Tint)
 	{
-		Icon = ECombatFeedbackIcon::Bullet; Tint = FLinearColor::White;
+		Icon = ECombatFeedbackIcon::Sword; Tint = FLinearColor::White;
 		switch (Kind)
 		{
-		case ECombatDamageKind::Frost: Icon = ECombatFeedbackIcon::Frost; Tint = FLinearColor(.60f, .87f, 1.f); break;
-		case ECombatDamageKind::Melt:
+		case ECombatDamageKind::Frost: Icon = ECombatFeedbackIcon::Frost; Tint = FrostBlue; break;
+		case ECombatDamageKind::Melt: Icon = ECombatFeedbackIcon::Melt; Tint = MeltTint; break;
 		case ECombatDamageKind::Explosion:
 		case ECombatDamageKind::Burn:
 		case ECombatDamageKind::Fireball:
@@ -110,6 +112,15 @@ namespace
 		FVector2f Center, float Scale, ECombatFeedbackIcon Icon, const FLinearColor& Tint, float Alpha)
 	{
 		FLinearColor Dark = Ink; Dark.A = Alpha;
+		if (Icon == ECombatFeedbackIcon::Melt)
+		{
+			// 反应标记直接复用两种元素剪影，各保留原色，不把融化误读为单纯火伤。
+			DrawIcon(Elements, LayerId, Geometry, Center + FVector2f(-11.f, 0.f) * Scale,
+				Scale * .7f, ECombatFeedbackIcon::Frost, FrostBlue, Alpha);
+			DrawIcon(Elements, LayerId, Geometry, Center + FVector2f(10.f, 0.f) * Scale,
+				Scale * .7f, ECombatFeedbackIcon::Flame, FireRed, Alpha);
+			return;
+		}
 		if (Icon == ECombatFeedbackIcon::Coin)
 		{
 			FLinearColor Gold = CoinGold; Gold.A = Alpha;
@@ -136,9 +147,12 @@ namespace
 			// 火焰用不对称多尖外焰与橙黄内焰，流血保留单尖血滴；剪影和亮度同时区分。
 			switch (Icon)
 			{
-			case ECombatFeedbackIcon::Bullet:
-				Line({{-12, 8}, {0, -12}, {9, -10}, {13, -3}, {1, 15}, {-12, 8}}, 5.f);
-				Line({{-6, 5}, {5, 11}}, 2.f); break;
+			case ECombatFeedbackIcon::Sword:
+				// 尖刃、横向护手与外露剑柄三段构成小剑，物理攻击仍统一纯白。
+				Line({{-5, 3}, {8, -13}, {14, -18}, {12, -10}, {-1, 7}, {-5, 3}}, 3.f);
+				Line({{-10, -1}, {4, 11}}, 4.f);
+				Line({{-3, 6}, {-11, 15}}, 5.f);
+				Line({{-14, 12}, {-9, 17}}, 3.f); break;
 			case ECombatFeedbackIcon::Frost:
 				for (int32 I = 0; I < 3; ++I)
 				{
@@ -216,13 +230,16 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 		const float Ratio = FMath::Clamp(Entry.Age / FeedbackLifetime, 0.f, 1.f);
 		const float Alpha = FMath::Clamp((1.f - Ratio) / .25f, 0.f, 1.f);
 		const float Pop = 1.f + .22f * (1.f - FMath::Clamp(Entry.Age / .13f, 0.f, 1.f));
-		const FVector2f Position(Pixel.X / Dpi, Pixel.Y / Dpi - Ratio * 52.f);
+		// 融化是一笔额外伤害，独立上行只调整画面，不合并或改写原火伤entry。
+		const float ReactionLift = Entry.Icon == ECombatFeedbackIcon::Melt ? 54.f * Pop : 0.f;
+		const FVector2f Position(Pixel.X / Dpi, Pixel.Y / Dpi - Ratio * 52.f - ReactionLift);
 		FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 32.f * Pop);
 		Font.OutlineSettings.OutlineSize = 3;
 		Font.OutlineSettings.OutlineColor = FLinearColor(Ink.R, Ink.G, Ink.B, Alpha);
 		const FString Text = FormatCombatFeedbackAmount(Entry);
 		const FVector2D TextSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, Font);
-		const FVector2f TextOrigin = Position + FVector2f(20.f * Pop, -TextSize.Y * .5f);
+		const float IconAdvance = Entry.Icon == ECombatFeedbackIcon::Melt ? 32.f : 20.f;
+		const FVector2f TextOrigin = Position + FVector2f(IconAdvance * Pop, -TextSize.Y * .5f);
 		DrawIcon(Elements, Base + 1, Geometry, Position, Pop, Entry.Icon, Entry.Tint, Alpha);
 		const FLinearColor Color = Entry.Icon == ECombatFeedbackIcon::Coin
 			? FLinearColor(1.f, .87f, .31f, Alpha) : FLinearColor(Entry.Tint.R, Entry.Tint.G, Entry.Tint.B, Alpha);

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 既有Debug入口、真实选择/出生/应用方法与状态。
- * [OUTPUT]: 原调试方法正文保留，专属JSON转义helper仅在本TU定义。
+ * [OUTPUT]: 调试入口仍调用真实生成/选择/应用方法；Boss召唤保留正式登场链与日志，不重复左上红字；专属JSON转义helper仅在本TU定义。
  * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
@@ -214,10 +214,6 @@ void AWaveDirector::DebugSpawnBoss(int32 BossIndex)
 	{
 		const FString Name = BossNames.IsValidIndex(Idx) ? BossNames[Idx] : FString::Printf(TEXT("BOSS %d"), Idx + 1);
 		Boss->SetBossIdentity(Name, Idx + 1);
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(97, 4.f, FColor::Red, FString::Printf(TEXT("[Debug] %s 已召唤"), *Name));
-		}
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Debug] Boss 召唤：%s"), *Name);
 	}
 }

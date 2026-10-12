@@ -3,6 +3,7 @@
  * [OUTPUT]: 对外提供 ACompanionAIController——队友大脑 M3 版：Follow/Engage 双状态手写 FSM（D3）+ **双作战模式**（Guard 护卫=移动层永远跟玩家走射护主 / Berserk 战斗狂人=追击评分最优目标；Q 键 Tick 边沿切换，共享评分器与火力层——元策略层）+ 感知对齐（26m 视距全向视锥，UPROPERTY 可调，信息对等原则）+ utility 评分器 EvaluateTargets（距离/威胁/残血三维，威胁含"咬人仇恨覆盖拉满"，权重护主主导 0.6/0.3/0.1 + SwitchCost 切换惩罚）+ 伤害通道 HandlePlayerDamaged（玩家受击广播 → 凶手注入候选集）+ 屏幕评分板 DrawScoreboard（[咬] 仇恨标记，可解释北极星的核心交付）+ M3.75 生命感层：Bark 台词播报（七类事件触发一句话人格，全局+分类双冷却，头顶跟随字幕）+ 步态输入读当前路径段（不重扫已走路点）与方向平滑；同目标活跃路径不重发MoveTo+ E5 暂态狂怒攻速 ActivateFrenzy（开火间隔×0.5 弹道紫，定时自恢复——TemporaryPickup 触发）；暴露 Follow/Perception/Combat/Mode/Utility/Bark 六组 EditAnywhere 参数
  * [POS]: Source/AICompanionDemo/AI 的决策核心；驱动CompanionCharacter，面向ICombatant感知/决策/攻击；1.2移动诊断保留实际MoveTo结果并供五秒日志读取，导航失败仍停步；评分板只在显式开启时展示。
  *  狂暴读真实FrenzyTimer；Q被动由Health乘一次，弹路显示实际扣血。感电5秒不消费，0.5秒集中互斥配对、原伤减半；Nova命中后继承玩家状态及独立地刺口。
+ *  Nova是本体闪现技能，借本执行器的射线参数而不借队友归属；普通AI射击与Nova都尊重传入施加者，模式/血链按实际源分流。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -177,7 +178,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Companion|Upgrade", meta = (ClampMin = "0.1", ClampMax = "2.0"))
 	float ExplosionDamageScale = 0.35f;
 
-	/** 寒霜弹（火力卡，控制系视觉）：命中使敌人减速染蓝（用户 2026-09-13 提案） */
+	/** 寒霜弹（火力卡，控制系视觉）：命中减速40%持续2s并挂队友雪花，不传播，仅玩家火触发独立融化 */
 	UPROPERTY(EditAnywhere, Category = "Companion|Upgrade")
 	bool bFrostUnlocked = false;
 
@@ -257,12 +258,12 @@ private:
 	/** 开火节拍：射程+LOS 双条件校验通过才 ApplyDamage + 弹道光束 */
 	void FireAtTarget();
 
-	/** 单条弹道（C1 火力层统一出口）：方向 trace → 命中/贯穿伤害 → 光束特效（颜色/粗细/贯穿感随升级卡变形）；HitFlashColor=命中火花色（伤害来源的可视辨识——常态黄/重击红/爆射品红，用户 2026-09-13 定调） */
+	/** 复用单条弹道，尊重InstigatorPawn实际来源；普通AI传队友，Nova传本体。原伤害/贯穿/命中链/光束参数保持。 */
 	void FireShot(AActor* InstigatorPawn, const FVector& Origin, const FVector& Direction, float DamageScale, const FColor& HitFlashColor = FColor::Yellow,
 		TMap<TWeakObjectPtr<AActor>, FVector>* ElementHits = nullptr);
 
 public:
-	/** 融合·闪现轰击（C1 融合卡）：闪现落点向八方爆射弹道——玩家闪现时回调，"你落地即爆炸" */
+	/** 本体融合·闪现轰击：实际玩家闪现传自身，在落点借八方射线结算；伤害/附冰归本体，零伤载荷不授传播资格。 */
 	void NovaBurst(AActor* InstigatorPawn, const FVector& Center);
 
 	/** E5 狂怒攻速（TemporaryPickup 收集触发）：开火间隔×0.5 持续 Duration 秒，弹道变紫，定时自恢复 */

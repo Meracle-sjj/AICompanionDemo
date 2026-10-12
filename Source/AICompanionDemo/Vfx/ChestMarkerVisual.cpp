@@ -1,6 +1,6 @@
 /**
  * [INPUT]: ChestMarkerVisual.h、CoreStyle内置Bold/描边字体与Slate矢量线、相机和真实暂停/低流速。
- * [OUTPUT]: 384x160世界画布；FREE!紫白粗字、普通锁与真实金币大数、金色钥匙无数字；10m到4m smoothstep及时间平滑渐显。
+ * [OUTPUT]: 384x160世界画布；FREE!紫白粗字与共用水平中心/安全内边距的漫画E键帽，E矢量居中；普通锁与真实金币大数、金色钥匙无数字，10m到4m smoothstep及时间平滑渐显。
  * [POS]: 宝箱纯视觉实现；不读写奖励账本，无调试文字、外部图片或新增资产，Slate仅持值。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,12 +19,20 @@
 #include "Styling/CoreStyle.h"
 #include "Widgets/SLeafWidget.h"
 
+namespace
+{
+	const FVector2f MarkerCanvasSize(384.f, 160.f);
+	const FVector2f KeycapSize(44.f, 32.f);
+	const FVector2f KeycapCenter(MarkerCanvasSize.X * .5f, 136.f);
+	const FVector2f KeyGlyphHalfSize(7.f, 10.f);
+}
+
 class SChestMarkerGlyph final : public SLeafWidget
 {
 public:
 	SLATE_BEGIN_ARGS(SChestMarkerGlyph) {} SLATE_END_ARGS()
 	void Construct(const FArguments&) { SetCanTick(false); SetVisibility(EVisibility::HitTestInvisible); }
-	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(384.f, 160.f); }
+	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(MarkerCanvasSize); }
 	bool SetPresentation(EChestMarkerKind Kind, int32 Price, bool bNearby, bool bHasKey)
 	{
 		if (DisplayKind == Kind && DisplayPrice == Price && bInteract == bNearby && bKey == bHasKey) { return false; }
@@ -66,7 +74,7 @@ public:
 		if (DisplayKind == EChestMarkerKind::Free)
 		{
 			// 大写粗字为主信息；细高光/双侧星芒保持沙漠上清晰的剪影。
-			Text(TEXT("FREE!"), 192.f, 67.f, 70.f, FLinearColor(1.f, .92f, 1.f, 1.f));
+			Text(TEXT("FREE!"), KeycapCenter.X, 67.f, 70.f, FLinearColor(1.f, .92f, 1.f, 1.f));
 			Stroke({FVector2f(49, 108), FVector2f(335, 108)}, Violet, 4.f);
 			for (const float X : {25.f, 359.f})
 			{
@@ -99,10 +107,26 @@ public:
 		}
 		if (bInteract)
 		{
-			Stroke({FVector2f(175, 123), FVector2f(209, 123), FVector2f(209, 156), FVector2f(175, 156), FVector2f(175, 123)}, Main, 2.5f);
-			Text(TEXT("E"), 192.f, 139.f, 21.f, FLinearColor::White);
+			const FVector2f TopLeft = KeycapCenter - KeycapSize * .5f;
+			const auto Box = [&](int32 OffsetLayer, FVector2f Position, FVector2f Size, const FLinearColor& Color)
+			{
+				FSlateDrawElement::MakeBox(Elements, Layer + OffsetLayer,
+					Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(Position)),
+					FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")), ESlateDrawEffect::None, Color * Tint);
+			};
+			// 键帽底影与E的真实线段共用中心；不受字体上升部/下降部留白影响，也不越过160画布底边。
+			Box(2, TopLeft + FVector2f(0.f, 3.f), KeycapSize, Dark);
+			Box(2, TopLeft, KeycapSize, Dark);
+			Box(3, TopLeft + FVector2f(2.f), KeycapSize - FVector2f(4.f), Main);
+			Box(4, TopLeft + FVector2f(4.f), KeycapSize - FVector2f(8.f), FLinearColor(1.f, .92f, 1.f));
+			const FVector2f A = KeycapCenter - KeyGlyphHalfSize;
+			const FVector2f B = KeycapCenter + KeyGlyphHalfSize;
+			FSlateDrawElement::MakeLines(Elements, Layer + 5, Geometry.ToPaintGeometry(),
+				TArray<FVector2f>{FVector2f(B.X, A.Y), A, FVector2f(A.X, B.Y), B}, ESlateDrawEffect::None, Dark * Tint, true, 3.5f);
+			FSlateDrawElement::MakeLines(Elements, Layer + 5, Geometry.ToPaintGeometry(),
+				TArray<FVector2f>{FVector2f(A.X, KeycapCenter.Y), FVector2f(B.X - 2.f, KeycapCenter.Y)}, ESlateDrawEffect::None, Dark * Tint, true, 3.5f);
 		}
-		return Layer + 2;
+		return Layer + 5;
 	}
 private:
 	EChestMarkerKind DisplayKind = EChestMarkerKind::Gold;
@@ -114,7 +138,7 @@ private:
 UChestMarkerVisual::UChestMarkerVisual(const FObjectInitializer& Initializer) : Super(Initializer)
 {
 	SetWidgetSpace(EWidgetSpace::World); SetGeometryMode(EWidgetGeometryMode::Plane);
-	SetDrawSize(FVector2D(384.f, 160.f)); SetPivot(FVector2D(.5f, .5f)); SetDrawAtDesiredSize(false);
+	SetDrawSize(FVector2D(MarkerCanvasSize)); SetPivot(FVector2D(.5f, .5f)); SetDrawAtDesiredSize(false);
 	SetBlendMode(EWidgetBlendMode::Transparent); SetBackgroundColor(FLinearColor::Transparent);
 	SetTwoSided(true); SetWindowFocusable(false); SetManuallyRedraw(true); SetTickMode(ETickMode::Enabled);
 	SetTickWhenOffscreen(false); SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -181,9 +205,11 @@ void UChestMarkerVisual::ReleaseResources() { Super::ReleaseResources(); Glyph.R
 
 FString UChestMarkerVisual::DebugVisualState() const
 {
-	return FString::Printf(TEXT("{\"kind\":%d,\"text\":\"%s\",\"price\":%d,\"keyOwned\":%s,\"interactNearby\":%s,\"opacity\":%.5f,\"targetOpacity\":%.5f,\"playerDistance\":%.3f,\"visible\":%s,\"retired\":%s,\"widgetReady\":%s,\"renderTarget\":%s,\"registered\":%s,\"collision\":%d,\"worldWidth\":192,\"font\":\"CoreStyle.Bold\"}"),
+	return FString::Printf(TEXT("{\"kind\":%d,\"text\":\"%s\",\"price\":%d,\"keyOwned\":%s,\"interactNearby\":%s,\"opacity\":%.5f,\"targetOpacity\":%.5f,\"playerDistance\":%.3f,\"visible\":%s,\"retired\":%s,\"widgetReady\":%s,\"renderTarget\":%s,\"registered\":%s,\"collision\":%d,\"worldWidth\":192,\"font\":\"CoreStyle.Bold\",\"freeCenterX\":%.1f,\"keycapCenter\":[%.1f,%.1f],\"keyGlyphCenter\":[%.1f,%.1f],\"keycapSize\":[%.1f,%.1f],\"keyGlyphSize\":[%.1f,%.1f],\"keycapStyle\":\"comic_vector_e\"}"),
 		static_cast<int32>(DisplayKind), DisplayKind == EChestMarkerKind::Free ? TEXT("FREE!") : DisplayKind == EChestMarkerKind::Gold ? TEXT("LOCK+PRICE") : TEXT("KEY"),
 		DisplayPrice, bKeyOwned ? TEXT("true") : TEXT("false"), bNearby ? TEXT("true") : TEXT("false"), Opacity, TargetOpacity, PlayerDistance,
 		IsVisible() ? TEXT("true") : TEXT("false"), bRetired ? TEXT("true") : TEXT("false"), Glyph.IsValid() && GetSlateWidget() == Glyph ? TEXT("true") : TEXT("false"),
-		GetRenderTarget() ? TEXT("true") : TEXT("false"), IsRegistered() ? TEXT("true") : TEXT("false"), static_cast<int32>(GetCollisionEnabled()));
+		GetRenderTarget() ? TEXT("true") : TEXT("false"), IsRegistered() ? TEXT("true") : TEXT("false"), static_cast<int32>(GetCollisionEnabled()),
+		KeycapCenter.X, KeycapCenter.X, KeycapCenter.Y, KeycapCenter.X, KeycapCenter.Y,
+		KeycapSize.X, KeycapSize.Y, KeyGlyphHalfSize.X * 2.f, KeyGlyphHalfSize.Y * 2.f);
 }

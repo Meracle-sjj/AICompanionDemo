@@ -1,9 +1,10 @@
-﻿/** [INPUT]: 玩家自动射击、ICombatant活敌、元素残留与遗物主攻回调。
- * [OUTPUT]: 玩家感电赠叉从枪口按15度散射（已有散射时30度），独立于折射；5秒挂电、整发去重且分支不递归，遗物主攻仅一次；弹丸/折射/冰/融化语义交Health实际量入口，不自行发伤害数字。
+/** [INPUT]: 玩家自动射击、ICombatant活敌、共用元素来源解析与遗物主攻回调。
+ * [OUTPUT]: 玩家感电赠叉从枪口按15度散射（已有散射时30度），独立于折射；5秒挂电、整发去重且分支不递归，遗物主攻仅一次；本体弹路可传播、本体Nova挂本体冰不授源；冰弹原伤害/语义交Health，不自行发伤害数字。
  * [POS]: 玩家战斗局部实现，与输入/生命周期分离。 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AICompanionDemoCharacter.h"
 #include "AICompanionDemo.h"
 #include "AI/Combatant.h"
+#include "AI/CombatElementalDamage.h"
 #include "AI/EnemyGrunt.h"
 #include "Audio/SFXLibrary.h"
 #include "Camera/CameraComponent.h"
@@ -63,7 +64,7 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 		UHealthComponent* VictimHealth = Combatant ? Combatant->GetHealthComponent() : nullptr;
 		if (!Combatant || Combatant->IsDead() || !IsValid(VictimHealth)) return false;
 		PayloadTargets.Add(Actor); // 同一发的主弹/侧弹/贯穿/单跳只算一次元素及伤害。
-		const float FinalDamage = ApplyElementPayload(Actor, Damage, Color, Point, &Kind);
+		const float FinalDamage = ApplyElementPayload(Actor, Damage, Color, Point, &Kind, true);
 		VictimHealth->ApplyCombatDamage(FinalDamage, this, {Kind, Point + FVector(0, 0, 30)});
 		return true;
 	};
@@ -135,10 +136,11 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 		if (UBossRelicComponent* Relics = FindComponentByClass<UBossRelicComponent>())
 			Relics->NotifyPrimaryAttack(this, Primary.Get(), PrimaryPoint);
 }
-float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float BaseDamage, FColor& InOutShotColor, const FVector& FxLocation, ECombatDamageKind* OutDamageKind)
+float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float BaseDamage, FColor& InOutShotColor, const FVector& FxLocation,
+	ECombatDamageKind* OutDamageKind, bool bCanSpreadFrost, AActor* ElementInstigator)
 {
 	// 元素弹头挂载统一入口（09-30 用户裁决"三线继承元素"——弹道形态与元素弹头正交）：主弹/散射侧弹/
-	// 穿透走廊/折射跳四条命中路径全经此——融化/冰霜/感电/印记一处结算
+	// 穿透走廊/折射跳四条命中路径全经此——冰霜/感电/印记一处挂载，反应仅在火伤入口结算
 	float FinalDamage = BaseDamage;
 	if (bHuntMarkUnlocked)
 	{
@@ -153,31 +155,14 @@ float AAICompanionDemoCharacter::ApplyElementPayload(AActor* VictimActor, float 
 		return FinalDamage;
 	}
 
-	// 融化（火×冰）：冰弹命中灼烧残留体=本次 ×2 + 冰蓝爆闪+火焰特效——辉耀灼烧是 AI 侧现成元素，玩家冰弹是引信
-	// 冰来源始终刷新独立残留；已燃烧的目标仍可让随后火盾/火圈主动融化。
+	// 参数与实际施加者显式传递；本体Nova也挂本体冰，但只有本体普通弹路可授传播资格。
 	if (bFrostShotUnlocked)
 	{
 		if (OutDamageKind) *OutDamageKind = ECombatDamageKind::Frost;
-		GruntVictim->RefreshFrostResidue(FrostSlowSeconds);
-		GruntVictim->ApplySlow(FrostSlowSeconds, FrostSlowFactor); // Nova零伤挂载与融化命中也保留当前减速。
-	}
-	const bool bMelt = BaseDamage > 0.f && bFrostShotUnlocked && GruntVictim->GetBurnResidue() > 0.f;
-	if (bMelt)
-	{
-		if (OutDamageKind) *OutDamageKind = ECombatDamageKind::Melt;
-		FinalDamage *= 2.f;
+		FCombatElementalDamage::ApplyFrost(GruntVictim, ElementInstigator ? ElementInstigator : this,
+			FrostSlowSeconds, FrostSlowFactor, bCanSpreadFrost && BaseDamage > 0.f);
 		InOutShotColor = FColor::FromHex(TEXT("9BD7FF"));
-		UVfxLibrary::SpawnVfx(GetWorld(), EVfx::Fire, FxLocation, 0.5f, 0.7f);   // [VFX] 融化火焰
-		DrawDebugSphere(GetWorld(), FxLocation, 45.f, 12, FColor::FromHex(TEXT("9BD7FF")), false, 0.3f, 0, 3.f);
-		DrawDebugString(GetWorld(), FxLocation + FVector(0.f, 0.f, 70.f), TEXT("融化！"),
-			nullptr, FColor::FromHex(TEXT("9BD7FF")), 0.7f, false, 1.2f);
-		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Element] 融化：冰弹命中灼烧体，伤害 ×2 → %s"),
-			*GetNameSafe(GruntVictim));
-	}
-	else if (bFrostShotUnlocked)
-	{
-		InOutShotColor = FColor::FromHex(TEXT("9BD7FF"));
-		UVfxLibrary::SpawnVfx(GetWorld(), EVfx::Frost, FxLocation, 0.4f, 0.7f);   // [VFX] 冰霜霜闪
+		UVfxLibrary::SpawnVfx(GetWorld(), EVfx::Frost, FxLocation, .4f, .7f);
 	}
 
 	// 感电用固定闪电标记表达残留；真正连接电弧仅在AI子弹配对两个带电活敌时生成。

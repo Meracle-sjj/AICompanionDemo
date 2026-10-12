@@ -1,9 +1,10 @@
-﻿/** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口、感电显示与UI/CombatFeedbackSubsystem处决反馈。
- * [OUTPUT]: FireShot、溅射、处决、折射和感电的明确伤害语义；感电0.5秒互斥配对/减半/5秒不消费，AI穿透折射互斥，Nova继承玩家状态。
+/** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口、CombatElementalDamage独立异人融化与感电显示。
+ * [OUTPUT]: 队友冰保持2秒/40%减速、无传播资格；本体Nova借射线实现但伤害/附冰仍归本体，零伤载荷不授传播源；原火力/猎印/感电/地刺节拍保持。
  * [POS]: Companion火力局部实现；本文件提交原始伤害、落点和处决层数，Health只乘一次模式并统一发漫画反馈。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AI/CompanionAIController.h"
 #include "AI/Combatant.h"
+#include "AI/CombatElementalDamage.h"
 #include "AI/EnemyGrunt.h"
 #include "AICompanionDemo.h"
 #include "AICompanionDemoCharacter.h"
@@ -41,8 +42,8 @@ void ACompanionAIController::ApplyHitChain(AActor* DirectVictim, UHealthComponen
 				if (UHealthComponent* BlastHealth = Cast<ICombatant>(BlastVictim)->GetHealthComponent())
 				{
 					const float BlastDmg = AttackDamage * ChainScale * ExplosionDamageScale;
-					BlastHealth->ApplyCombatDamage(BlastDmg, InstigatorPawn,
-						{ECombatDamageKind::Explosion, BlastVictim->GetActorLocation() + FVector(0.f, 0.f, 90.f)});
+					FCombatElementalDamage::ApplyFire(BlastVictim, InstigatorPawn, BlastDmg,
+						ECombatDamageKind::Explosion, BlastVictim->GetActorLocation() + FVector(0.f, 0.f, 90.f));
 				}
 			}
 		}
@@ -50,13 +51,12 @@ void ACompanionAIController::ApplyHitChain(AActor* DirectVictim, UHealthComponen
 
 	if (!IsValid(DirectVictim) || !IsValid(DirectHealth)) return;
 
-	// 寒霜链：命中即染冻减速（弹到的目标同样生效——"弹射也没法触发附加收益"清账）
+	// 队友寒霜链：命中挂独立队友冰与雪花减速（弹到的目标同样生效——"弹射也没法触发附加收益"清账）
 	if (bFrostUnlocked)
 	{
 		if (AEnemyGrunt* FrostVictim = Cast<AEnemyGrunt>(DirectVictim))
 		{
-			FrostVictim->ApplySlow(2.f, 0.6f);
-			FrostVictim->RefreshFrostResidue(2.f);
+			FCombatElementalDamage::ApplyFrost(FrostVictim, InstigatorPawn, 2.f, .6f);
 		}
 	}
 
@@ -93,7 +93,7 @@ void ACompanionAIController::NovaBurst(AActor* InstigatorPawn, const FVector& Ce
 		const float Angle = FMath::DegreesToRadians(i * 45.f);
 		FireShot(InstigatorPawn, Center, FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0), .7f, FColor::Magenta, &ElementHits);
 	}
-	// 全部AI射线先结算旧猎印，整次爆射结束后统一挂玩家当前状态。
+	// 全部本体技能射线先结算旧猎印，整次爆射结束后统一挂玩家当前状态。
 	// 重叠走廊不会在后一条射线中吃掉刚挂的新猎印，同目标仅挂一次元素。
 	for (const TPair<TWeakObjectPtr<AActor>, FVector>& Hit : ElementHits)
 	{
@@ -101,7 +101,8 @@ void ACompanionAIController::NovaBurst(AActor* InstigatorPawn, const FVector& Ce
 		if (ICombatant* Combatant = Cast<ICombatant>(Hit.Key.Get()); Combatant && !Combatant->IsDead())
 		{
 			FColor Color = FColor::Magenta;
-			ElementSource->ApplyElementPayload(Hit.Key.Get(), 0.f, Color, Hit.Value);
+			// 执行器复用不改变技能归属；借本体参数也明确保留本体施加者，Nova不授传播资格。
+			ElementSource->ApplyElementPayload(Hit.Key.Get(), 0.f, Color, Hit.Value, nullptr, false, ElementSource.Get());
 		}
 	}
 	for (const TPair<TWeakObjectPtr<AActor>, FVector>& Hit : ElementHits)
@@ -114,8 +115,9 @@ void ACompanionAIController::NovaBurst(AActor* InstigatorPawn, const FVector& Ce
 void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Origin, const FVector& Direction, float DamageScale, const FColor& HitFlashColor,
 	TMap<TWeakObjectPtr<AActor>, FVector>* ElementHits)
 {
-	// 闪现爆射的调用者是玩家，实际子弹仍属于队友；模式伤害在Health按此归属统一乘一次。
-	if (IsValid(GetPawn())) InstigatorPawn=GetPawn();
+	// 尊重调用方传入的真实施加者：普通射击传队友，闪现爆射传本体，执行器不替换归属。
+	const APawn* SourcePawn = Cast<APawn>(InstigatorPawn);
+	const ACompanionAIController* SourceController = SourcePawn ? Cast<ACompanionAIController>(SourcePawn->GetController()) : nullptr;
 	if (UGameplayStatics::GetGlobalTimeDilation(this) < .01f || GetWorld()->IsPaused()) return;
 	const APawn* CombatGateHero = UGameplayStatics::GetPlayerPawn(this, 0);
 	const UHealthComponent* HeroHealth = CombatGateHero ? CombatGateHero->FindComponentByClass<UHealthComponent>() : nullptr;
@@ -187,7 +189,7 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 
 		if (!IsValid(Health)) continue;
 		const float BeforeShotHealth = Health->GetCurrentHealth();
-		const float ShotModeMultiplier = GetModeDamageMultiplier();
+		const float ShotModeMultiplier = SourceController ? SourceController->GetModeDamageMultiplier() : 1.f;
 		Health->ApplyCombatDamage(AttackDamage * Scale, InstigatorPawn, {ECombatDamageKind::Projectile, HitPoint + FVector(0.f, 0.f, 28.f)});
 		if (!IsValid(Health)||!IsValid(Victim)) continue;
 		const float ActualShotDamage = FMath::Max(BeforeShotHealth - Health->GetCurrentHealth(), 0.f);
@@ -196,7 +198,7 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 		LastShotDisplayedDamage = FMath::RoundToFloat(ActualShotDamage * 100.f) / 100.f;
 		LastShotModeMultiplier = ShotModeMultiplier;
 		LastShotVictim = Victim;
-		if (const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0))
+		if (const APawn* Hero = SourceController ? UGameplayStatics::GetPlayerPawn(this, 0) : nullptr)
 		{
 			if (UBossRelicComponent* Relics = Hero->FindComponentByClass<UBossRelicComponent>())
 			{ Relics->NotifyCompanionHit(InstigatorPawn, ActualShotDamage); }
@@ -258,7 +260,7 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 					NextHealth->ApplyCombatDamage(AttackDamage * BounceScale, InstigatorPawn, {ECombatDamageKind::Ricochet, NextChest + FVector(0.f, 0.f, 22.f)});
 					if (!IsValid(NextHealth)||!IsValid(Next)) break;
 					const float ActualBounceDamage = FMath::Max(BeforeBounceHealth - NextHealth->GetCurrentHealth(), 0.f);
-					if (const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0))
+					if (const APawn* Hero = SourceController ? UGameplayStatics::GetPlayerPawn(this, 0) : nullptr)
 					{
 						if (UBossRelicComponent* Relics = Hero->FindComponentByClass<UBossRelicComponent>())
 						{ Relics->NotifyCompanionHit(InstigatorPawn, ActualBounceDamage); }

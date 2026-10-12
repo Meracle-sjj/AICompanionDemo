@@ -5,7 +5,7 @@
  * [OUTPUT]: 对外提供 ABossColossus 的实现——BeginPlay 入场欢迎刺（bHarmless）+体量覆写（血 4500 慢速 180）；
  *  TickSlam 三模式（读条期按 PendingSpikes 蓝图画红圈脉冲）：①红圈阵（5×5 裁圆大圈 21 只）②锁定圈（大圈预告环刺）
  *  ③放射射线（8 向逐刺小圈）；ExecuteSlam 蓝图实体化（刺破地 0.12s）+逐刺各半径判定同帧；
- *  squash蓄力/实际落锤0.38s震屏（42XY/24Z，小于虫80/46）；仅原地愤怒放射模式播BossImpact，另两模式静音；刺0.12s→0.45s→0.35s销毁
+ *  squash蓄力/实际落锤0.38s震屏（42XY/24Z，小于虫80/46）；仅原地愤怒放射模式播BossImpact，另两模式静音；刺0.12s→0.45s→0.35s销毁；登场沿基类正式语音/事件，不重复左上红字
  *   **✅ 原型跑通（2026-10-05 用户验收：BossBase 浮空修复后移动/追击/三段地刺/近战全链验证，登记为原型）**；
  *   受击动作已删常态（09-30 用户裁决"打怪一直抽搐很诡异"）：HitReactDamageThreshold 默认 99999=禁用，
  *   暴击体系落地后调低即"大伤才踉跄"分级（数据源 HealthComponent::LastDamageTaken）
@@ -128,11 +128,6 @@ void ABossColossus::BeginPlay()
 			FVector SpikeLoc = GetActorLocation() + FVector(FMath::Cos(Angle) * 320.f, FMath::Sin(Angle) * 320.f, 0.f);
 			ResolveGroundZ(SpikeLoc);
 			SpawnSpike(SpikeLoc, 0.f, 1.4f, /*bHarmless*/ true);
-		}
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(96, 4.f, kColossusRing,
-				TEXT("裂地巨像 苏醒！小心脚下红圈！"));
 		}
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] 裂地巨像入场——环形欢迎刺 ×10（无害仪式）"));
 	}

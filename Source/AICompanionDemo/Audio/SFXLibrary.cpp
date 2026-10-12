@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SFXLibrary.h 的槽位契约、Kismet/GameplayStatics 的 SpawnSound2D/SpawnSoundAtLocation、Engine/World、Engine/SoundAttenuation（运行时构造衰减——空间化语音零资产）
- * [OUTPUT]: 固定录音字幕/预算；妖术师短声交专用世界预算，铡刀/地下声与原BGM独立
+ * [OUTPUT]: 固定录音字幕/预算及队友加速独立录音；妖术师短声交专用世界预算，铡刀/地下声与原BGM独立
  * [POS]: Audio槽位解析与播放分流；语音/妖术师交各世界所有者，其他事件保持原2D入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -108,6 +108,7 @@ namespace
 		case EGameSFX::CardVoice_BloodSacrifice:  Sound = Slots->CardVoice_BloodSacrifice;  Volume = 1.f; break;
 		case EGameSFX::CardVoice_Vigor:           Sound = Slots->CardVoice_Vigor;           Volume = 1.f; break;
 		case EGameSFX::CardVoice_SwiftMove:       Sound = Slots->CardVoice_SwiftMove;       Volume = 1.f; break;
+		case EGameSFX::CardVoice_CompanionSwiftMove: Sound = Slots->CardVoice_CompanionSwiftMove; Volume = 1.f; break;
 		case EGameSFX::CardVoice_Barrage:         Sound = Slots->CardVoice_Barrage;         Volume = 1.f; break;
 		case EGameSFX::CardVoice_BlinkBomb:       Sound = Slots->CardVoice_BlinkBomb;       Volume = 1.f; break;
 		case EGameSFX::CardVoice_RadianceOverload: Sound = Slots->CardVoice_RadianceOverload; Volume = 1.f; break;
@@ -253,6 +254,7 @@ bool USFXLibrary::IsInterruptingVoice(EGameSFX Event)
 bool USFXLibrary::IsLimitedItemVoice(EGameSFX Event)
 {
 	return (Event >= EGameSFX::CardVoice_Blink && Event <= EGameSFX::CardVoice_RadianceBond)
+		|| Event == EGameSFX::CardVoice_CompanionSwiftMove
 		|| IsPickupVoice(Event) || Event == EGameSFX::Voice_BeaconRepeat;
 }
 
@@ -358,6 +360,7 @@ FString USFXLibrary::GetVoiceLine(EGameSFX Event)
 	case EGameSFX::CardVoice_BloodSacrifice: return TEXT("力量，总有代价。");
 	case EGameSFX::CardVoice_Vigor: return TEXT("结构强化完毕。");
 	case EGameSFX::CardVoice_SwiftMove: return TEXT("移动模块，提速。");
+	case EGameSFX::CardVoice_CompanionSwiftMove: return TEXT("现在，我更能跟上你的脚步了。");
 	case EGameSFX::CardVoice_Barrage: return TEXT("弹幕覆盖，一个不留。");
 	case EGameSFX::CardVoice_BlinkBomb: return TEXT("落点，即是爆点。");
 	case EGameSFX::CardVoice_RadianceOverload: return TEXT("领域扩张至极限。");

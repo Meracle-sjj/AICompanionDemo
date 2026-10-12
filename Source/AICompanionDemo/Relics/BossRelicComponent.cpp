@@ -1,8 +1,8 @@
 /**
- * [INPUT]: 本组件数据契约、ICombatant/Health统一实际扣血反馈、EnemyGrunt 普通减速与冰火残留、CompanionAIController 狂怒、
+ * [INPUT]: 本组件数据契约、ICombatant/Health统一实际扣血反馈、EnemyGrunt 普通减速、CombatElementalDamage异人独立融化与灼烧表现、CompanionAIController 狂怒、
  *  BossOrb::LaunchFriendly、Vfx/SFX及Niagara组件回传、Engine Cone/BasicShapeMaterial、Character::LaunchCharacter。
  * [OUTPUT]: 九遗物结算；行走火球30范围伤与闪烁三球30/20互斥共用独立爆闪；地刺真实概率触发时仅播一次铡刀短砍音，50与5s/0.5s每跳10流血保持。
- * [POS]: Relics/运行时实现；只向Health提交次生伤害类别与落点，不再自行发伤害数值；统一重入闸，死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
+ * [POS]: Relics/运行时实现；玩家火先正常结算，再由统一入口消费队友冰并另结同raw融化；只向Health提交次生伤害类别与落点，不再自行发伤害数值；统一重入闸，死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "BossRelicComponent.h"
@@ -11,6 +11,7 @@
 
 #include "AI/BossOrb.h"
 #include "AI/Combatant.h"
+#include "AI/CombatElementalDamage.h"
 #include "AI/CompanionAIController.h"
 #include "AI/CompanionCharacter.h"
 #include "AI/EnemyGrunt.h"
@@ -389,12 +390,15 @@ void UBossRelicComponent::NotifyPlayerDamaged(AActor* Source, float ActualDamage
 	}
 }
 
-float UBossRelicComponent::DamageEnemy(AActor* Target, float Damage, ECombatDamageKind Kind)
+float UBossRelicComponent::DamageEnemy(AActor* Target, float Damage, ECombatDamageKind Kind, bool* OutMelt)
 {
+	if (OutMelt) *OutMelt = false;
 	ICombatant* Combatant = IsValid(Target) ? Cast<ICombatant>(Target) : nullptr;
 	if (!Combatant || Combatant->IsDead() || Damage <= 0 || !OwnerAlive()) return 0.f;
 	UHealthComponent* Health = Combatant->GetHealthComponent();
 	if (!Health) return 0.f;
+	if (Kind == ECombatDamageKind::Burn || Kind == ECombatDamageKind::Explosion || Kind == ECombatDamageKind::Fireball)
+		return FCombatElementalDamage::ApplyFire(Target, GetOwner(), Damage, Kind, Target->GetActorLocation() + FVector(0, 0, 95), OutMelt);
 	const float Before = Health->GetCurrentHealth();
 	Health->ApplyCombatDamage(Damage, GetOwner(), {Kind, Target->GetActorLocation() + FVector(0, 0, 95)});
 	return FMath::Max(Before - Health->GetCurrentHealth(), 0.f);
@@ -430,12 +434,11 @@ void UBossRelicComponent::FireAreaDamage(const FVector& Center, float Radius, fl
 	{
 		if (FVector::DistSquared2D(Center, Enemy->GetActorLocation()) > FMath::Square(Radius)) continue;
 		AEnemyGrunt* Grunt = Cast<AEnemyGrunt>(Enemy);
-		const bool bMelt = Grunt && Grunt->GetFrostResidue() > 0.f;
-		const float Actual = DamageEnemy(Enemy, Damage * (bMelt ? 2.f : 1.f), bMelt ? ECombatDamageKind::Melt : ECombatDamageKind::Burn);
+		bool bMelt = false;
+		const float Actual = DamageEnemy(Enemy, Damage, ECombatDamageKind::Burn, &bMelt);
 		if (Actual <= 0) continue;
 		if (Grunt)
 		{
-			if (bMelt) Grunt->ConsumeFrostResidue();
 			Grunt->RefreshBurnResidue(1.5f);
 		}
 		const FVector Point = Enemy->GetActorLocation();
@@ -656,8 +659,8 @@ FString UBossRelicComponent::DescribeRelic(EBossRelicId Id) const
 	case EBossRelicId::SeismicStrike: return FString::Printf(TEXT("每 %.0f 秒准备一次震爆；下一次主攻命中时，半径 %.1f 米造成 %.0f 伤害并击飞普通敌人。"), SeismicInterval, SeismicRadius / 100.f, SeismicDamage);
 	case EBossRelicId::StoneCarapace: return FString::Printf(TEXT("永久减伤 %.0f%%；实际受击时，对伤害来源敌人反伤 %.0f。"), CarapaceReduction * 100.f, ThornsDamage);
 	case EBossRelicId::VolcanicRounds: return FString::Printf(TEXT("玩家每次主攻命中附加爆炸，半径 %.1f 米造成 %.0f 伤害；散射、穿透与次生效果不重复触发。"), VolcanicRadius / 100.f, VolcanicDamage);
-	case EBossRelicId::FlameWard: return FString::Printf(TEXT("每 %.0f 秒获得 %.0f 秒火盾，期间减伤 %.0f%%；半径 %.1f 米每 %.1f 秒灼烧 %.0f 伤害，碰到冰残留触发一次双倍融化。"), WardInterval, WardDuration, WardReduction * 100.f, WardRadius / 100.f, WardDamageInterval, WardDamagePerTick);
-	case EBossRelicId::BlinkPyre: return FString::Printf(TEXT("闪烁起点和终点留下半径 %.1f 米火圈，持续 %.0f 秒，每 %.1f 秒造成 %.0f 火伤；可触发融化，最多保留六个火圈。"), PyreRadius / 100.f, PyreDuration, PyreDamageInterval, PyreDamagePerTick);
+	case EBossRelicId::FlameWard: return FString::Printf(TEXT("每 %.0f 秒获得 %.0f 秒火盾，期间减伤 %.0f%%；半径 %.1f 米每 %.1f 秒灼烧 %.0f 伤害，碰到队友冰残留另结一次等额融化伤害。"), WardInterval, WardDuration, WardReduction * 100.f, WardRadius / 100.f, WardDamageInterval, WardDamagePerTick);
+	case EBossRelicId::BlinkPyre: return FString::Printf(TEXT("闪烁起点和终点留下半径 %.1f 米火圈，持续 %.0f 秒，每 %.1f 秒造成 %.0f 火伤；可消费队友冰另结等额融化，最多保留六个火圈。"), PyreRadius / 100.f, PyreDuration, PyreDamageInterval, PyreDamagePerTick);
 	default: return TEXT("");
 	}
 }

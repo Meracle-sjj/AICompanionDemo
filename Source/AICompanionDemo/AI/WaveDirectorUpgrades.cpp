@@ -182,7 +182,7 @@ void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 			: Id == EUpgradeId::PlayerPierce ? TEXT("PlayerPierce") : TEXT("PlayerPrism"));
 		break;
 	case EUpgradeId::FrostShotPlayer:
-		// 元素·寒霜弹·本体版（09-29 十二节 A.1）：玩家弹挂冰霜轻减速；命中灼烧残留体=融化 ×2
+		// 元素·寒霜弹·本体版：玩家弹挂本体冰，真实弹命中授予半秒近距传播源；融化由异人火入口另结。
 		if (PlayerChar)
 		{
 			PlayerChar->bFrostShotUnlocked = true;

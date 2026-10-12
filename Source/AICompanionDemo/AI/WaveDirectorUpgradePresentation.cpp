@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 真实升级参数/已获次数/固定语音字幕与展示枚举。
- * [OUTPUT]: 稳定ID、实际说明、稀有度/融合标志和HUD快照。
+ * [OUTPUT]: 稳定ID、实际说明、稀有度/融合标志、HUD快照与成功队友加速卡的独立录音路由。
  * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
@@ -163,12 +163,12 @@ FString AWaveDirector::DescribeCard(EUpgradeId Id) const
 	case EUpgradeId::Radiance:     return TEXT("辉耀领域（领域·可叠加）｜队友周围4m内每0.5秒灼烧5伤；后续每张半径+1m、每拍伤害+10");
 	case EUpgradeId::HealNova:     return TEXT("回响脉冲（羁绊·可叠加）｜每累计恢复 40 点生命，脚下展开蔓延 2 秒的绿色领域：7m 内敌人持续受创，蔓延终点爆发 25 伤冲击；再抽 阈值-5/终点伤+10——回复也是武器");
 	case EUpgradeId::BuddyHealing: return TEXT("贴贴疗愈（羁绊·可叠加）｜与队友 2.5m 内双方缓慢回血；再抽 +1 HP/拍——贴住他，也贴住危险");
-	case EUpgradeId::FrostShotPlayer: return TEXT("寒霜弹·本体版（元素）｜玩家弹挂冰霜轻减速；命中【灼烧中的敌人】=融化，本次伤害 ×2——辉耀的火，等你来点");
+	case EUpgradeId::FrostShotPlayer: return TEXT("寒霜弹·本体版（元素）｜冰弹减速30%持续1.5s；本体直击、分叉与弹跳命中每0.5s向2m近邻传播，感染者不接力。队友火伤消费本体冰，另结等额融化伤害。");
 	case EUpgradeId::ShockShot:       return TEXT("感电弹（元素）｜每次射击从枪口额外散射1条70%弹伤侧弹；已有散射时另偏30°，命中挂电5s且重复刷新；队友每0.5s配对4m内两带电活敌，每端至少10伤或队友原伤15%（取高），每敌每拍一条链，不消费标记");
 	case EUpgradeId::HuntMark:        return AcquiredCardDescription(Id) + TEXT(" 本次选择：") + UpgradeCardDescription(Id).Replace(TEXT("\n"), TEXT("；"));
 	case EUpgradeId::ShockOverload:   return TEXT("感电过载（深化）｜每0.5s每端基础传导10→20，比例15%→27.5%并取高；带电5s不消费，保留枪口70%散射侧弹");
 	case EUpgradeId::MarkMaster:      return AcquiredCardDescription(Id) + TEXT(" 本次选择：") + UpgradeCardDescription(Id).Replace(TEXT("\n"), TEXT("；"));
-	case EUpgradeId::FrostDeep:       return TEXT("深度冻结（深化）｜冰霜减速 1.5s/0.7→4s/0.4——冻得更久更狠");
+	case EUpgradeId::FrostDeep:       return TEXT("深度冻结（深化）｜你的寒霜减速60%持续4s，传播继承深化数值；仍只有本体弹路命中能成为传播源。");
 	case EUpgradeId::PlayerScatter:   return TEXT("玩家散射（弹道）｜你的射击三向分裂 ±15°——与 AI 散射完全独立");
 	case EUpgradeId::PlayerPierce:    return TEXT("玩家穿透（弹道）｜你的子弹贯穿敌群，全额伤害；可与玩家折射同持，每个贯穿目标各折射一次，分支不递归");
 	case EUpgradeId::PlayerPrism:     return TEXT("玩家折射（弹道）｜每个主弹/贯穿命中向8m内另一敌人单跳70%伤害；与穿透协同，整发目标去重；独立于感电枪口散射");
@@ -186,7 +186,7 @@ FString AWaveDirector::DescribeCard(EUpgradeId Id) const
 	case EUpgradeId::PrismRounds:      return TEXT("折射弹体（技能）｜命中后向最近敌人弹射（2 跳，每跳 70%），品红折射线——光棱坦克（与穿透互斥）");
 	case EUpgradeId::SwiftMove:        return TEXT("疾行（成长）｜移速 +15%（可叠加）——走位流的复利");
 	case EUpgradeId::ExplosiveRounds:  return TEXT("高爆弹头（旧版兼容）｜每次范围 +0.8m、溅射 +12 个百分点（首次 3.3m/47%），橙色大爆闪；现役Boss奖励不自动授予");
-	case EUpgradeId::FrostRounds:      return TEXT("寒霜弹（火力）｜命中使敌人减速 40% 持续 2s 并染蓝——被点名的猎犬跑不动了");
+	case EUpgradeId::FrostRounds:      return TEXT("寒霜弹（火力）｜队友弹命中减速40%持续2s；本体火伤可消费队友冰并另结等额融化，队友辉耀不触发。");
 	}
 	return TEXT("？？？");
 }
@@ -281,6 +281,7 @@ FString AWaveDirector::CardBarkOf(EUpgradeId Id, EGameSFX& OutVoice) const
 	case EUpgradeId::BloodSacrifice:   OutVoice = EGameSFX::CardVoice_BloodSacrifice;  return USFXLibrary::GetVoiceLine(OutVoice);
 	case EUpgradeId::Vigor:            OutVoice = EGameSFX::CardVoice_Vigor;           return USFXLibrary::GetVoiceLine(OutVoice);
 	case EUpgradeId::SwiftMove:        OutVoice = EGameSFX::CardVoice_SwiftMove;       return USFXLibrary::GetVoiceLine(OutVoice);
+	case EUpgradeId::CompanionSwiftMove: OutVoice = EGameSFX::CardVoice_CompanionSwiftMove; return USFXLibrary::GetVoiceLine(OutVoice);
 	case EUpgradeId::Barrage:          OutVoice = EGameSFX::CardVoice_Barrage;         return USFXLibrary::GetVoiceLine(OutVoice);
 	case EUpgradeId::BlinkBomb:        OutVoice = EGameSFX::CardVoice_BlinkBomb;       return USFXLibrary::GetVoiceLine(OutVoice);
 	case EUpgradeId::RadianceOverload: OutVoice = EGameSFX::CardVoice_RadianceOverload; return USFXLibrary::GetVoiceLine(OutVoice);

@@ -3,6 +3,7 @@
  * [OUTPUT]: 对外提供 AEnemyGrunt——拟人猎手敌人二代：胶囊互撞、贴地行走、**追击全自驱寻路（历 D12 MoveToActor→D16 输入常开→D17 归一：FindPathToActorSynchronously 每 0.5s 算路存路点串，HuntPlayer 沿"路径下一路点"喂输入——加速度与绕障同源，滑步案与双驱动打架案双根治；无控制器，bRunPhysicsWithNoController 主开关）**、贴脸挥拳节拍（攻击动画与伤害同拍，伤害走 HealthComponent 唯一入口；出拳双闸门：|ΔZ|≤150 层高 + ObjectType LOS——隐形敌人案根治，穿层/隔板绝不挥拳）、ragdoll 布娃娃死亡 + 定时自毁；实现 ICombatant 供队友评分器跨形体识别；M3.75 增补：EGruntVariant 三变体（Standard 基线/Rusher 快而脆/Brute 慢而硬，ApplyVariant 出生定型——移速/血量/伤害/间隔/体型/色调/经验值/蛋糕掉率八项参数集，数据差异不造新类）+ XpPickup 经验掉落（喂 XpValue，收集上报的组合根在 GameMode）+ HealthPickup 柠檬蛋糕概率掉落（蛮兵必掉，收集直接作用于玩家血量）+ 滑行呆移探针（bEnableMoveProbe，1Hz 取证器，确认修复后关）
  *  猎印/狂暴显示各有组件；感电5秒残留以动态ShockMarkVisual固定闪电字形同步，半秒持续配对不消费；死亡隐藏/EndPlay释放。ApplySummonedWarlock一次定型紫色双倍攻速召唤物，无常规掉落。
  * [POS]: AI/ 的敌对方实体（替代球体 EnemyTarget 的猎手位置，WaveDirector 的生成目标）；外观与动画构造期 C++ 内联装配（与队友 BP 的已验证组合同款：SKM_Manny_Simple + ABP_Unarmed——2026-09-07 用户要求配置零人工的取舍，BP 子类可覆盖），球类保留作回归安全网
+ *  v1.3.3正式：双来源冰钟独立；本体真实弹命中才授予半秒/200cm传播资格，雪花纯显示，异人融化只消费相反来源。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -24,6 +25,7 @@ class USphereComponent;
 class UHuntMarkVisual;
 class UEnemyEnrageVisual;
 class UShockMarkVisual;
+class UFrostMarkVisual;
 
 /** 假人变体（M3.75 B3）：数据差异不造新类——同一套参数集槽位，ApplyVariant 出生定型 */
 UENUM(BlueprintType)
@@ -147,12 +149,12 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Enemy|Hunt", meta = (ClampMin = "0.05", ClampMax = "1.0"))
 	float RangedHitChance = 0.75f;
 
-	/** 寒霜减速（M3.75 寒霜弹命中调用）：移速 ×Factor 持续 Duration 秒并染蓝，到时恢复——控制系视觉的实体层 */
+	/** 通用减速只改移动；寒霜雪花由独立状态显示，不覆盖变体身体色。 */
 	void ApplySlow(float Duration, float SpeedFactor);
 
 	// ---------- 元素标记（09-29 元素反应体系，gameplay-proposals 十二节：玩家=状态制造器，AI=反应触发器） ----------
 
-	/** 灼烧残留（秒）：辉耀 TickRadiance 每拍刷新——玩家冰弹命中残留体=融化反应（×2）的判定面 */
+	/** 灼烧残留只保留既有持续火焰表现；冰弹不再反向引爆或放大伤害。 */
 	void RefreshBurnResidue(float Duration = 1.5f) { BurnResidue = Duration; }
 	float GetBurnResidue() const { return BurnResidue; }
 
@@ -162,10 +164,15 @@ public:
 	UFUNCTION(BlueprintPure, Category="Enemy|Elements")
 	float GetShockResidue() const { return IsDead() ? 0.f : ShockResidue; }
 	UFUNCTION(BlueprintPure, Category="Debug|Elements") FString DebugShockState() const;
-	/** 仅真实冰弹刷新；火伤融化消费残留，不清持续减速。 */
-	void RefreshFrostResidue(float Duration = 1.5f) { FrostResidue = FMath::Max(FrostResidue, Duration); }
-	float GetFrostResidue() const { return FrostResidue; }
-	void ConsumeFrostResidue() { FrostResidue = 0.f; }
+	/** 两来源冰钟独立；仅本体真实弹命中传DirectShotSource，Nova/传播不授予接力资格。 */
+	void ApplyPlayerFrost(float Duration, float SpeedFactor, AActor* DirectShotSource = nullptr);
+	void ApplyCompanionFrost(float Duration, float SpeedFactor);
+	float GetPlayerFrostResidue() const { return IsDead() ? 0.f : PlayerFrostResidue; }
+	float GetCompanionFrostResidue() const { return IsDead() ? 0.f : CompanionFrostResidue; }
+	float GetFrostResidue() const { return FMath::Max(GetPlayerFrostResidue(), GetCompanionFrostResidue()); }
+	/** 异人火成功后只消费对应冰来源；本体冰消费同时清其传播资格，减速仍按原到期恢复。 */
+	void ConsumeFrostResidue(bool bPlayerSource);
+	UFUNCTION(BlueprintPure, Category = "Debug|Elements") FString DebugFrostState() const;
 
 	/** 猎杀印记层数（玩家弹命中叠 1，上限随"印记强化"卡成长）——AI 命中消耗全部层=处决反应（每层额外伤） */
 	virtual void AddHuntMark(int32 MaxStacks) override;
@@ -177,7 +184,7 @@ public:
 	/** 元素残留衰减（Tick 调用）：灼烧/感电走自然时——不衰减则残留体永续，反应门槛失真 */
 	void TickElementResidue(float DeltaSeconds);
 
-	/** 寒霜到点恢复：还原变体基线移速与色调 */
+	/** 减速到点只恢复变体基线移速，身体配色不参与寒霜。 */
 
 	// ---------- Warlock 蓄力射线（09-25 Boss 变体，用户点名"红射线预警→实体伤害"） ----------
 
@@ -222,7 +229,18 @@ public:
 	/** 元素残留体（秒）：灼烧/感电——玩家侧反应判定面，Tick 自然衰减 */
 	float BurnResidue = 0.f;
 	float ShockResidue = 0.f;
-	float FrostResidue = 0.f;
+	float PlayerFrostResidue = 0.f;
+	float CompanionFrostResidue = 0.f;
+	float FrostSpreadSourceRemaining = 0.f;
+	float FrostSpreadAccum = 0.f;
+	float FrostSpreadDuration = 0.f;
+	float FrostSpreadSpeedFactor = 1.f;
+	int32 FrostSpreadPulses = 0;
+	int32 FrostSpreadApplications = 0;
+	TWeakObjectPtr<AActor> FrostSpreadSource;
+	void UpdateFrostVisual();
+	void TickFrostSpread(float DeltaSeconds);
+	void ReceiveFrostSpread(float Duration, float SpeedFactor);
 
 	/** 猎杀印记层数：玩家弹叠、AI 弹消耗——"玩家攒、AI 爆"的节奏载体 */
 	int32 MarkStacks = 0;
@@ -285,6 +303,7 @@ private:
 	TObjectPtr<UHuntMarkVisual> HuntMarkVisual;
 	UPROPERTY(VisibleAnywhere, Category="Enemy|Visual") TObjectPtr<UEnemyEnrageVisual> EnrageVisual;
 	UPROPERTY(Transient) TObjectPtr<UShockMarkVisual> ShockVisual;
+	UPROPERTY(Transient) TObjectPtr<UFrostMarkVisual> FrostVisual;
 
 	/** 视觉刺激源：注册进队友 AIPerception（与 EnemyTarget 同范式——感知注册在敌人体内完成，队友侧零配置） */
 	UPROPERTY(VisibleAnywhere, Category = "Enemy")
@@ -293,11 +312,11 @@ private:
 	/** 对玩家的攻击冷却累计器（追击中照常累计、封顶在攻击阈值——贴脸即出手，不清零） */
 	float PlayerAttackCooldown = 0.f;
 
-	/** 变体基线移速与色调（ApplyVariant 定型记录）：寒霜减速恢复的还原基准 */
+	/** 变体基线移速与色调（ApplyVariant 定型记录）；减速只恢复步速。 */
 	float BaseWalkSpeed = 200.f;
 	FVector BaseTint = FVector(0.03f, 0.03f, 0.035f);
 
-	/** 寒霜恢复定时器：到点还原基线移速与色调 */
+	/** 减速恢复定时器：到点还原基线移速。 */
 	FTimerHandle FrostRecoverTimerHandle;
 
 	/** 投掷冷却累计器（高处反制独立节拍） */

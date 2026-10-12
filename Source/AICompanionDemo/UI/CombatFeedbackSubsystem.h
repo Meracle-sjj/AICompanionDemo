@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Health模式/减伤结算后、HP截断前的完整伤害与类别/落点/内部归属快照，游戏时钟、PlayerController投影与GameMode终局状态。
- * [OUTPUT]: 既有金币与全伤害漫画数字；九族原创伤害矢量按类型着色，白物理/亮红火焰/暗红流血/紫雷电，64条短命反馈。
+ * [OUTPUT]: 既有金币与全伤害漫画数字；十族原创伤害矢量按类型着色，白小剑/亮红火焰/冰火融化双图/暗红流血/紫雷电，64条短命反馈。
  * [POS]: UI唯一正式数值反馈层；Health单次提交完整伤害，来源只留内部审计字段；金币保持原口，暂停冻结/终局清账并拒绝新增。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,7 +14,7 @@
 
 class UCombatFeedbackSubsystem;
 
-enum class ECombatFeedbackIcon : uint8 { Coin, Cleaver, Bullet, Frost, Drop, Lightning, Spikes, Ray, Impact, Flame };
+enum class ECombatFeedbackIcon : uint8 { Coin, Cleaver, Sword, Frost, Drop, Lightning, Spikes, Ray, Impact, Flame, Melt };
 
 struct FCombatFeedbackEntry
 {

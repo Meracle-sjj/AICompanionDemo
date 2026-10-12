@@ -1,10 +1,11 @@
 /**
- * [INPUT]: 导演的地图/祭坛/首领奖励与领域治疗状态。
- * [OUTPUT]: 原运行效果及调度方法完整保留，原游戏时钟/伤害归属不变；辉耀伤害显式提交类别与命中前落点，由Health发实际量/模式快照反馈。
- * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
+ * [INPUT]: 导演的地图/祭坛/首领奖励与领域状态，CombatElementalDamage提供异源冰火结算，Health统一伤害反馈。
+ * [OUTPUT]: 原领域火伤与时钟保持，辉耀命中本体霜冻后另结算等额Melt；祭坛/狂暴仅保留正式事件与声音，去重复左上红字。
+ * [POS]: AI/WaveDirector运行效果接线；导演持领域节拍，敌人持霜冻来源，反应规则交共用结算口而不在领域复制。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "WaveDirector.h"
+#include "AI/CombatElementalDamage.h"
 #include "Relics/BossRelicComponent.h"
 #include "AI/BossAltar.h"
 #include "AI/BossBase.h"
@@ -97,11 +98,6 @@ void AWaveDirector::ProcessScheduledEvents()
 					URunEventLog::Publish(GetWorld(), TEXT("神秘的声音"), BossName + TEXT("已出现，寻找它的祭坛吧"),
 						FName(*FString::Printf(TEXT("BossAltar_%d"), i + 1)));
 					USFXLibrary::PlaySFX(GetWorld(), EGameSFX::BossWarn);
-					if (GEngine)
-					{
-						GEngine->AddOnScreenDebugMessage(kBannerKey, 6.f, FColor::Red,
-							FString::Printf(TEXT("☠ %s 的祭坛已出现——循红色光柱前往！"), *BossName));
-					}
 					UE_LOG(LogAICompanionDemo, Warning, TEXT("[Boss] %d 号祭坛冒出 @ %s"), i + 1, *Loc.ToCompactString());
 				}
 			}
@@ -111,10 +107,6 @@ void AWaveDirector::ProcessScheduledEvents()
 	{
 		SetEnraged(true);
 		URunEventLog::Publish(GetWorld(), TEXT("神秘的声音"), TEXT("你怎么还在这里？"), TEXT("WorldEnrage"));
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(kBannerKey, 8.f, FColor::Red, TEXT("☠ 狂 暴 开 始 —— 逃 是 逃 不 掉 的"));
-		}
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 狂暴态开启——怪物曲线换挡不封顶"));
 	}
 }
@@ -222,9 +214,9 @@ void AWaveDirector::TickRadiance()
 			{
 				if (!Health->IsDead())
 				{
-					Health->ApplyCombatDamage(static_cast<float>(RadianceDamagePerTick), /*Instigator*/ Companion,
-						{ECombatDamageKind::Radiance, Enemy->GetActorLocation() + FVector(0.f, 0.f, 70.f)});
-					// 灼烧残留（09-29 元素反应）：每拍刷新 1.5s 判定面——玩家冰弹命中残留体=融化（×2）
+					FCombatElementalDamage::ApplyFire(Enemy, Companion, static_cast<float>(RadianceDamagePerTick),
+						ECombatDamageKind::Radiance, Enemy->GetActorLocation() + FVector(0.f, 0.f, 70.f));
+					// 灼烧残留只维持现有持续表现；融化由异源霜冻与实际火伤在共用入口结算。
 					if (AEnemyGrunt* BurningGrunt = Cast<AEnemyGrunt>(Enemy))
 					{
 						BurningGrunt->RefreshBurnResidue();
