@@ -1,6 +1,6 @@
 # 资源来源与分发说明
 
-v1.3.3新增两条原创数学合成危机PCM（0.42／0.28秒）与一条队友加速固定配音“现在，我更能跟上你的脚步了。”；均新增SoundWave，保留全部旧声音源和资产。两短声不使用第三方采样或连续长滑音，配音沿现有豆包seed-audio-1.0和原角色录音参考离线生成，游戏运行不联网调用TTS。三声已实际导入、受控起播并由最终完整Cook核对非空Export／Bulk，原BGM唯一收录；本地完整Win64和两次独立冷启／正常退出已完成。人耳听词／同人相似度／危机感尚未确认，不以导入、起播或Cook代替听感判断。即将正式交付：[v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。
+v1.3.3新增两条原创数学合成危机PCM（0.42／0.28秒）与一条队友加速固定配音“现在，我更能跟上你的脚步了。”；均新增SoundWave，保留全部旧声音源和资产。两短声不使用第三方采样或连续长滑音，配音沿现有豆包seed-audio-1.0和原角色录音参考离线生成，游戏运行不联网调用TTS。三声已实际导入、受控起播并由最终完整Cook核对非空Export／Bulk，原BGM唯一收录；本地完整Win64和两次独立冷启／正常退出已完成。人耳听词／同人相似度／危机感尚未确认，不以导入、起播或Cook代替听感判断。交付入口：[v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。
 
 伤害小剑、冰火融化双图、寒霜雪花与免费箱居中E均由代码矢量绘制，沿用引擎字体，不新增外部图标或字体。三张README AI概念图保留既有标注和来源，不当作实际游戏截图。原BGM继续沿用作者此前明确的分发确认；以下第三方素材权利与账户适用条款边界保持。
 

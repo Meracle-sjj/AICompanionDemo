@@ -1,6 +1,6 @@
 # 玩家指南 · 1.3.3
 
-**v1.3.3 本地完整构建与限定验证已完成，即将正式交付。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)；下述机制对应v1.3.3，旧包保留历史。
+**v1.3.3 本地完整构建与限定验证已完成。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)；下述机制对应v1.3.3，旧包保留历史。
 
 [1.3.3 修订摘要](CHANGELOG.md) · [系统设计](Docs/SYSTEM_DESIGN.md)
 
