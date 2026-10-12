@@ -1,3 +1,7 @@
+**[实机演示视频（Bilibili）](https://www.bilibili.com/video/BV1S9pn6KEZn/)**
+
+> 当前实机视频展示的是 **v1.3.1** 版本；后续将继续更新。
+
 # AI队友协作生存原型 · AICompanionDemo
 
 **v1.3.3 本地完整构建与限定验证已完成。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)；玩家附件为 `Player-Win64-v1.3.3.zip`。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。旧版本标签、附件与反馈继续保留。
