@@ -1,6 +1,6 @@
-# 资源来源与分发说明 · v1.3.4-preview 开发候选
+# 资源来源与分发说明 · v1.3.5-preview
 
-**当前候选尚无正式发行，正式下载仍为 v1.3.3。** 本轮新增原创现场召唤柱材质与作者选定的 CC0 Sword #10 独立声音资源；最终 Editor 18.73 秒构建与限定运行已有证据，完整 Win64／Cook／两次新包冷启已完成，游戏内人耳听感另验。以下 v1.3.3 资源记录保留历史。
+**本文对应 v1.3.5-preview；v1.3.3 继续保留为稳定版。** 本轮显示与数字调整未新增第三方素材；继承 v1.3.4-preview 的原创现场召唤柱材质与作者选定的 CC0 Sword #10 独立声音资源。历史 v1.3.4 的 Editor 18.73 秒构建、完整 Win64／Cook／两次冷启及限定运行按其范围保留，游戏内人耳听感另验。以下 v1.3.3 资源记录保留历史。
 
 v1.3.3新增两条原创数学合成危机PCM（0.42／0.28秒）与一条队友加速固定配音“现在，我更能跟上你的脚步了。”；均新增SoundWave，保留全部旧声音源和资产。两短声不使用第三方采样或连续长滑音，配音沿现有豆包seed-audio-1.0和原角色录音参考离线生成，游戏运行不联网调用TTS。三声已实际导入、受控起播并由最终完整Cook核对非空Export／Bulk，原BGM唯一收录；本地完整Win64和两次独立冷启／正常退出已完成。人耳听词／同人相似度／危机感尚未确认，不以导入、起播或Cook代替听感判断。交付入口：[v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。
 
@@ -49,4 +49,26 @@ v1.1／v1.2 曾因当时生成、下载、订阅与分发凭证缺口排除原 S
 
 <!-- V134_ACTUAL_PACKAGE_RECEIPT -->
 
+### 历史阶段收据：v1.3.4-preview 发布前
+
+以下保留当时的候选状态；v1.3.4-preview 后续已作为预览发布。当前 v1.3.5-preview 的范围见下一节，旧包结果不代替本轮验收。
+
 本轮新完整 Win64 BuildCookRun 已于 181.92 秒成功；官方容器核对所选刀剑声、光柱材质、原版妖术师两声与唯一原 BGM，包内 1.3.4-preview／声音路由核同。两独立子进程冷启（1280×720、960×540）均挂载开始菜单并按 EngineLoop 时限正常 OS0 退出、无 Fatal；仅启动与退出，不代键鼠、自然整局或人耳混音。Cook 汇总 0 错误／5 警告，日志中的既有 KeyGlow 缺失原件保留。当前为本地试玩候选，尚无新正式 Release。
+
+<!-- V135_PREVIEW_RECEIPT -->
+
+## v1.3.5-preview：显示与数字可读性
+
+本轮修复游戏高 DPI 感知与无边框所在屏幕物理像素查询，并调整伤害数字的字号、密度透明度和错层排布；伤害账本保持。
+
+- 显示：启用 UE 官方游戏高 DPI 模式。无边框在应用前查询窗口所在显示器的当前物理尺寸，不将逻辑像素或 EDID 原生尺寸当作桌面模式。新包已在 150% 缩放下核到 2560×1600；窗口客户端 960×540 也已核同。
+- 录屏：OBS 32.2.2 的“自动”对 `UnrealWindow` 会选择 BitBlt，本机历史日志也确认该选择。可在“窗口采集 → 属性 → 采集方式”选择“Windows 10 (1903或更新版本)”尝试 WGC，或用游戏采集。当前核查没有改变 OBS、驱动、系统缩放、UE 窗口类或 DX12；WGC 的实际录屏效果单独等待反馈。
+- 字号：伤害 0–19 使用 20pt，20–100 按十点档递增至 32pt，1000 仍封顶 32pt；实际零伤害仍按既有规则静默。机制图标、配色及完整伤害值保留，金币沿原表现。
+- 密度：实际绘出的伤害数字从 12 条到 40 条时，不透明度由 1 降至 0.5；继续增多保持 0.5。正常密度淡化最多50%透明，寿命末的自然消失仍单独淡出。
+- 错层：按实际字体、图标和描边矩形搭交错梯子；边缘向下或邻列借位，保留4单位间隔与8单位边距。每条最多96次找位，放不下时暂缓旧条绘制，不改变事件或伤害。
+
+v1.3.5-preview完整Win64 BuildCookRun183.60秒成功，官方Cook已核版本/HighDPI真及继承的声音/材质/唯一原BGM；两正常非unattended、非RenderOffscreen新包在144DPI/150%下，原生窗口960×540、无边框2560×1600客户端尺寸与物理模式核同，逐屏DPI感知上下文为2且实际OS0。Cook汇总0错误/5警告，既有KeyGlow日志保留。实际NativePaint限定正控15字号/同点64融化绘60抑4/24边缘/40邻近均有矩形不交叠、4间隔/8边距、96尝试上限；拥挤alpha正常阶段>=.5，寿命末淡出另计。显示选择/应用/保存入口在PIE核过，独立包物理尺寸另证；没有代物理鼠标/键盘或自然整局，OBS WGC实际采集尚待用户确认。
+
+[本轮反馈与预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/8) · [试玩预览](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5-preview)。稳定版仍为v1.3.3，旧记录按各自时点保留。
+
+本轮没有新增第三方素材；显示方案复用UE/Windows官方接口，OBS只作为开源行为核查参考，未复制其实现：[Epic UE-310825](https://issues.unrealengine.com/issue/UE-310825)、[OBS32.2.2自动采集选择](https://github.com/obsproject/obs-studio/blob/32.2.2/plugins/win-capture/window-capture.c#L113-L167)、[Microsoft物理显示模式接口](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsw)。

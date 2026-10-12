@@ -1,13 +1,14 @@
 /**
  * [INPUT]: Health模式/减伤结算后、HP截断前的完整伤害与类别/落点/内部归属快照，游戏时钟、PlayerController投影与GameMode终局状态。
- * [OUTPUT]: 既有金币与全伤害漫画数字；十族原创伤害矢量按类型着色，白小剑/亮红火焰/冰火融化双图/暗红流血/紫雷电，64条短命反馈。
- * [POS]: UI唯一正式数值反馈层；Health单次提交完整伤害，来源只留内部审计字段；金币保持原口，暂停冻结/终局清账并拒绝新增。
+ * [OUTPUT]: 既有金币与全伤害漫画数字；十族类型图样、20–32pt十伤害档、最多50%拥挤透明及含图标/描边的屏幕梯子排布，64条短命反馈与真实绘制快照。
+ * [POS]: UI唯一正式数值反馈层；Health单次提交完整伤害，来源只留内部审计；画面放不下仅暂缓旧条绘制，暂停冻结/终局清账，不改变账本或事件寿命。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Layout/SlateRect.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Health/CombatDamageFeedback.h"
 #include "CombatFeedbackSubsystem.generated.h"
@@ -28,18 +29,38 @@ struct FCombatFeedbackEntry
 	FLinearColor Tint = FLinearColor::White;
 };
 
+/** 只记录上一帧实际排布；不参与伤害、事件寿命或下一帧位置决策。 */
+struct FCombatFeedbackPaintSnapshot
+{
+	float Amount = 0.f;
+	float Age = 0.f;
+	int32 EntryIndex = 0;
+	float FontPoints = 0.f;
+	int32 LayoutAttempts = 0;
+	bool bCoin = false;
+	FSlateRect Bounds;
+	float Alpha = 1.f;
+};
+
 UCLASS()
 class AICOMPANIONDEMO_API UCombatFeedbackLayer : public UUserWidget
 {
 	GENERATED_BODY()
 public:
 	void Setup(UCombatFeedbackSubsystem* InSource);
+	FString DebugPaintState() const;
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& CullingRect,
 		FSlateWindowElementList& Elements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override;
 private:
 	TWeakObjectPtr<UCombatFeedbackSubsystem> Source;
+	mutable TArray<FCombatFeedbackPaintSnapshot> LastPaint;
+	mutable FVector2f LastViewport = FVector2f::ZeroVector;
+	mutable float LastDpi = 1.f;
+	mutable float LastCrowdOpacity = 1.f;
+	mutable int32 LastProjected = 0;
+	mutable int32 LastSuppressed = 0;
 };
 
 UCLASS()

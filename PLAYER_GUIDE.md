@@ -1,12 +1,12 @@
-# 玩家指南 · v1.3.4-preview 开发候选（尚无正式发行）
+# 玩家指南 · v1.3.5-preview
 
-**当前正式下载仍为 v1.3.3；本指南对应 v1.3.4-preview 开发候选，尚无正式发行。** [v1.3.3 正式下载](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3) · [本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/7)。
+**本指南对应 v1.3.5-preview 试玩预览；v1.3.3 继续保留为稳定版。** [v1.3.5-preview 试玩入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5-preview) · [v1.3.3 稳定版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3) · [本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/8)。
 
 [本轮修订摘要](CHANGELOG.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [试玩反馈与漫画图解](Docs/PLAYTEST_FEEDBACK.md)
 
 ## 启动
 
-玩家附件为 `Player-Win64-v1.3.3.zip`。完整解压并保留所有子目录，再运行根目录 `AICompanionDemo.exe`。无需安装 Unreal Editor；不要在压缩包内直接启动，也不要只复制 exe。源码 ZIP 供阅读实现；`SHA256SUMS.txt` 可校验下载文件。若提示缺少 Visual C++ 运行库，安装随包的 Microsoft 官方 x64 运行库。
+玩家附件为 `Player-Win64-v1.3.5-preview.zip`。完整解压并保留所有子目录，再运行根目录 `AICompanionDemo.exe`。无需安装 Unreal Editor；不要在压缩包内直接启动，也不要只复制 exe。`AICompanionDemo-source-v1.3.5-preview.zip` 供阅读实现；`SHA256SUMS-v1.3.5-preview.txt` 可校验下载文件。若提示缺少 Visual C++ 运行库，安装随包的 Microsoft 官方 x64 运行库。
 
 支持 Windows 64 位，默认使用 DirectX 12 / Shader Model 6；最低硬件配置尚未确定。程序尚无发布者数字签名，Windows 可能显示未知发布者提示。本作采用离线游戏 AI，不需要 API 密钥或联网；引擎诊断服务可能触发网络权限提示，离线玩法无需允许网络访问。
 
@@ -98,6 +98,10 @@ Lv.9／11／13……的等级奖励属于玩家，Lv.10／12／14……属于队
 
 素材与配音来源见[第三方资源说明](Docs/THIRD_PARTY.md)。
 
+## 历史版本验收范围
+
+以下按各自记录时点保留，旧包结果不代替 v1.3.5-preview 的验收；本轮结果见最后一节。
+
 v1.3.4-preview 的最终 Editor 正常构建 18.73 秒通过；限定 PIE 已核现场光柱在三游戏秒后唯一召唤、无旧数字 UI，真正暂停及奖励冻结时阶段／尺寸／透明度保持。光柱画面在临时近址／镜头夹具下复核；单元素领取／抽池和针刺弹射入口也有受控原件。三级语音已核 Boss→Boss→恢复→普通卡词的顺序，以及生命语音抢普通；妖术师原版路由、音量／音调与并发／距离／间隔限制有实际记录。完整 Win64、Cook 与两次新包冷启已完成，具体范围见下方收据，受控场景不代表自然完整一局或全部构筑已经验证。
 
 历史 v1.3.3 完成188.76秒完整Windows构建、三条新声音的官方Cook收录与包内1.3.3配置核验，以及受控伤害／寒霜传播／音频生命周期专项。两次独立冷启分别使用1280×720测试模式和960×540正常模式，核对标题与显示设置、测试死亡按钮重开、正常局Lv.2奖励上暂停、返回主菜单和文字退出；两次实际系统退出码均为0，日志正常闭合且未见Fatal。仍有既有M_KeyGlow材质缺失错误及其他非致命警告，未宣称日志零错误。旧包记录不代替 v1.3.4 验收。
@@ -108,4 +112,24 @@ v1.3.4-preview 的最终 Editor 正常构建 18.73 秒通过；限定 PIE 已核
 
 <!-- V134_ACTUAL_PACKAGE_RECEIPT -->
 
+### 历史阶段收据：v1.3.4-preview 发布前
+
+以下保留当时的候选状态；v1.3.4-preview 后续已作为预览发布。当前 v1.3.5-preview 的范围见下一节，旧包结果不代替本轮验收。
+
 本轮新完整 Win64 BuildCookRun 已于 181.92 秒成功；官方容器核对所选刀剑声、光柱材质、原版妖术师两声与唯一原 BGM，包内 1.3.4-preview／声音路由核同。两独立子进程冷启（1280×720、960×540）均挂载开始菜单并按 EngineLoop 时限正常 OS0 退出、无 Fatal；仅启动与退出，不代键鼠、自然整局或人耳混音。Cook 汇总 0 错误／5 警告，日志中的既有 KeyGlow 缺失原件保留。当前为本地试玩候选，尚无新正式 Release。
+
+<!-- V135_PREVIEW_RECEIPT -->
+
+## v1.3.5-preview：显示与数字可读性
+
+本轮修复游戏高 DPI 感知与无边框所在屏幕物理像素查询，并调整伤害数字的字号、密度透明度和错层排布；伤害账本保持。
+
+- 显示：启用 UE 官方游戏高 DPI 模式。无边框在应用前查询窗口所在显示器的当前物理尺寸，不将逻辑像素或 EDID 原生尺寸当作桌面模式。新包已在 150% 缩放下核到 2560×1600；窗口客户端 960×540 也已核同。
+- 录屏：OBS 32.2.2 的“自动”对 `UnrealWindow` 会选择 BitBlt，本机历史日志也确认该选择。可在“窗口采集 → 属性 → 采集方式”选择“Windows 10 (1903或更新版本)”尝试 WGC，或用游戏采集。当前核查没有改变 OBS、驱动、系统缩放、UE 窗口类或 DX12；WGC 的实际录屏效果单独等待反馈。
+- 字号：伤害 0–19 使用 20pt，20–100 按十点档递增至 32pt，1000 仍封顶 32pt；实际零伤害仍按既有规则静默。机制图标、配色及完整伤害值保留，金币沿原表现。
+- 密度：实际绘出的伤害数字从 12 条到 40 条时，不透明度由 1 降至 0.5；继续增多保持 0.5。正常密度淡化最多50%透明，寿命末的自然消失仍单独淡出。
+- 错层：按实际字体、图标和描边矩形搭交错梯子；边缘向下或邻列借位，保留4单位间隔与8单位边距。每条最多96次找位，放不下时暂缓旧条绘制，不改变事件或伤害。
+
+v1.3.5-preview完整Win64 BuildCookRun183.60秒成功，官方Cook已核版本/HighDPI真及继承的声音/材质/唯一原BGM；两正常非unattended、非RenderOffscreen新包在144DPI/150%下，原生窗口960×540、无边框2560×1600客户端尺寸与物理模式核同，逐屏DPI感知上下文为2且实际OS0。Cook汇总0错误/5警告，既有KeyGlow日志保留。实际NativePaint限定正控15字号/同点64融化绘60抑4/24边缘/40邻近均有矩形不交叠、4间隔/8边距、96尝试上限；拥挤alpha正常阶段>=.5，寿命末淡出另计。显示选择/应用/保存入口在PIE核过，独立包物理尺寸另证；没有代物理鼠标/键盘或自然整局，OBS WGC实际采集尚待用户确认。
+
+[本轮反馈与预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/8) · [试玩预览](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5-preview)。稳定版仍为v1.3.3，旧记录按各自时点保留。

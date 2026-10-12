@@ -4,25 +4,27 @@
 
 # AI队友协作生存原型 · AICompanionDemo
 
-**[下载 v1.3.4-preview 试玩版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.4-preview)** · 玩家附件：`Player-Win64-v1.3.4-preview.zip`。本轮包含祭坛渐扩光柱、单元素互斥与声音调整；[v1.3.3 正式版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)继续作为稳定版。
+**[下载 v1.3.5-preview 试玩版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5-preview)** · 玩家附件：`Player-Win64-v1.3.5-preview.zip`。本轮修复150%缩放下的无边框像素尺寸，并调整伤害数字的透明度、错层和字号；[v1.3.3 正式版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)继续作为稳定版。
 
-**v1.3.3 本地完整构建与限定验证已完成。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)；玩家附件为 `Player-Win64-v1.3.3.zip`。[本轮修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。旧版本标签、附件与反馈继续保留。
+伤害字号由20pt按十点档递增至32pt，100以上封顶；数字增多时最多50%拥挤透明，寿命末消失另计。图标和数字一起错层排布，空间不足时暂缓旧行展示。新包已核150%缩放下960×540窗口和2560×1600无边框物理尺寸；OBS实际采集仍待反馈。妖术师沿用v1.3.4恢复的原版蓄力／发射声和距离、叠响限制。[v1.3.5反馈与实装记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/8)。
+
+**v1.3.3 稳定版历史：完整构建与限定验证已完成。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)；玩家附件为 `Player-Win64-v1.3.3.zip`。[该版本修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。旧版本标签、附件与反馈继续保留。
 
 一份面向**系统策划岗位**的个人可玩作品。玩家与 AI 队友在沙丘战场中协作，通过站位、护卫／歼灭切换、局内构筑、资源消费与 Boss 挑战改变战局。使用 **Unreal Engine 5.6.1、C++、离线 FSM／Utility AI**，游戏运行不调用大模型。
 
-本轮将普通攻击改为白色小剑；火焰亮红、流血暗红、雷电紫色，融化使用冰晶＋火焰双图与混色数字。数值显示减伤后的完整伤害，致死不按剩余血量缩小。本体冰＋队友火、队友冰＋本体火各触发一笔独立等额融化；例如原火5与融化5分别显示，保留两笔生命结算。
+v1.3.3 确立普通攻击白色小剑、亮红火焰、暗红流血、紫色雷电，以及冰晶＋火焰融化双图与混色数字；现版继续保留。数值显示减伤后的完整伤害，致死不按剩余血量缩小。本体冰＋队友火、队友冰＋本体火各触发一笔独立等额融化；例如原火5与融化5分别显示，保留两笔生命结算。
 
-本体寒霜普通弹的直接、分叉与弹跳命中，每0.5游戏秒向2米内敌人传染；感染者不接力，雪花标记不改变身体颜色。闪现爆射仍是本体技能，伤害与附冰按本体归属；队友辉耀不能融化队友自己的冰。妖术师改用两条更清楚的原创短危机声，保留叠响与暂停限制；队友加速卡增加固定配音“现在，我更能跟上你的脚步了。”。开始页显示设置使用完整按钮，免费箱E居中，Boss登场保留事件提示并移除重复左上红字。
+本体寒霜普通弹的直接、分叉与弹跳命中，每0.5游戏秒向2米内敌人传染；感染者不接力，雪花标记不改变身体颜色。闪现爆射仍是本体技能，伤害与附冰按本体归属；队友辉耀不能融化队友自己的冰。v1.3.3 曾试用两条原创短危机声，后续按作者听感恢复原版妖术师音色；短声仍保留为历史资源。队友加速卡的固定配音为“现在，我更能跟上你的脚步了。”。开始页显示设置使用完整按钮，免费箱E居中，Boss登场保留事件提示并移除重复左上红字。
 
-本轮已完成188.76秒完整Windows构建、官方Cook资源与配置核验、受控专项和两次独立冷启／正常退出。三条新声音已实际导入、收录并核对限定PIE起播；人耳听感与同人相似度尚未确认。两档窗口覆盖标题与设置、测试死亡重开、正常局奖励暂停及返回主菜单退出；自然整局、全部构筑、长期性能、异机与持续WASD尚未验证。游戏运行离线，无需大模型或在线语音服务。
+历史 v1.3.3 已完成188.76秒完整Windows构建、官方Cook资源与配置核验、受控专项和两次独立冷启／正常退出。该版三条新声音已实际导入、收录并核对限定PIE起播；人耳听感与同人相似度尚未确认。该版两档窗口覆盖标题与设置、测试死亡重开、正常局奖励暂停及返回主菜单退出；这些结果不代替 v1.3.5 的验证。自然整局、全部构筑、长期性能、异机与持续WASD尚未验证。游戏运行离线，无需大模型或在线语音服务。
 
 已发布的 v1.3.1 保留顺序对白与紧急抢占、FREE! 与锁／价格／钥匙提示、贴坡宝箱、行走火球爆炸、地刺短铡刀音、地下碎岩声及结束页清账。
 
-[v1.3.2 反馈与修订预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)保留本轮目标；[v1.3.1 反馈记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/4)和旧版本标签、附件与反馈轨迹继续保留。
+[v1.3.2 反馈与修订预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/5)保留该阶段目标；[v1.3.1 反馈记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/4)和旧版本标签、附件与反馈轨迹继续保留。
 
 **开发周期：国庆节整个假期＋后续 3 天，约 10 天；非假期利用空闲时间开发。**
 
-[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [试玩反馈与改进](Docs/PLAYTEST_FEEDBACK.md) · [1.3.3 修订摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
+[试玩与操作](PLAYER_GUIDE.md) · [系统设计](Docs/SYSTEM_DESIGN.md) · [试玩反馈与改进](Docs/PLAYTEST_FEEDBACK.md) · [当前修订摘要](CHANGELOG.md) · [素材来源](Docs/THIRD_PARTY.md)
 
 ## 自动战斗中的玩家决策
 
@@ -58,7 +60,7 @@ AI Perception 提供感知，Follow／Engage 状态决定行为，Utility 评分
 
 已改善的火球空间判定与伤害数字，连同原漫画图解，集中在[试玩反馈与设计改进](Docs/PLAYTEST_FEEDBACK.md)。火球问题由作者的朋友在开发阶段试玩内部版本时发现；伤害字体、类型图标与配色由作者反馈推动。
 
-声音仍在根据试听迭代。页面分别记录已改善的规则、当前听感反馈与下一步目标；后续关键改动继续沿用漫画图解。[当前反馈与修订预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/7)。
+声音仍在根据试听迭代。页面分别记录已改善的规则、当前听感反馈与下一步目标；后续关键改动继续沿用漫画图解。[当前显示与数字反馈](https://github.com/Meracle-sjj/AICompanionDemo/issues/8) · [声音与光柱迭代记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/7)。
 
 ## 本人职责与代码入口
 

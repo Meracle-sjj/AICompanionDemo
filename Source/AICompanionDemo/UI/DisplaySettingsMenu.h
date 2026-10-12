@@ -1,8 +1,8 @@
 /**
- * [INPUT]: UUserWidget/Slate普通按钮与内嵌滚动列表、UGameUserSettings窗口/分辨率/保存API、Kismet设备分辨率查询、宿主关闭设置入口
- * [OUTPUT]: UDisplaySettingsMenu——同层三显示模式、分辨率单选列表、应用/返回；无弹窗或右拖列表，打开只读已有设置、未应用选择不保存
- * [POS]: UI/显示设置层；宿主保活与输入/暂停仲裁，不强制重置用户Saved配置、不持有玩法状态
- * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
+ * [INPUT]: UGameUserSettings模式/像素分辨率/保存、Slate当前游戏窗所在显示器指标、宿主关闭设置入口
+ * [OUTPUT]: UDisplaySettingsMenu——三模式与同层分辨率单选；无边框随当前屏幕像素模式，应用重查；调试状态区分配置、视口与DPI
+ * [POS]: UI/显示设置层；启动DPI感知归Config，窗口创建归UE；宿主保活与暂停输入仲裁，未应用选择不写Saved
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #pragma once
 

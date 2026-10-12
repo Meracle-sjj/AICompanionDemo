@@ -1,8 +1,8 @@
 /**
- * [INPUT]: DisplaySettingsMenu契约、UE5.6 UGameUserSettings/Kismet分辨率查询、同层Slate按钮/滚动列表
- * [OUTPUT]: 三模式按钮与内嵌分辨率单选；取消Popup/SListView右键拖拽支路，背景鼠标不冒泡；设备选项/应用确认保存/ESC返回保持原契约
- * [POS]: UI/显示设置实现；不修改GamePaused/dilation、不重载用户配置或全局写默认值
- * [PROTOCOL]: 变更时更新此头部，然后检查 UI/AGENTS.md 与父级 AGENTS.md
+ * [INPUT]: UGameUserSettings官方应用/保存流程、Slate实时显示指标及游戏窗口所在屏幕、Kismet设备模式查询
+ * [OUTPUT]: 三显示模式与内嵌像素分辨率单选；无边框随当前屏幕，应用时重查；调试回读像素尺寸与DPI请求状态
+ * [POS]: UI/显示设置实现；依赖Config启动前高DPI感知，不将Slate逻辑尺寸或显示器EDID原生尺寸当桌面模式
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "DisplaySettingsMenu.h"
 
@@ -11,6 +11,8 @@
 #include "Brushes/SlateColorBrush.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Styling/CoreStyle.h"
@@ -22,6 +24,7 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
 
 namespace
@@ -31,6 +34,33 @@ namespace
 	FString FormatResolution(FIntPoint Resolution)
 	{
 		return FString::Printf(TEXT("%d × %d"), Resolution.X, Resolution.Y);
+	}
+
+	// ---------- 当前显示模式像素；选屏规则与SceneViewport::ResizeFrame一致 ----------
+	FIntPoint GetWindowDisplayResolution()
+	{
+		if (FSlateApplication::IsInitialized())
+		{
+			FDisplayMetrics Metrics;
+			FSlateApplication::Get().GetDisplayMetrics(Metrics);
+			const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
+			if (Window.IsValid())
+			{
+				const FSlateRect WorkArea = FSlateApplication::Get().GetWorkArea(
+					FSlateRect::FromPointAndExtent(Window->GetPositionInScreen(), Window->GetClientSizeInScreen()));
+				for (const FMonitorInfo& Monitor : Metrics.MonitorInfo)
+				{
+					const FIntPoint Size(Monitor.DisplayRect.Right - Monitor.DisplayRect.Left, Monitor.DisplayRect.Bottom - Monitor.DisplayRect.Top);
+					if (Size.X > 0 && Size.Y > 0 && WorkArea.GetTopLeft() == FVector2D(Monitor.WorkArea.Left, Monitor.WorkArea.Top))
+					{
+						return Size;
+					}
+				}
+			}
+			return FIntPoint(Metrics.PrimaryDisplayWidth, Metrics.PrimaryDisplayHeight);
+		}
+		const UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings();
+		return Settings ? Settings->GetDesktopResolution() : FIntPoint::ZeroValue;
 	}
 }
 
@@ -60,11 +90,11 @@ void UDisplaySettingsMenu::RefreshFromUserSettings()
 void UDisplaySettingsMenu::BuildResolutionOptions()
 {
 	AvailableResolutions.Reset();
-	FIntPoint Desktop = FIntPoint::ZeroValue;
-	if (const UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings()) { Desktop = Settings->GetDesktopResolution(); }
+	const FIntPoint Desktop = GetWindowDisplayResolution();
 	if (PendingMode == EWindowMode::WindowedFullscreen)
 	{
-		AvailableResolutions.Add(Desktop.X > 0 && Desktop.Y > 0 ? Desktop : PendingResolution);
+		PendingResolution = Desktop.X > 0 && Desktop.Y > 0 ? Desktop : PendingResolution;
+		AvailableResolutions.Add(PendingResolution);
 	}
 	else if (PendingMode == EWindowMode::Fullscreen)
 	{
@@ -249,7 +279,7 @@ TSharedRef<SWidget> UDisplaySettingsMenu::RebuildWidget()
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 18.f)
 						[
 							SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(PendingMode == EWindowMode::WindowedFullscreen
-								? FString::Printf(TEXT("无边框全屏使用桌面分辨率：%s。"), *FormatResolution(PendingResolution))
+								? FString::Printf(TEXT("无边框全屏跟随所在屏幕：%s。"), *FormatResolution(PendingResolution))
 								: FString::Printf(TEXT("当前选择：%s · 滚轮浏览，单击选择。"), *FormatResolution(PendingResolution))); })
 							.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13)).ColorAndOpacity(FLinearColor(0.65f, 0.74f, 0.78f))
 						]
@@ -281,6 +311,8 @@ FReply UDisplaySettingsMenu::OnApplyClicked()
 {
 	if (UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings())
 	{
+		// 屏幕模式或窗口所在屏幕可能已变化；无边框不能保存打开菜单时的旧尺寸。
+		if (PendingMode == EWindowMode::WindowedFullscreen) { BuildResolutionOptions(); RefreshChoiceStyles(); }
 		if (PendingResolution.X <= 0 || PendingResolution.Y <= 0 || !AvailableResolutions.Contains(PendingResolution)) { return FReply::Handled(); }
 		Settings->SetScreenResolution(PendingResolution);
 		Settings->SetFullscreenMode(PendingMode);
@@ -288,8 +320,9 @@ FReply UDisplaySettingsMenu::OnApplyClicked()
 		Settings->ConfirmVideoMode();
 		Settings->SaveSettings();
 		Status = TEXT("已保存显示设置。");
-		UE_LOG(LogAICompanionDemo, Log, TEXT("[DisplaySettings] Saved mode=%d resolution=%dx%d"),
-			static_cast<int32>(Settings->GetFullscreenMode()), Settings->GetScreenResolution().X, Settings->GetScreenResolution().Y);
+		const FIntPoint Desktop = GetWindowDisplayResolution();
+		UE_LOG(LogAICompanionDemo, Log, TEXT("[DisplaySettings] Saved mode=%d resolution=%dx%d monitorDesktop=%dx%d"),
+			static_cast<int32>(Settings->GetFullscreenMode()), Settings->GetScreenResolution().X, Settings->GetScreenResolution().Y, Desktop.X, Desktop.Y);
 	}
 	else { Status = TEXT("显示设置暂不可用。"); }
 	return FReply::Handled();
@@ -343,10 +376,16 @@ FString UDisplaySettingsMenu::DebugDisplaySettingsState() const
 	}
 	FString Options;
 	for (const FIntPoint Size : AvailableResolutions) { Options += FString::Printf(TEXT("%dx%d;"), Size.X, Size.Y); }
-	return FString::Printf(TEXT("inViewport=%d focusable=%d pendingMode=%d pending=%dx%d configuredMode=%d configured=%dx%d viewportMode=%d viewport=%dx%d options=%s status=%s picker=inline modeButtons=%d resolutionRows=%d"),
+	const FIntPoint Desktop = GetWindowDisplayResolution();
+	const FIntPoint PrimaryDesktop = Settings ? Settings->GetDesktopResolution() : FIntPoint::ZeroValue;
+	const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
+	const IConsoleVariable* HighDpi = IConsoleManager::Get().FindConsoleVariable(TEXT("EnableHighDPIAwareness"));
+	return FString::Printf(TEXT("inViewport=%d focusable=%d pendingMode=%d pending=%dx%d configuredMode=%d configured=%dx%d viewportMode=%d viewport=%dx%d options=%s status=%s picker=inline modeButtons=%d resolutionRows=%d monitorDesktop=%dx%d primaryDesktop=%dx%d windowDpiScale=%.3f highDpiRequested=%d"),
 		IsInViewport(), IsFocusable(), static_cast<int32>(PendingMode), PendingResolution.X, PendingResolution.Y,
 		Settings ? static_cast<int32>(Settings->GetFullscreenMode()) : -1, Configured.X, Configured.Y,
-		ActualMode, Actual.X, Actual.Y, *Options, *Status, ModeButtons.Num(), ResolutionButtons.Num());
+		ActualMode, Actual.X, Actual.Y, *Options, *Status, ModeButtons.Num(), ResolutionButtons.Num(),
+		Desktop.X, Desktop.Y, PrimaryDesktop.X, PrimaryDesktop.Y, Window.IsValid() ? Window->GetDPIScaleFactor() : 1.f,
+		HighDpi && HighDpi->GetInt() != 0);
 }
 
 bool UDisplaySettingsMenu::DebugSelectDisplaySettings(int32 Width, int32 Height, int32 FullscreenMode)

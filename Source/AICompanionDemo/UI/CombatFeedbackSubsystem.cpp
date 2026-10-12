@@ -1,7 +1,7 @@
 /**
- * [INPUT]: Health提交的模式/减伤结算后完整伤害/语义/内部归属值快照，既有金币口，Slate粗体描边/矢量与世界投影。
- * [OUTPUT]: 金币整数与全伤害两位四舍五入裁尾零（正值不足0.005显示<0.01）；白小剑与十族伤害图样，独立融化在原火伤上行绘冰火双图/混色数字，暂停冻结/终局清理。
- * [POS]: 既有UI数值层的渲染与生命周期实现；不读取可变伤害账本或当前模式，不新增HUD/事件队列/图片字体资源。
+ * [INPUT]: Health提交的模式/减伤结算后完整伤害/语义/内部归属快照，既有金币口，Slate真实字体尺寸、视口DPI与世界投影。
+ * [OUTPUT]: 原精度数值/十族图样，20–32pt伤害档、12至40条的1至0.5拥挤不透明度、有界无重叠梯子及只读绘制快照；金币样式与寿命末淡出保留。
+ * [POS]: 唯一正式数值层的屏幕排布、渲染与生命周期；只在Slate单位内放位，空间不足优先保留新数字，不移动世界落点、不聚合/改写Health账本。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "CombatFeedbackSubsystem.h"
@@ -23,6 +23,15 @@ namespace
 {
 	constexpr float FeedbackLifetime = .85f;
 	constexpr int32 FeedbackLimit = 64;
+	constexpr int32 DamageFontMinimum = 20;
+	constexpr int32 DamageFontMaximum = 32;
+	constexpr int32 CrowdFadeStart = 12;
+	constexpr int32 CrowdFadeFull = 40;
+	constexpr float CrowdOpacityMinimum = .5f;
+	constexpr float LayoutMargin = 8.f;
+	constexpr float LayoutGap = 4.f;
+	constexpr float LadderStagger = 12.f;
+	constexpr int32 LayoutAttemptLimit = 96;
 	const FLinearColor Ink(.045f, .025f, .025f);
 	const FLinearColor CoinGold(1.f, .76f, .16f);
 	const FLinearColor BladeSilver(.88f, .97f, 1.f);
@@ -88,6 +97,85 @@ namespace
 		while (Text.EndsWith(TEXT("0"))) Text.LeftChopInline(1);
 		if (Text.EndsWith(TEXT("."))) Text.LeftChopInline(1);
 		return Text;
+	}
+
+	// ---------- 字号与屏幕排布：只消费反馈值，不回写业务 ----------
+	int32 DamageFontPoints(float Amount)
+	{
+		const int32 Band = FMath::Clamp(FMath::FloorToInt(FMath::Min(Amount, 100.f) / 10.f), 1, 10);
+		return FMath::RoundToInt(FMath::Lerp(static_cast<float>(DamageFontMinimum),
+			static_cast<float>(DamageFontMaximum), (Band - 1) / 9.f));
+	}
+
+	float CrowdOpacity(int32 VisibleDamageCount)
+	{
+		const float Density = FMath::Clamp((VisibleDamageCount - CrowdFadeStart)
+			/ static_cast<float>(CrowdFadeFull - CrowdFadeStart), 0.f, 1.f);
+		return FMath::Lerp(1.f, CrowdOpacityMinimum, Density);
+	}
+
+	struct FPaintFeedback
+	{
+		int32 EntryIndex = 0;
+		float FontPoints = 0.f;
+		int32 Attempts = 0;
+		float Scale = 1.f;
+		FString Text;
+		FSlateFontInfo Font;
+		FVector2f Position = FVector2f::ZeroVector;
+		FVector2f TextOffset = FVector2f::ZeroVector;
+		FVector2f TextSize = FVector2f::ZeroVector;
+		FSlateRect RelativeBounds;
+		FSlateRect Bounds;
+	};
+
+	FSlateRect OffsetBounds(const FSlateRect& Bounds, FVector2f Offset)
+	{
+		return FSlateRect(Bounds.Left + Offset.X, Bounds.Top + Offset.Y,
+			Bounds.Right + Offset.X, Bounds.Bottom + Offset.Y);
+	}
+
+	bool Conflicts(const FSlateRect& A, const FSlateRect& B)
+	{
+		return A.Left < B.Right + LayoutGap && A.Right + LayoutGap > B.Left
+			&& A.Top < B.Bottom + LayoutGap && A.Bottom + LayoutGap > B.Top;
+	}
+
+	bool PlaceFeedback(FPaintFeedback& Item, const TArray<FPaintFeedback>& Placed,
+		FVector2f Viewport, float RowHeight, float ColumnWidth)
+	{
+		const FSlateRect& Local = Item.RelativeBounds;
+		const float MinX = LayoutMargin - Local.Left;
+		const float MaxX = Viewport.X - LayoutMargin - Local.Right;
+		const float MinY = LayoutMargin - Local.Top;
+		const float MaxY = Viewport.Y - LayoutMargin - Local.Bottom;
+		if (MinX > MaxX || MinY > MaxY) return false;
+		const FVector2f Anchor(FMath::Clamp(Item.Position.X, MinX, MaxX), FMath::Clamp(Item.Position.Y, MinY, MaxY));
+		const int32 Rows = FMath::Min(FeedbackLimit, FMath::CeilToInt(Viewport.Y / RowHeight) + 1);
+		// 先向上搭梯；顶边无空间则向下，再向左右邻列借位。最多96次，绝不强行叠画。
+		for (int32 Column = 0; Column < 5 && Item.Attempts < LayoutAttemptLimit; ++Column)
+		{
+			const int32 ColumnIndex = Column == 0 ? 0 : (Column + 1) / 2 * (Column % 2 ? -1 : 1);
+			for (int32 Direction = 0; Direction < 2 && Item.Attempts < LayoutAttemptLimit; ++Direction)
+			{
+				for (int32 Row = Direction == 0 ? 0 : 1; Row < Rows && Item.Attempts < LayoutAttemptLimit; ++Row)
+				{
+					++Item.Attempts;
+					const float Y = Anchor.Y + Row * RowHeight * (Direction == 0 ? -1.f : 1.f);
+					if (Y < MinY || Y > MaxY) break;
+					const float Stagger = Row == 0 ? 0.f : (Row % 2 ? -LadderStagger : LadderStagger);
+					const FVector2f Candidate(FMath::Clamp(Anchor.X + ColumnIndex * ColumnWidth + Stagger, MinX, MaxX), Y);
+					const FSlateRect Bounds = OffsetBounds(Local, Candidate);
+					bool bBlocked = false;
+					for (const FPaintFeedback& Existing : Placed)
+					{
+						if (Conflicts(Bounds, Existing.Bounds)) { bBlocked = true; break; }
+					}
+					if (!bBlocked) { Item.Position = Candidate; Item.Bounds = Bounds; return true; }
+				}
+			}
+		}
+		return false;
 	}
 
 	void Stroke(FSlateWindowElementList& Elements, int32 LayerId, const FGeometry& Geometry,
@@ -219,35 +307,95 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 	const FWidgetStyle& Style, bool bParentEnabled) const
 {
 	const int32 Base = Super::NativePaint(Args, Geometry, CullingRect, Elements, LayerId, Style, bParentEnabled);
+	LastPaint.Reset(); LastProjected = 0; LastSuppressed = 0; LastCrowdOpacity = 1.f;
+	LastViewport = FVector2f(Geometry.GetLocalSize());
 	const UCombatFeedbackSubsystem* State = Source.Get();
 	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-	if (!State || !PC) return Base;
+	if (!State || !PC || LastViewport.X <= 0.f || LastViewport.Y <= 0.f) return Base;
 	const float Dpi = FMath::Max(UWidgetLayoutLibrary::GetViewportScale(this), .01f);
-	for (const FCombatFeedbackEntry& Entry : State->GetEntries())
+	LastDpi = Dpi;
+	const TArray<FCombatFeedbackEntry>& Entries = State->GetEntries();
+	TArray<FPaintFeedback> Projected;
+	Projected.Reserve(Entries.Num());
+	float RowHeight = 1.f, ColumnWidth = 1.f;
+	const TSharedRef<FSlateFontMeasure> FontMeasure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	// 最新伤害先占位；旧条仍保留实际数值和寿命，只在画面拥挤到无位时暂缓显示。
+	for (int32 Index = Entries.Num() - 1; Index >= 0; --Index)
 	{
+		const FCombatFeedbackEntry& Entry = Entries[Index];
 		FVector2D Pixel;
 		if (!PC->ProjectWorldLocationToScreen(Entry.Location, Pixel, true)) continue;
+		const FVector2f Screen(Pixel.X / Dpi, Pixel.Y / Dpi);
+		if (Screen.X < 0.f || Screen.X > LastViewport.X || Screen.Y < 0.f || Screen.Y > LastViewport.Y) continue;
 		const float Ratio = FMath::Clamp(Entry.Age / FeedbackLifetime, 0.f, 1.f);
-		const float Alpha = FMath::Clamp((1.f - Ratio) / .25f, 0.f, 1.f);
-		const float Pop = 1.f + .22f * (1.f - FMath::Clamp(Entry.Age / .13f, 0.f, 1.f));
-		// 融化是一笔额外伤害，独立上行只调整画面，不合并或改写原火伤entry。
-		const float ReactionLift = Entry.Icon == ECombatFeedbackIcon::Melt ? 54.f * Pop : 0.f;
-		const FVector2f Position(Pixel.X / Dpi, Pixel.Y / Dpi - Ratio * 52.f - ReactionLift);
-		FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 32.f * Pop);
-		Font.OutlineSettings.OutlineSize = 3;
-		Font.OutlineSettings.OutlineColor = FLinearColor(Ink.R, Ink.G, Ink.B, Alpha);
-		const FString Text = FormatCombatFeedbackAmount(Entry);
-		const FVector2D TextSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, Font);
-		const float IconAdvance = Entry.Icon == ECombatFeedbackIcon::Melt ? 32.f : 20.f;
-		const FVector2f TextOrigin = Position + FVector2f(IconAdvance * Pop, -TextSize.Y * .5f);
-		DrawIcon(Elements, Base + 1, Geometry, Position, Pop, Entry.Icon, Entry.Tint, Alpha);
-		const FLinearColor Color = Entry.Icon == ECombatFeedbackIcon::Coin
+		const bool bCoin = Entry.Icon == ECombatFeedbackIcon::Coin;
+		FPaintFeedback Item;
+		Item.EntryIndex = Index;
+		Item.FontPoints = bCoin ? 32.f * (1.f + .22f
+			* (1.f - FMath::Clamp(Entry.Age / .13f, 0.f, 1.f))) : static_cast<float>(DamageFontPoints(Entry.Amount));
+		Item.Scale = Item.FontPoints / static_cast<float>(DamageFontMaximum);
+		Item.Font = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), Item.FontPoints);
+		Item.Font.OutlineSettings.OutlineSize = Item.FontPoints < 26 ? 2 : 3;
+		Item.Text = FormatCombatFeedbackAmount(Entry);
+		Item.TextSize = FVector2f(FontMeasure->Measure(Item.Text, Item.Font));
+		Item.TextOffset = FVector2f((Entry.Icon == ECombatFeedbackIcon::Melt ? 32.f : 20.f) * Item.Scale,
+			-Item.TextSize.Y * .5f);
+		const float ReactionLift = Entry.Icon == ECombatFeedbackIcon::Melt ? 54.f * Item.Scale : 0.f;
+		Item.Position = Screen - FVector2f(0.f, Ratio * 52.f + ReactionLift);
+		const float Outline = Item.Font.OutlineSettings.OutlineSize + 2.f;
+		// 图标所有线宽/双元素偏移与文字描边都占位，避免只测数字却让两侧图标相撞。
+		Item.RelativeBounds = FSlateRect(-27.f * Item.Scale - 2.f,
+			-FMath::Max(26.f * Item.Scale + 2.f, Item.TextSize.Y * .5f + Outline),
+			FMath::Max(27.f * Item.Scale + 2.f, Item.TextOffset.X + Item.TextSize.X + Outline),
+			FMath::Max(26.f * Item.Scale + 2.f, Item.TextSize.Y * .5f + Outline));
+		RowHeight = FMath::Max(RowHeight, Item.RelativeBounds.GetSize2f().Y + LayoutGap);
+		ColumnWidth = FMath::Max(ColumnWidth, Item.RelativeBounds.GetSize2f().X + LayoutGap + 2.f * LadderStagger);
+		Projected.Add(MoveTemp(Item));
+	}
+	LastProjected = Projected.Num();
+	TArray<FPaintFeedback> Placed;
+	Placed.Reserve(Projected.Num());
+	int32 VisibleDamageCount = 0;
+	for (FPaintFeedback& Item : Projected)
+	{
+		if (!PlaceFeedback(Item, Placed, LastViewport, RowHeight, ColumnWidth)) { ++LastSuppressed; continue; }
+		if (Entries[Item.EntryIndex].Icon != ECombatFeedbackIcon::Coin) ++VisibleDamageCount;
+		Placed.Add(MoveTemp(Item));
+	}
+	LastCrowdOpacity = CrowdOpacity(VisibleDamageCount);
+	for (FPaintFeedback& Item : Placed)
+	{
+		const FCombatFeedbackEntry& Entry = Entries[Item.EntryIndex];
+		const bool bCoin = Entry.Icon == ECombatFeedbackIcon::Coin;
+		const float Ratio = FMath::Clamp(Entry.Age / FeedbackLifetime, 0.f, 1.f);
+		const float LifetimeOpacity = FMath::Clamp((1.f - Ratio) / .25f, 0.f, 1.f);
+		const float Alpha = LifetimeOpacity * (bCoin ? 1.f : LastCrowdOpacity);
+		Item.Font.OutlineSettings.OutlineColor = FLinearColor(Ink.R, Ink.G, Ink.B, Alpha);
+		const FVector2f TextOrigin = Item.Position + Item.TextOffset;
+		DrawIcon(Elements, Base + 1, Geometry, Item.Position, Item.Scale, Entry.Icon, Entry.Tint, Alpha);
+		const FLinearColor Color = bCoin
 			? FLinearColor(1.f, .87f, .31f, Alpha) : FLinearColor(Entry.Tint.R, Entry.Tint.G, Entry.Tint.B, Alpha);
 		FSlateDrawElement::MakeText(Elements, Base + 5,
-			Geometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(TextOrigin)), Text, Font,
+			Geometry.ToPaintGeometry(Item.TextSize, FSlateLayoutTransform(TextOrigin)), Item.Text, Item.Font,
 			ESlateDrawEffect::None, Color);
+		LastPaint.Add({Entry.Amount, Entry.Age, Item.EntryIndex, Item.FontPoints, Item.Attempts, bCoin, Item.Bounds, Alpha});
 	}
 	return Base + 5;
+}
+
+FString UCombatFeedbackLayer::DebugPaintState() const
+{
+	FString Values;
+	for (const FCombatFeedbackPaintSnapshot& Item : LastPaint)
+	{
+		if (!Values.IsEmpty()) Values += TEXT(",");
+		Values += FString::Printf(TEXT("{\"entryIndex\":%d,\"amount\":%.9g,\"age\":%.9g,\"coin\":%s,\"fontPoints\":%.9g,\"attempts\":%d,\"alpha\":%.9g,\"bounds\":[%.9g,%.9g,%.9g,%.9g]}"),
+			Item.EntryIndex, Item.Amount, Item.Age, Item.bCoin ? TEXT("true") : TEXT("false"), Item.FontPoints,
+			Item.LayoutAttempts, Item.Alpha, Item.Bounds.Left, Item.Bounds.Top, Item.Bounds.Right, Item.Bounds.Bottom);
+	}
+	return FString::Printf(TEXT("{\"projected\":%d,\"drawn\":%d,\"suppressed\":%d,\"viewport\":[%.9g,%.9g],\"dpi\":%.9g,\"crowdOpacity\":%.9g,\"attemptLimit\":%d,\"margin\":%.9g,\"gap\":%.9g,\"values\":[%s]}"),
+		LastProjected, LastPaint.Num(), LastSuppressed, LastViewport.X, LastViewport.Y, LastDpi, LastCrowdOpacity,
+		LayoutAttemptLimit, LayoutMargin, LayoutGap, *Values);
 }
 
 void UCombatFeedbackSubsystem::ShowGold(UWorld* World, const FVector& Location, int32 Amount)
@@ -296,9 +444,7 @@ void UCombatFeedbackSubsystem::Push(const FCombatFeedbackEntry& Entry)
 	}
 	if (!Layer) return;
 	if (Entries.Num() >= FeedbackLimit) Entries.RemoveAt(0);
-	FCombatFeedbackEntry Spread = Entry;
-	Spread.Location.X += (Entries.Num() % 3 - 1) * 24.f;
-	Entries.Add(Spread);
+	Entries.Add(Entry);
 }
 
 void UCombatFeedbackSubsystem::Tick(float DeltaTime)
@@ -343,8 +489,10 @@ FString UCombatFeedbackSubsystem::DebugFeedbackState() const
 			static_cast<int32>(Entry.Icon), *FormatCombatFeedbackAmount(Entry), Entry.Tint.R, Entry.Tint.G, Entry.Tint.B,
 			Entry.Location.X, Entry.Location.Y, Entry.Location.Z);
 	}
-	return FString::Printf(TEXT("{\"entries\":%d,\"layerVisible\":%s,\"endingMuted\":%s,\"sourceBadgeVisible\":false,\"damageAmountMode\":\"resolved_before_health_clamp\",\"lifetime\":%.2f,\"limit\":%d,\"values\":[%s]}"),
-		Entries.Num(), Layer && Layer->IsInViewport() ? TEXT("true") : TEXT("false"), bEndingMuted ? TEXT("true") : TEXT("false"), FeedbackLifetime, FeedbackLimit, *Values);
+	const FString Paint = Layer ? Layer->DebugPaintState() : TEXT("null");
+	return FString::Printf(TEXT("{\"entries\":%d,\"layerVisible\":%s,\"endingMuted\":%s,\"sourceBadgeVisible\":false,\"damageAmountMode\":\"resolved_before_health_clamp\",\"lifetime\":%.2f,\"limit\":%d,\"fontRange\":[%d,%d],\"crowdFadeCounts\":[%d,%d],\"crowdOpacityMinimum\":%.9g,\"paint\":%s,\"values\":[%s]}"),
+		Entries.Num(), Layer && Layer->IsInViewport() ? TEXT("true") : TEXT("false"), bEndingMuted ? TEXT("true") : TEXT("false"),
+		FeedbackLifetime, FeedbackLimit, DamageFontMinimum, DamageFontMaximum, CrowdFadeStart, CrowdFadeFull, CrowdOpacityMinimum, *Paint, *Values);
 }
 
 void UCombatFeedbackSubsystem::DebugEmitFeedback(bool bExecute, int32 Amount)
