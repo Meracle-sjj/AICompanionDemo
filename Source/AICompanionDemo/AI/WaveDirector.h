@@ -2,6 +2,7 @@
  * [INPUT]: 依赖 Engine 的 AActor/TimerManager/SpawnActor（0.5s 节拍与环形刷怪）、Kismet 的 GetPlayerPawn（刷怪圆心与玩家死亡监听）、本模块 EnemyGrunt（变体注入 ApplyVariant 与刷怪队列枚举）、本模块 Combatant 接口与 HealthComponent（敌人 OnDeath 绑定→全灭检测/击杀计数；玩家 OnDeath→终局）；UI/UpgradeCardView（GC保护的图文视图，视口树先于视图释放）
  * [OUTPUT]: 对外提供 AWaveDirector——L4D 导演式节奏中枢（M3.75 B2）：波次表驱动的 Break→Spawning→WaveActive→…→Finished/Failed 相位机（环形刷怪、同屏上限节流补刷、全灭晋级）+ VS 成长账本（AddXp 收集口/等级曲线，普通横排三选一/锁箱2×3六选二的图文面板接入）+ 屏幕 HUD 行（key=4：波数/活敌/击杀/等级）与事件横幅（key=5：开波/升级/胜负）+ **妖术师饱和换算（10-07 用户裁决：CountAliveWarlocks 存活计数 ≥WarlockAliveLimit(5) 时，妖术师配额整批换算为随机杂兵批次 猎犬×8/标准兵×5/蛮兵×3——后期堆积死局治理）**；升级图文卡面的候选/选择槽位/暂停状态与编辑器验收口
  *  成长契约：奖励保留来源/发生等级，Lv.9玩家/Lv.10 AI交替；玩家抽满三张强化，Flip独立按钮/F键只转换当前玩家等级奖励，不占数字槽。奖励输入统一由GameMode仲裁并恢复测试F1偏好。
+ *  元素契约：冰/电/猎印三线只准一线，候选与领取复验共用当前玩家状态；六选二首领路线后将冲突未领槽改为金币袋，保留第二次领取。
  *  同批契约：64²连续探索场/33²真实地形显示；Boss死亡加入串行选择队列，九遗物由Relics组件结算；辉耀5/0.5s、每张+10，过载翻倍已有伤害；HUD稳定ID追加独特遗物与真实周期/狂暴剩余秒数。
  *  活蠕虫期间共享世界杂兵限额10/妖术师3，导演及召唤师逐只准入；超员直接退场无死亡/掉落/反馈伤害，导演自有活敌账本由OnDestroyed校正。
  *  v1.2公开只读IsRunTerminated供初始箱金焰清理；相位写入仍由导演持有。
@@ -281,6 +282,8 @@ private:
 	bool HasCompanionMoveSpeedBenefit() const;
 	FString AcquiredCardDescription(EUpgradeId Id) const;
 	static bool IsPlayerPoolCard(EUpgradeId Id);
+	/** 玩家冰/电/猎印三线兼容与深化前置；抽池、提交和效果入口共用，不在拒绝时消费奖励。 */
+	bool IsPlayerElementCompatible(EUpgradeId Id) const;
 
 	/** 按权重抽三张不重复（协议组同屏至多一张；通用池摘除爆炸卡——09-27 迁移锁箱） */
 	void RollOffers(bool bChestPool = false);
@@ -387,6 +390,10 @@ public:
 	/** 狂暴由导演统一切换；杂兵读取同一状态，包含召唤师新生杂兵。 */
 	void SetEnraged(bool bInEnraged);
 	UFUNCTION(BlueprintPure, Category = "Endless") bool IsEnraged() const { return bEnraged; }
+	/** 出生与存量怪读取同一绝对时间倍率；14分钟阶段只免移动减速。 */
+	float GetMobSpeedMultiplier() const;
+	bool IsMobUnstoppable() const;
+	void UpdateMobPressure();
 	UFUNCTION(BlueprintCallable, Category = "Debug|Endless") void DebugSetEnraged(bool bInEnraged);
 	/** 真实杂兵死亡旁路；普通刷怪与召唤杂兵都调用，蠕虫端按Health身份去重。 */
 	UFUNCTION(BlueprintCallable, Category = "Combat")

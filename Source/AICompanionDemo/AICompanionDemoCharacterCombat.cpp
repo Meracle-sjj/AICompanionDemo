@@ -1,5 +1,5 @@
 /** [INPUT]: 玩家自动射击、ICombatant活敌、共用元素来源解析与遗物主攻回调。
- * [OUTPUT]: 玩家感电赠叉从枪口按15度散射（已有散射时30度），独立于折射；5秒挂电、整发去重且分支不递归，遗物主攻仅一次；本体弹路可传播、本体Nova挂本体冰不授源；冰弹原伤害/语义交Health，不自行发伤害数字。
+ * [OUTPUT]: 玩家弹路整发命中去重，遗物主攻仅一次；每个成功弹射命中另走独立针刺概率口，不重复主攻爆炸；本体弹路可传播、本体Nova挂本体冰不授源。
  * [POS]: 玩家战斗局部实现，与输入/生命周期分离。 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AICompanionDemoCharacter.h"
 #include "AICompanionDemo.h"
@@ -129,7 +129,11 @@ void AAICompanionDemoCharacter::PlayerFire(AActor* Target)
 			const FVector Point = Next->GetActorLocation() + FVector(0, 0, 40);
 			FColor Color = bShockShotUnlocked ? FColor::FromHex(TEXT("C9A6FF")) : FColor::Magenta;
 			if (DealHit(Next, Point, PlayerShotDamage * FMath::Clamp(PlayerPrismScale, .1f, 1.f), Color, ECombatDamageKind::Ricochet))
+			{
 				DrawDebugLine(GetWorld(), RootHit.SourceCenter + FVector(0, 0, 40), Point, Color, false, .18f, 0, 2.f);
+				if (UBossRelicComponent* Relics = FindComponentByClass<UBossRelicComponent>())
+					Relics->NotifyElementalRayHit(this, Next, Point);
+			}
 		}
 	}
 	if (Primary.IsValid())

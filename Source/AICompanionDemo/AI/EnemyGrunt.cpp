@@ -4,7 +4,7 @@
  *  1.1仅Standard基础步速450→405cm/s，其他变体不变；ApplyVariant同步慢速恢复基线。猎印由UPROPERTY持有；狂暴双股贴身紫红火焰由EnrageVisual管理，召唤杂兵出生读导演；死亡先清火焰并报告普通怪事件。
  * [POS]: AI/ 的敌对方实现（球体 EnemyTarget 的继任者，WaveDirector 的生成目标）；球体时代两大物理补丁（SnapToGround 贴地、免 sweep）在 ACharacter 载体上整体作废——胶囊+重力天生正确，但两道 BP 隐式装配必须显式化（构造函数注释含三案根因）：① bRunPhysicsWithNoController（无 Controller 不模拟，悬浮冻结）；② 胶囊 42×96 + mesh 贴地(-90)/前向转正(-90°)（模板配在 BP 里，裸 C++ 缺失即浮空+恒侧身）；③ 胶囊 Visibility=Block（Pawn 预设默认 Ignore，队友 LOS 线穿透即永不开火）
  *  v1.3.2：妖术师两声进入每世界短声预算；光束、投掷和拳击仅提交伤害语义，实际漫画数字由Health统一生成。
- *  v1.3.3正式：ApplySlow/RecoverFromSlow仅管理移动，寒霜雪花和双来源残留由Elements局部实现。
+ *  ApplySlow/RecoverFromSlow仅管理移动，寒霜雪花和双来源残留由Elements局部实现；终局原速/倍率与免减速交Endgame局部实现，减速恢复不得抹掉时间成长。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -568,13 +568,15 @@ void AEnemyGrunt::HandleDeath(UHealthComponent* HealthComp)
 void AEnemyGrunt::ApplySlow(const float Duration, const float SpeedFactor)
 {
 	UCharacterMovementComponent* Cmc = GetCharacterMovement();
-	if (!Cmc || IsDead())
+	if (!Cmc || IsDead() || bUnstoppable || !FMath::IsFinite(Duration) || Duration <= 0.f
+		|| !FMath::IsFinite(SpeedFactor) || SpeedFactor <= 0.f || SpeedFactor > 1.f)
 	{
 		return;
 	}
 
 	// 移动控制与状态显示分开；不让寒霜或地刺覆盖敌人变体身体色。
-	Cmc->MaxWalkSpeed = BaseWalkSpeed * SpeedFactor;
+	MovementSlowFactor = SpeedFactor;
+	Cmc->MaxWalkSpeed = BaseWalkSpeed * MovementSlowFactor;
 
 	// 到点还原基线（重复命中刷新定时器，不会叠加错乱）
 	GetWorldTimerManager().SetTimer(FrostRecoverTimerHandle, this,
@@ -583,6 +585,7 @@ void AEnemyGrunt::ApplySlow(const float Duration, const float SpeedFactor)
 
 void AEnemyGrunt::RecoverFromSlow()
 {
+	MovementSlowFactor = 1.f;
 	if (IsDead())
 	{
 		return;
@@ -685,13 +688,19 @@ void AEnemyGrunt::ApplyVariant(const EGruntVariant InVariant)
 	SetActorScale3D(FVector(BodyScale));
 
 	// 记录基线（寒霜减速恢复的还原基准）+ 应用配色：沿用 "Paint Tint" 真名（M3.5 实证）
-	BaseWalkSpeed = MoveSpeed;
+	VariantWalkSpeed = BaseWalkSpeed = MoveSpeed;
+	MovementSlowFactor = 1.f;
+	GetWorldTimerManager().ClearTimer(FrostRecoverTimerHandle);
 	BaseTint = Tint;
 	if (UCharacterMovementComponent* CmcSlow = GetCharacterMovement())
 	{
 		CmcSlow->MaxWalkSpeed = BaseWalkSpeed;   // 幂等：重定型时清掉残留减速
 	}
 	GetMesh()->SetVectorParameterValueOnMaterials(TEXT("Paint Tint"), Tint);
+	// 重定型包含召唤物；统一复读当前导演，不让换变体覆盖终局速度/免减速。
+	if (const AAICompanionDemoGameMode* GM = GetWorld()->GetAuthGameMode<AAICompanionDemoGameMode>())
+		if (const AWaveDirector* Director = GM->GetWaveDirector())
+			ApplyEndgamePressure(Director->GetMobSpeedMultiplier(), Director->IsEnraged(), Director->IsMobUnstoppable());
 }
 
 void AEnemyGrunt::ApplyDifficulty(const float HpMult, const float XpMult)

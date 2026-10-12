@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 SFXLibrary.h 的槽位契约、Kismet/GameplayStatics 的 SpawnSound2D/SpawnSoundAtLocation、Engine/World、Engine/SoundAttenuation（运行时构造衰减——空间化语音零资产）
- * [OUTPUT]: 固定录音字幕/预算及队友加速独立录音；妖术师短声交专用世界预算，铡刀/地下声与原BGM独立
+ * [OUTPUT]: 固定录音字幕/预算与Boss/生命/普通三级分类；原版妖术师交专用世界预算，铡刀/地下声与原BGM独立
  * [POS]: Audio槽位解析与播放分流；语音/妖术师交各世界所有者，其他事件保持原2D入口
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -247,8 +247,17 @@ bool USFXLibrary::TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Loc
 
 bool USFXLibrary::IsInterruptingVoice(EGameSFX Event)
 {
-	return Event == EGameSFX::Voice_PlayerHurt || Event == EGameSFX::Voice_Recovered
-		|| GetVoiceKind(Event) == ERunEventKind::BossAppear || GetVoiceKind(Event) == ERunEventKind::BossDefeated;
+	return GetVoicePriority(Event) != ECompanionVoicePriority::Other;
+}
+
+ECompanionVoicePriority USFXLibrary::GetVoicePriority(EGameSFX Event)
+{
+	const ERunEventKind Kind = GetVoiceKind(Event);
+	if (Kind == ERunEventKind::BossAppear || Kind == ERunEventKind::BossDefeated)
+		return ECompanionVoicePriority::Boss;
+	if (Event == EGameSFX::Voice_PlayerHurt || Event == EGameSFX::Voice_PlayerLow || Event == EGameSFX::Voice_Recovered)
+		return ECompanionVoicePriority::Health;
+	return ECompanionVoicePriority::Other;
 }
 
 bool USFXLibrary::IsLimitedItemVoice(EGameSFX Event)

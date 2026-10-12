@@ -1,6 +1,6 @@
 /**
  * [INPUT]: CompanionVoiceSubsystem队列契约、真实音频状态与SFXLibrary固定录音字幕。
- * [OUTPUT]: 普通串行与最新紧急抢占；八类最高事件跨奖励冻结起播/续播，真实暂停一律冻结；起播预算/字幕/历史同刻。
+ * [OUTPUT]: Boss串行锁定与优先待播、最新生命状态抢普通、普通FIFO；Boss/生命跨奖励演出，真实暂停全冻；起播预算/字幕/历史同刻。
  * [POS]: Audio/每世界语音所有者；不推进战斗、不保留事件调用者或已结束世界。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -27,15 +27,28 @@ bool UCompanionVoiceSubsystem::Enqueue(USoundBase* Sound, EGameSFX Event, float 
 		++BudgetSkippedCount;
 		return false;
 	}
-	if (USFXLibrary::IsInterruptingVoice(Event))
+	const ECompanionVoicePriority Priority = USFXLibrary::GetVoicePriority(Event);
+	if (Priority == ECompanionVoicePriority::Health)
 	{
-		// 相同最高级也取最新事实；清除全部旧话，避免恢复后补播过时提醒。
-		DiscardedPendingCount += Pending.Num();
-		Pending.Reset();
-		if (ActiveAudio) ++InterruptedCount;
+		// Boss期间生命状态可能已经恢复；只保留最新生命事实，不能吞掉已登记的Boss事件。
+		const int32 Removed = Pending.RemoveAll([](const FQueuedCompanionVoice& Item)
+		{
+			return USFXLibrary::GetVoicePriority(Item.Event) == ECompanionVoicePriority::Health;
+		});
+		DiscardedPendingCount += Removed;
+	}
+	const ECompanionVoicePriority ActivePriority = USFXLibrary::GetVoicePriority(ActiveEvent);
+	if (ActiveAudio && ActivePriority != ECompanionVoicePriority::Boss
+		&& Priority != ECompanionVoicePriority::Other && Priority >= ActivePriority)
+	{
+		++InterruptedCount;
 		ClearActive();
 	}
-	FQueuedCompanionVoice& Item = Pending.AddDefaulted_GetRef();
+	// 稳定插入：更高等级越过低等级，同级保持到达顺序。当前Boss连另一个Boss也不能切断。
+	int32 InsertAt = 0;
+	while (InsertAt < Pending.Num() && USFXLibrary::GetVoicePriority(Pending[InsertAt].Event) >= Priority) ++InsertAt;
+	Pending.Insert(FQueuedCompanionVoice(), InsertAt);
+	FQueuedCompanionVoice& Item = Pending[InsertAt];
 	Item.Sound = Sound;
 	Item.Event = Event;
 	Item.Volume = Volume;
@@ -201,6 +214,8 @@ FString UCompanionVoiceSubsystem::DebugVoiceState() const
 	State->SetStringField(TEXT("event"), USFXLibrary::GetVoiceEventId(ActiveEvent).ToString());
 	State->SetStringField(TEXT("line"), ActiveLine);
 	State->SetNumberField(TEXT("kind"), static_cast<int32>(ActiveKind));
+	State->SetNumberField(TEXT("priority"), static_cast<int32>(USFXLibrary::GetVoicePriority(ActiveEvent)));
+	State->SetBoolField(TEXT("boss_playback_locked"), ActiveAudio && USFXLibrary::GetVoicePriority(ActiveEvent) == ECompanionVoicePriority::Boss);
 	State->SetStringField(TEXT("audio"), GetPathNameSafe(ActiveAudio));
 	State->SetStringField(TEXT("sound"), IsValid(ActiveAudio) ? GetPathNameSafe(ActiveAudio->Sound) : FString());
 	State->SetBoolField(TEXT("playing"), IsValid(ActiveAudio) && ActiveAudio->IsPlaying());

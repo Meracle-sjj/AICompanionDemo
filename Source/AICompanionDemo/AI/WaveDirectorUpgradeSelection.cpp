@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 经验金币账本、奖励队列、选择视图和候选池。
- * [OUTPUT]: 奖励来源/等级/Flip/槽位/前置资格与金币账本归导演；成功开箱台词由箱体提交，不在奖励入口重复发声。
- * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
+ * [OUTPUT]: 奖励来源/等级/Flip/槽位与金币账本归导演；候选和提交共用玩家元素三线兼容检查，拒绝不消费槽位或次数。
+ * [POS]: AI/WaveDirector成长准入；大箱未领取前保留元素选择空间，领取后的冲突槽转换由效果出口负责。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
 #include "WaveDirector.h"
@@ -239,12 +239,13 @@ void AWaveDirector::SelectUpgradeOffer(const int32 Slot)
 	{
 		return;
 	}
+	const EUpgradeId Id = bChestDoublePick ? ChestOffers[Slot] : Offers[Slot];
+	if (Id == EUpgradeId::Flip) { FlipCurrentReward(); return; }
+	if (!IsPlayerElementCompatible(Id)) { return; }
 	if (bChestDoublePick)
 	{
 		ChestTakenSlots.Add(Slot);
 	}
-	const EUpgradeId Id = bChestDoublePick ? ChestOffers[Slot] : Offers[Slot];
-	if (Id == EUpgradeId::Flip) { FlipCurrentReward(); return; }
 	ApplyUpgrade(Id);
 }
 
@@ -328,20 +329,7 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 
 	// 弹药互斥（09-30 用户裁决"选一种子弹后只出现与它相关的强化"）：三元素线互相排斥——
 	// 任一线主卡已解锁，另两线全部离池（本线深化卡随主线保留）
-	if (UnlockedIds.Contains(TEXT("ShockShot")) || UnlockedIds.Contains(TEXT("HuntMark")) || UnlockedIds.Contains(TEXT("FrostShotPlayer")))
-	{
-		Pool.RemoveAll([this](const FUpgradeCardDef& C)
-		{
-			const FString G = C.Group.ToString();
-			if (!G.StartsWith(TEXT("Element")))
-			{
-				return false;
-			}
-			return !((G == TEXT("ElementShock") && UnlockedIds.Contains(TEXT("ShockShot"))) ||
-				(G == TEXT("ElementMark") && UnlockedIds.Contains(TEXT("HuntMark"))) ||
-				(G == TEXT("ElementFrost") && UnlockedIds.Contains(TEXT("FrostShotPlayer"))));
-		});
-	}
+	Pool.RemoveAll([this](const FUpgradeCardDef& C) { return !IsPlayerElementCompatible(C.Id); });
 	// 玩家低伤弹允许穿透+折射同持；散射仍与这两种互斥。OneShotKey独立排除已领卡。
 	if (UnlockedIds.Contains(TEXT("PlayerScatter")))
 	{
@@ -468,6 +456,24 @@ void AWaveDirector::RollOffers(const bool bChestPool)
 		// 同组至多一张：抽中后整组离池（含所抽卡本身）
 		const FName Group = Pool[Picked].Group;
 		Pool.RemoveAll([&Group](const FUpgradeCardDef& C) { return C.Group == Group; });
+	}
+}
+
+bool AWaveDirector::IsPlayerElementCompatible(const EUpgradeId Id) const
+{
+	const AAICompanionDemoCharacter* Hero = Cast<AAICompanionDemoCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	const bool bFrost = UnlockedIds.Contains(TEXT("FrostShotPlayer")) || (Hero && Hero->bFrostShotUnlocked);
+	const bool bShock = UnlockedIds.Contains(TEXT("ShockShot")) || (Hero && Hero->bShockShotUnlocked);
+	const bool bMark = UnlockedIds.Contains(TEXT("HuntMark")) || (Hero && Hero->bHuntMarkUnlocked);
+	switch (Id)
+	{
+	case EUpgradeId::FrostShotPlayer: return Hero && !bShock && !bMark;
+	case EUpgradeId::ShockShot: return Hero && !bFrost && !bMark;
+	case EUpgradeId::HuntMark: return Hero && !bFrost && !bShock;
+	case EUpgradeId::FrostDeep: return Hero && bFrost && !bShock && !bMark;
+	case EUpgradeId::ShockOverload: return Hero && bShock && !bFrost && !bMark;
+	case EUpgradeId::MarkMaster: return Hero && bMark && !bFrost && !bShock;
+	default: return true;
 	}
 }
 

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 导演的地图/祭坛/首领奖励与领域状态，CombatElementalDamage提供异源冰火结算，Health统一伤害反馈。
- * [OUTPUT]: 原领域火伤与时钟保持，辉耀命中本体霜冻后另结算等额Melt；祭坛/狂暴仅保留正式事件与声音，去重复左上红字。
+ * [OUTPUT]: 原领域火伤与时钟保持，辉耀命中本体霜冻后另结算等额Melt；祭坛/狂暴仅保留正式事件与声音，半秒同步存量终局移动，不持减速或冰钟。
  * [POS]: AI/WaveDirector运行效果接线；导演持领域节拍，敌人持霜冻来源，反应规则交共用结算口而不在领域复制。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -103,12 +103,14 @@ void AWaveDirector::ProcessScheduledEvents()
 			}
 		}
 	}
-	if (!bEnraged && ElapsedSeconds >= 720.f)
+	if (!bEnraged && ElapsedSeconds >= kEnrageStartSeconds)
 	{
 		SetEnraged(true);
 		URunEventLog::Publish(GetWorld(), TEXT("神秘的声音"), TEXT("你怎么还在这里？"), TEXT("WorldEnrage"));
 		UE_LOG(LogAICompanionDemo, Warning, TEXT("[Wave] 狂暴态开启——怪物曲线换挡不封顶"));
 	}
+	// 半秒导演节拍同步存量与新生怪；免减速只切移动层，冰钟/反应不受影响。
+	UpdateMobPressure();
 }
 
 void AWaveDirector::NotifyBossKilled(int32 BossIndex, const FString& BossName, const FVector& BossLocation)

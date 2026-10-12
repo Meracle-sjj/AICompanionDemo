@@ -1,5 +1,5 @@
 /**
- * [INPUT]: SFXLibrary解析的两类妖术师短声、玩家Pawn距离、ICombatant存活契约和世界暂停/生命周期。
+ * [INPUT]: SFXLibrary解析的妖术师蓄力/发射音、玩家Pawn距离、ICombatant存活契约和世界暂停/生命周期。
  * [OUTPUT]: 每世界两个空间组件预算与成功起播间隔；玩家12至24米距离音量/原位空间方向，暂停冻结/死亡清理与只读探针。
  * [POS]: Audio仅妖术师两声的生命周期所有者；不接语音/BGM，不修改技能时序或伤害。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

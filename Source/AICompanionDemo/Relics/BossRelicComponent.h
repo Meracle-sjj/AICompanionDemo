@@ -1,6 +1,6 @@
 /**
  * [INPUT]: ActorComponent/HealthComponent与统一异人火反应入口；主攻、队友直击、真实受击与成功闪烁由共享宿主接线。
- * [OUTPUT]: 九遗物参数/效果与只读JSON；玩家火保持原raw，仅队友冰另结等额独立融化；步行火球与闪烁落点三颗追踪球，直击30/邻敌20互斥；地刺50与每跳10可刷新流血。
+ * [OUTPUT]: 九遗物参数/效果与只读JSON；针刺默认30%，主攻与去重弹射/闪现轰击命中共享独立概率；地刺50与每跳10可刷新流血，次生不递归主攻。
  * [POS]: Relics/唯一玩法所有者；次生向Health提交明确类别与命中前落点，反馈只取账本实际扣血；死亡/EndPlay幂等销毁球/火圈/石刺及两种临时VFX，不延长正常寿命。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -34,7 +34,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="BossRelics") bool HasRelic(EBossRelicId Id) const;
 	/** 每次玩家主攻首个真实命中最多调用一次；穿透、散射、折射及次生效果不得再次调用。 */
 	void NotifyPrimaryAttack(AActor* Attacker, AActor* PrimaryTarget, const FVector& ImpactPoint);
-	/** 闪现轰击真实命中的独立概率地刺口；调用者每目标只调用一次，不触发主攻震击/熔核爆弹。 */
+	/** 弹射或闪现轰击真实命中的独立概率地刺口；整发每目标一次，不触发主攻震击/熔核爆弹。 */
 	void NotifyElementalRayHit(AActor* Attacker, AActor* Target, const FVector& ImpactPoint);
 	/** 编辑器专项入口复用真实主攻分支；非编辑器不执行。 */
 	UFUNCTION(BlueprintCallable, Category="Debug|BossRelics") void DebugPrimaryAttack(AActor* PrimaryTarget, const FVector& ImpactPoint);
@@ -66,7 +66,7 @@ public:
 	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="0")) float FireballDamage = 30.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="1")) float FireballRadius = 300.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|MovingFireball", meta=(ClampMin="0")) float BlinkFireballSplashDamage = 20.f;
-	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0",ClampMax="1")) float SpikeChance = .2f;
+	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0",ClampMax="1")) float SpikeChance = .3f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0")) float SpikeDamage = 50.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="1")) float SpikeRadius = 180.f;
 	UPROPERTY(EditAnywhere, Category="BossRelics|StoneSpikes", meta=(ClampMin="0.1")) float SpikeSlowDuration = 2.f;

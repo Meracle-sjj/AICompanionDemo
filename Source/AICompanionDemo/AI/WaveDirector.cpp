@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 波次/Endless节奏、出生参数与生命事件。
- * [OUTPUT]: 保留原关卡时序/三闸环形刷怪/死亡账本/旧回归HUD。
- * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
+ * [OUTPUT]: 保留原关卡时序/三闸环形刷怪/死亡账本/旧回归HUD；新生怪读统一终局倍率，速度不再单独累乘。
+ * [POS]: AI/WaveDirector节奏与生成入口；时间压力公式交MobEffects，减速组合交EnemyGrunt。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
 #include "WaveDirector.h"
@@ -532,7 +532,7 @@ AActor* AWaveDirector::SpawnEnemyAtRing(const EGruntVariant Variant)
 	if (AEnemyGrunt* Grunt = Cast<AEnemyGrunt>(Enemy))
 	{
 		Grunt->ApplyVariant(Variant);
-		Grunt->SetEnraged(bEnraged);
+		Grunt->ApplyEndgamePressure(GetMobSpeedMultiplier(), bEnraged, IsMobUnstoppable());
 		// 难度成长二选一：Endless 走时间曲线（R10：VS 数值 15%/2.5% 每分钟），波次机走波数线性（+5%/波）
 		const float Minutes = GetElapsedMinutes();
 		if (UHealthComponent* GruntHealth = Grunt->GetHealthComponent())
@@ -543,20 +543,11 @@ AActor* AWaveDirector::SpawnEnemyAtRing(const EGruntVariant Variant)
 			// 狂暴换挡（09-30 v2：12min 起血量指数换 1.35/分，不封顶——MegaBonk 式 insane）
 			if (bEnraged)
 			{
-				HpFactor *= FMath::Pow(1.35f, Minutes - 12.f);
+					HpFactor *= FMath::Pow(1.35f, FMath::Max(0.f, Minutes - kEnrageStartSeconds / 60.f));
 			}
 			GruntHealth->SetMaxHealth(GruntHealth->GetMaxHealth() * HpFactor, /*bFillCurrent*/ true);
 		}
-		if (bEndlessMode && Grunt->GetCharacterMovement())
-		{
-			float SpeedFactor = FMath::Min(FMath::Pow(SpeedGrowthPerMinute, Minutes), SpeedGrowthCap);
-			// 狂暴速度换挡：脱帽加速（压迫力拉满，逃不掉）
-			if (bEnraged)
-			{
-				SpeedFactor *= FMath::Pow(1.15f, Minutes - 12.f);
-			}
-			Grunt->GetCharacterMovement()->MaxWalkSpeed *= FMath::Min(SpeedFactor, SpeedGrowthCap * 2.5f);
-		}
+		// 速度成长由ApplyEndgamePressure合成；减速与自然恢复共用同一成长后基线。
 		// 难度祭坛注入（09-25）：献祭档位的血量/经验乘子最后落位（叠加在时间成长之上）
 		if (DifficultyLevel > 0)
 		{

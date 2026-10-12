@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 稳定升级ID与真实玩家/队友状态。
- * [OUTPUT]: 原ApplyUpgrade正文完整保留；效果/数值/领取恢复时序不变。
- * [POS]: AI/WaveDirector的按职责局部实现；机械拆分不改行为。
+ * [OUTPUT]: 有效升级效果与持有账本；元素入口拒绝跨线，六选二首领路线后将不兼容未领槽改为金币袋，仍可领满两次。
+ * [POS]: AI/WaveDirector成长提交出口；复用候选侧的兼容判断，账本与面板只反映真实生效领取。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md。
  */
 #include "WaveDirector.h"
@@ -35,12 +35,13 @@
 
 using namespace WaveDirectorPrivate;
 
-// ---------- 原ApplyUpgrade正文完整保留；效果/数值/领取恢复时序不变。 ----------
+// ---------- 领取效果与账本；元素互斥在提交边界复验。 ----------
 
 void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 {
 	if (IsRunTerminated()) { return; }
 	if (Id == EUpgradeId::Flip) { FlipCurrentReward(); return; }
+	if (!IsPlayerElementCompatible(Id)) { return; }
 	// 协议卡/血祭的落点：队友评分器与火力层（缓存一次，卡后常驻）
 	ACompanionAIController* Ctl = ResolveCompanionCtl();
 
@@ -329,6 +330,15 @@ void AWaveDirector::ApplyUpgrade(EUpgradeId Id)
 		--ChestPicksRemaining;
 		if (ChestPicksRemaining > 0)
 		{
+			// 首次领取后按真实路线复验，冲突槽换成收益卡，保留六槽布局和第二次领取。
+			for (int32 Slot = 0; Slot < 6; ++Slot)
+			{
+				if (!ChestTakenSlots.Contains(Slot) && !IsPlayerElementCompatible(ChestOffers[Slot]))
+				{
+					ChestOffers[Slot] = EUpgradeId::GoldPouch;
+					OfferFallbackNote = TEXT("已选择子弹路线：冲突选项已替换为金币袋，仍可领取第二张。");
+				}
+			}
 			// 重建面板，保留本次宝箱的已选槽位和剩余领取数。
 			if (UpgradeOverlay.IsValid() && GEngine && GEngine->GameViewport)
 			{

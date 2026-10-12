@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 本组件数据契约、ICombatant/Health统一实际扣血反馈、EnemyGrunt 普通减速、CombatElementalDamage异人独立融化与灼烧表现、CompanionAIController 狂怒、
  *  BossOrb::LaunchFriendly、Vfx/SFX及Niagara组件回传、Engine Cone/BasicShapeMaterial、Character::LaunchCharacter。
- * [OUTPUT]: 九遗物结算；行走火球30范围伤与闪烁三球30/20互斥共用独立爆闪；地刺真实概率触发时仅播一次铡刀短砍音，50与5s/0.5s每跳10流血保持。
+ * [OUTPUT]: 九遗物结算；针刺默认30%，主攻与去重弹射/闪现轰击命中共享概率口；成功地刺一次短砍音，50与5s/0.5s每跳10流血保持。
  * [POS]: Relics/运行时实现；玩家火先正常结算，再由统一入口消费队友冰并另结同raw融化；只向Health提交次生伤害类别与落点，不再自行发伤害数值；统一重入闸，死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -655,7 +655,7 @@ FString UBossRelicComponent::DescribeRelic(EBossRelicId Id) const
 	case EBossRelicId::BloodLink: return FString::Printf(TEXT("队友距你 %.0f 米内时，直击实际伤害的 %.0f%% 恢复你的生命。"), BloodLinkRange / 100.f, BloodLinkHealingRatio * 100.f);
 	case EBossRelicId::SpiritFrenzy: return FString::Printf(TEXT("每 %.0f 秒使队友紫色狂暴 %.0f 秒；狂暴药剂持续时间增加 %.0f%%。"), FrenzyInterval, FrenzyDuration, (PotionFrenzyMultiplier - 1.f) * 100.f);
 	case EBossRelicId::MovingFireball: return FString::Printf(TEXT("累计行走 %.0f 米发射一颗爆炸火球，造成 %.0f 范围伤害；闪烁落点生成三颗追踪必中火球，直击 %.0f、周围 %.0f 伤害，二者不叠加。爆炸半径 %.1f 米；闪烁不计行走距离。"), FireballTravelDistance / 100.f, FireballDamage, FireballDamage, BlinkFireballSplashDamage, FireballRadius / 100.f);
-	case EBossRelicId::StoneSpikes: return FString::Printf(TEXT("主攻命中有 %.0f%% 概率唤出地刺，半径 %.1f 米造成 %.0f 伤害，并使存活敌人流血 %.0f 秒，每 %.1f 秒造成 %.0f 伤害；重复地刺刷新流血，不叠层。普通敌人速度降至 %.0f%%，持续 %.0f 秒。"), SpikeChance * 100.f, SpikeRadius / 100.f, SpikeDamage, SpikeBleedDuration, SpikeBleedInterval, SpikeBleedDamage, SpikeSpeedFactor * 100.f, SpikeSlowDuration);
+	case EBossRelicId::StoneSpikes: return FString::Printf(TEXT("主攻、弹射与闪现轰击命中各有 %.0f%% 概率唤出地刺，半径 %.1f 米造成 %.0f 伤害，并使存活敌人流血 %.0f 秒，每 %.1f 秒造成 %.0f 伤害；重复地刺刷新流血，不叠层。普通敌人速度降至 %.0f%%，持续 %.0f 秒。"), SpikeChance * 100.f, SpikeRadius / 100.f, SpikeDamage, SpikeBleedDuration, SpikeBleedInterval, SpikeBleedDamage, SpikeSpeedFactor * 100.f, SpikeSlowDuration);
 	case EBossRelicId::SeismicStrike: return FString::Printf(TEXT("每 %.0f 秒准备一次震爆；下一次主攻命中时，半径 %.1f 米造成 %.0f 伤害并击飞普通敌人。"), SeismicInterval, SeismicRadius / 100.f, SeismicDamage);
 	case EBossRelicId::StoneCarapace: return FString::Printf(TEXT("永久减伤 %.0f%%；实际受击时，对伤害来源敌人反伤 %.0f。"), CarapaceReduction * 100.f, ThornsDamage);
 	case EBossRelicId::VolcanicRounds: return FString::Printf(TEXT("玩家每次主攻命中附加爆炸，半径 %.1f 米造成 %.0f 伤害；散射、穿透与次生效果不重复触发。"), VolcanicRadius / 100.f, VolcanicDamage);

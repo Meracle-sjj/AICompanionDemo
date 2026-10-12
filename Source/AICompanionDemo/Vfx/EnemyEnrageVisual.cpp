@@ -1,8 +1,8 @@
 /**
  * [INPUT]: 预Cook的NS_ColoredFireMid、User.Flame_Material材质与User.Flame_Color颜色参数、独立MI_EnrageFlame、Niagara组件参数/暂停API。
- * [OUTPUT]: 仅在组件参数中绑定紫红材质，每杂兵两份贴身火焰；不复制系统或修改共享Renderer，幂等清理。
+ * [OUTPUT]: 仅在组件参数中绑定紫红材质，每杂兵两份贴身火焰；14分钟只增Z高度1.8倍，不增加组件/粒子数，幂等清理。
  * [POS]: 身体覆盖层独立于寒霜染色和猎印，显示变化不改移动/碰撞/元素契约。
- * [PROTOCOL]: 变更时更新此头部；成员地图由主agent统一维护。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "EnemyEnrageVisual.h"
 #include "Components/SceneComponent.h"
@@ -17,6 +17,7 @@
 
 namespace
 {
+	constexpr float HeightenedScale = 1.8f;
 	const FName FlameColorName(TEXT("User.Flame_Color"));
 	const FName FlameMaterialName(TEXT("User.Flame_Material"));
 	FNiagaraVariable ColorParameter() { return FNiagaraVariable(FNiagaraTypeDefinition::GetColorDef(), FlameColorName); }
@@ -71,7 +72,7 @@ bool UEnemyEnrageVisual::BuildFlames()
 		Flame->SetVariableMaterial(FlameMaterialName, EnrageMaterial);
 		Flame->SetupAttachment(GetOwner()->GetRootComponent());
 		Flame->SetRelativeLocation(Position);
-		Flame->SetRelativeScale3D(FVector(FlameScale));
+		Flame->SetRelativeScale3D(FVector(FlameScale, FlameScale, FlameScale * (bHeightened ? HeightenedScale : 1.f)));
 		Flame->SetCanEverAffectNavigation(false);
 		Flame->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Flame->SetCastShadow(false);
@@ -107,6 +108,15 @@ void UEnemyEnrageVisual::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	for (UNiagaraComponent* Flame : Flames) if (IsValid(Flame)) Flame->SetPaused(bFreeze);
 }
 
+void UEnemyEnrageVisual::SetHeightened(bool bInHeightened)
+{
+	bInHeightened = bInHeightened && bEnraged;
+	if (bHeightened == bInHeightened) return;
+	bHeightened = bInHeightened;
+	for (UNiagaraComponent* Flame : Flames)
+		if (IsValid(Flame)) Flame->SetRelativeScale3D(FVector(FlameScale, FlameScale, FlameScale * (bHeightened ? HeightenedScale : 1.f)));
+}
+
 void UEnemyEnrageVisual::DestroyFlames()
 {
 	for (UNiagaraComponent* Flame : Flames)
@@ -129,11 +139,13 @@ FString UEnemyEnrageVisual::DebugVisualState() const
 {
 	int32 Live=0, Active=0, Paused=0;
 	FLinearColor Actual = FLinearColor::Black;
+	FVector ActualScale = FVector::ZeroVector;
 	FString Materials;
 	for (const UNiagaraComponent* Flame : Flames)
 	{
 		if (!IsValid(Flame)) continue;
 		++Live;
+		ActualScale = Flame->GetRelativeScale3D();
 		if (Flame->IsActive()) ++Active;
 		if (Flame->IsPaused()) ++Paused;
 		Actual = Flame->GetOverrideParameters().GetParameterValueOrDefault<FLinearColor>(ColorParameter(), FLinearColor::Black);
@@ -150,7 +162,8 @@ FString UEnemyEnrageVisual::DebugVisualState() const
 				*Material->GetPathName(), bHasTint ? TEXT("true") : TEXT("false"), Tint.R, Tint.G, Tint.B, Tint.A);
 		}
 	}
-	return FString::Printf(TEXT("{\"enraged\":%s,\"systemLoaded\":%s,\"compatibleColor\":%s,\"safeColoredSystem\":%s,\"enrageMaterialLoaded\":%s,\"liveFlameComponents\":%d,\"activeFlameComponents\":%d,\"pausedFlameComponents\":%d,\"buildCount\":%d,\"actualColor\":[%.4f,%.4f,%.4f,%.4f],\"usedMaterials\":[%s]}"),
+	return FString::Printf(TEXT("{\"heightened\":%s,\"actualScale\":[%.4f,%.4f,%.4f],\"enraged\":%s,\"systemLoaded\":%s,\"compatibleColor\":%s,\"safeColoredSystem\":%s,\"enrageMaterialLoaded\":%s,\"liveFlameComponents\":%d,\"activeFlameComponents\":%d,\"pausedFlameComponents\":%d,\"buildCount\":%d,\"actualColor\":[%.4f,%.4f,%.4f,%.4f],\"usedMaterials\":[%s]}"),
+		bHeightened ? TEXT("true") : TEXT("false"), ActualScale.X, ActualScale.Y, ActualScale.Z,
 		bEnraged ? TEXT("true") : TEXT("false"), SourceFlameSystem ? TEXT("true") : TEXT("false"), bCompatibleColor ? TEXT("true") : TEXT("false"),
 		bSafeColoredSystem ? TEXT("true") : TEXT("false"), EnrageMaterial ? TEXT("true") : TEXT("false"),
 		Live, Active, Paused, BuildCount, Actual.R, Actual.G, Actual.B, Actual.A, *Materials);

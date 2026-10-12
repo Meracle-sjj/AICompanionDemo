@@ -1,8 +1,8 @@
 /**
  * [INPUT]: USoundBase软引用槽、世界语音队列、Kismet 2D/空间/附属音频与原BGM/潜地循环声源。
- * [OUTPUT]: 固定字幕/语音策略与独立队友加速卡语音；妖术师危机短声以0.85/0.90交玩家距离/空间方向预算；BGM/潜地循环独立
+ * [OUTPUT]: 固定字幕与Boss/生命/普通三级语音策略；原版妖术师0.4/0.45交玩家距离/空间预算，所选CC0刀剑铡刀默认增益1；BGM/潜地循环独立
  *  信标首次解锁/成功召回沿用现役两条资源路径，v2声源为冷峻自然女声；台词分别为“我一直在你身边。”“我从未离开过你”。
- * [POS]: Audio声音槽位真源；普通音效、固定语音与妖术师空间短声各有明确入口，业务不直接创建组件
+ * [POS]: Audio声音槽位真源；普通音效、固定语音与妖术师空间音效各有明确入口，业务不直接创建组件
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -19,6 +19,14 @@ class UAudioComponent;
 class AActor;
 class USceneComponent;
 enum class ERunEventKind : uint8;
+
+/** 排程等级由槽位语义决定；数值越大越优先，Boss当前播放不可抢占。 */
+enum class ECompanionVoicePriority : uint8
+{
+	Other,
+	Health,
+	Boss
+};
 
 /** 全游戏音效事件清单——挂接点见各业务文件的 PlaySFX 调用行 */
 UENUM(BlueprintType)
@@ -113,7 +121,7 @@ class AICOMPANIONDEMO_API USFXLibrary : public UObject
 public:
 	/** 普通音效按事件2D播放；妖术师两声必须使用携带真实来源的专用空间入口。 */
 	static void PlaySFX(UWorld* World, EGameSFX Event);
-	/** 两类妖术师短声共用本世界并发/成功间隔；不排队，返回值不代表人耳验收。 */
+	/** 两类妖术师音效共用本世界并发/成功间隔；不排队，返回值不代表人耳验收。 */
 	static bool PlayWarlockSFX(UWorld* World, EGameSFX Event, AActor* Source, const FVector& Location);
 
 	/** 空间化语音入口（09-27 用户定调"音箱放到 AI 身上"）：3D 定位于 Location——远处队友的喊话
@@ -122,8 +130,9 @@ public:
 
 	/** 返回true表示成功入本世界串行队列；前一句未完成时保持待播。 */
 	static bool TryPlayVoice(UWorld* World, EGameSFX Event, const FVector& Location);
-	/** 紧急事件不经过闲聊节流，立即替换当前及全部待播旧台词。 */
+	/** Boss/生命不经过闲聊节流并跨奖励演出；实际抢占由世界队列按三级仲裁。 */
 	static bool IsInterruptingVoice(EGameSFX Event);
+	static ECompanionVoicePriority GetVoicePriority(EGameSFX Event);
 	/** 相同拾取/升级录音每世界最多真正起播三次，排队和被吞不计数。 */
 	static bool IsLimitedItemVoice(EGameSFX Event);
 	/** 仅真实成功开箱调用；初始、普通、大锁箱共用前三次序号。 */
@@ -186,7 +195,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Relic")
 	TSoftObjectPtr<USoundBase> RelicStoneCleaver;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Relic", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float RelicStoneCleaverVolume = .65f;
+	float RelicStoneCleaverVolume = 1.f;
 
 	/** 经验晶体收集 */
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Pickup")
@@ -249,7 +258,7 @@ public:
 	TSoftObjectPtr<USoundBase> WarlockBeamCharge;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamChargeVolume = 0.85f;
+	float WarlockBeamChargeVolume = 0.4f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
 	float WarlockBeamChargePitch = 1.f;
 
@@ -258,7 +267,7 @@ public:
 	TSoftObjectPtr<USoundBase> WarlockBeamFire;
 
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float WarlockBeamFireVolume = 0.90f;
+	float WarlockBeamFireVolume = 0.45f;
 	UPROPERTY(EditAnywhere, Config, Category = "SFX|Boss", meta = (ClampMin = "0.1", ClampMax = "2.0"))
 	float WarlockBeamFirePitch = 1.f;
 

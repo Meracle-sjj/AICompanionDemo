@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 世界生命周期、SFXLibrary固定录音字幕/槽位和UAudioComponent真实播放状态。
- * [OUTPUT]: 普通FIFO与最新紧急抢占；紧急声音/气泡跨奖励冻结连续演出，真实暂停全部停播；起播预算/记录与前三成功箱计数。
+ * [OUTPUT]: Boss不可抢占、生命可抢普通、同级普通FIFO的三级队列；Boss/生命跨奖励冻结，真实暂停全停；起播预算/记录与前三成功箱计数。
  * [POS]: Audio/语音排程唯一所有者；仅Game/PIE，UPROPERTY保活声源/组件，Deinitialize停播清局。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

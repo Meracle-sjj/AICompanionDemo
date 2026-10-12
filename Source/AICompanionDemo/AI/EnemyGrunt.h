@@ -3,7 +3,7 @@
  * [OUTPUT]: 对外提供 AEnemyGrunt——拟人猎手敌人二代：胶囊互撞、贴地行走、**追击全自驱寻路（历 D12 MoveToActor→D16 输入常开→D17 归一：FindPathToActorSynchronously 每 0.5s 算路存路点串，HuntPlayer 沿"路径下一路点"喂输入——加速度与绕障同源，滑步案与双驱动打架案双根治；无控制器，bRunPhysicsWithNoController 主开关）**、贴脸挥拳节拍（攻击动画与伤害同拍，伤害走 HealthComponent 唯一入口；出拳双闸门：|ΔZ|≤150 层高 + ObjectType LOS——隐形敌人案根治，穿层/隔板绝不挥拳）、ragdoll 布娃娃死亡 + 定时自毁；实现 ICombatant 供队友评分器跨形体识别；M3.75 增补：EGruntVariant 三变体（Standard 基线/Rusher 快而脆/Brute 慢而硬，ApplyVariant 出生定型——移速/血量/伤害/间隔/体型/色调/经验值/蛋糕掉率八项参数集，数据差异不造新类）+ XpPickup 经验掉落（喂 XpValue，收集上报的组合根在 GameMode）+ HealthPickup 柠檬蛋糕概率掉落（蛮兵必掉，收集直接作用于玩家血量）+ 滑行呆移探针（bEnableMoveProbe，1Hz 取证器，确认修复后关）
  *  猎印/狂暴显示各有组件；感电5秒残留以动态ShockMarkVisual固定闪电字形同步，半秒持续配对不消费；死亡隐藏/EndPlay释放。ApplySummonedWarlock一次定型紫色双倍攻速召唤物，无常规掉落。
  * [POS]: AI/ 的敌对方实体（替代球体 EnemyTarget 的猎手位置，WaveDirector 的生成目标）；外观与动画构造期 C++ 内联装配（与队友 BP 的已验证组合同款：SKM_Manny_Simple + ABP_Unarmed——2026-09-07 用户要求配置零人工的取舍，BP 子类可覆盖），球类保留作回归安全网
- *  v1.3.3正式：双来源冰钟独立；本体真实弹命中才授予半秒/200cm传播资格，雪花纯显示，异人融化只消费相反来源。
+ *  v1.3.3正式：双来源冰钟独立；本体真实弹命中才授予半秒/200cm传播资格，雪花纯显示，异人融化只消费相反来源。终局速度由导演统一倍率与变体原速合成；14分钟只免移动减速，冰钟/反应保持。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -53,10 +53,13 @@ public:
 	virtual bool IsDead() const override;
 	virtual bool IsEngagingPlayer() const override;
 	virtual UHealthComponent* GetHealthComponent() const override { return HealthComponent; }
-	/** 全局狂暴只改变身体显示；数值成长仍归导演，重复开启不追加粒子组件。 */
+	/** 狂暴显示由组件管理；终局移动倍率归导演，重复开启不追加粒子组件。 */
 	UFUNCTION(BlueprintCallable, Category="Enemy|Enrage") void SetEnraged(bool bInEnraged);
 	UFUNCTION(BlueprintPure, Category="Enemy|Enrage") bool IsEnraged() const;
 	UFUNCTION(BlueprintPure, Category="Debug|Enrage") FString DebugEnragedState() const;
+	/** 导演提供绝对倍率；重复同步不累乘，14分钟清移动减速但保留元素状态。 */
+	void ApplyEndgamePressure(float SpeedMultiplier, bool bInEnraged, bool bInUnstoppable);
+	UFUNCTION(BlueprintPure, Category="Debug|Enrage") FString DebugMovementPressureState() const;
 
 	/** 近身攻击触发距离（厘米）：进入即停步开打 */
 	UPROPERTY(EditAnywhere, Category = "Enemy|Hunt", meta = (ClampMin = "50.0"))
@@ -314,6 +317,9 @@ private:
 
 	/** 变体基线移速与色调（ApplyVariant 定型记录）；减速只恢复步速。 */
 	float BaseWalkSpeed = 200.f;
+	float VariantWalkSpeed = 200.f;
+	float MovementSlowFactor = 1.f;
+	bool bUnstoppable = false;
 	FVector BaseTint = FVector(0.03f, 0.03f, 0.035f);
 
 	/** 减速恢复定时器：到点还原基线移速。 */
