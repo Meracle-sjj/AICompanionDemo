@@ -2,7 +2,7 @@
  * [INPUT]: 依赖 AIModule 的 AAIController/MoveToActor/PathFollowingComponent/AIPerception(Sight)、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息与 LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、HAL 的 FPlatformTime（台词双闸门时钟）、本模块 HealthComponent（M3 评分的威胁/残血数据面）
  * [OUTPUT]: 对外提供 ACompanionAIController——队友大脑 M3 版：Follow/Engage 双状态手写 FSM（D3）+ **双作战模式**（Guard 护卫=移动层永远跟玩家走射护主 / Berserk 战斗狂人=追击评分最优目标；Q 键 Tick 边沿切换，共享评分器与火力层——元策略层）+ 感知对齐（26m 视距全向视锥，UPROPERTY 可调，信息对等原则）+ utility 评分器 EvaluateTargets（距离/威胁/残血三维，威胁含"咬人仇恨覆盖拉满"，权重护主主导 0.6/0.3/0.1 + SwitchCost 切换惩罚）+ 伤害通道 HandlePlayerDamaged（玩家受击广播 → 凶手注入候选集）+ 屏幕评分板 DrawScoreboard（[咬] 仇恨标记，可解释北极星的核心交付）+ M3.75 生命感层：Bark 台词播报（七类事件触发一句话人格，全局+分类双冷却，头顶跟随字幕）+ 步态输入读当前路径段（不重扫已走路点）与方向平滑；同目标活跃路径不重发MoveTo+ E5 暂态狂怒攻速 ActivateFrenzy（开火间隔×0.5 弹道紫，定时自恢复——TemporaryPickup 触发）；暴露 Follow/Perception/Combat/Mode/Utility/Bark 六组 EditAnywhere 参数
  * [POS]: Source/AICompanionDemo/AI 的决策核心；驱动CompanionCharacter，面向ICombatant感知/决策/攻击；1.2移动诊断保留实际MoveTo结果并供五秒日志读取，导航失败仍停步；评分板只在显式开启时展示。
- *  狂暴读真实FrenzyTimer；Q被动由Health乘一次，弹路显示实际扣血。感电5秒不消费，0.5秒集中互斥配对、原伤减半；Nova命中后继承玩家状态及独立地刺口。
+ *  药剂/遗物狂暴共用真实FrenzyTimer；异源重叠强制5秒紫炎，Health对实际队友来源唯一乘2，HUD只读状态；紫炎复用终局火焰。
  *  Nova是本体闪现技能，借本执行器的射线参数而不借队友归属；普通AI射击与Nova都尊重传入施加者，模式/血链按实际源分流。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -18,6 +18,10 @@ class UAISenseConfig_Sight;
 class ICombatant;
 class UHealthComponent;
 class AAICompanionDemoCharacter;
+class UEnemyEnrageVisual;
+
+/** 狂暴来源只说明当前真实Timer的语义，不另建药剂或遗物持续时间。 */
+enum class ECompanionFrenzySource : uint8 { None, Potion, Relic, Purple };
 
 /** 队友 FSM（D3 决策：C++ 手写状态机，拒绝 BT/StateTree 黑盒）——M2 两态起步，M3 生长 */
 UENUM(BlueprintType)
@@ -54,7 +58,9 @@ class AICOMPANIONDEMO_API ACompanionAIController : public AAIController
 public:
 	ACompanionAIController();
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnUnPossess() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	/** 当前作战模式：Q 键切换（Tick 边沿检测），护卫/战斗狂人两种移动策略——共享评分器与火力层 */
@@ -266,12 +272,20 @@ public:
 	/** 本体融合·闪现轰击：实际玩家闪现传自身，在落点借八方射线结算；伤害/附冰归本体，零伤载荷不授传播资格。 */
 	void NovaBurst(AActor* InstigatorPawn, const FVector& Center);
 
-	/** E5 狂怒攻速（TemporaryPickup 收集触发）：开火间隔×0.5 持续 Duration 秒，弹道变紫，定时自恢复 */
+	/** 药剂/周期各自触发普通狂暴；异源重叠及紫炎再拾药强制刷新为5秒，不保留旧剩余。 */
 	UFUNCTION(BlueprintCallable, Category = "Companion|Combat")
 	void ActivateFrenzy(float Duration, bool bFromPotion = true);
 	/** 真实狂暴定时器剩余时间；不创建计时副本，非编辑器构建同样可用。 */
 	UFUNCTION(BlueprintPure, Category = "Companion|Combat")
 	float GetFrenzyRemaining() const;
+	/** 只读遗物或紫炎的实际Timer；单独药剂不冻结遗物冷却。 */
+	UFUNCTION(BlueprintPure, Category = "Companion|Combat")
+	float GetRelicFrenzyRemaining() const;
+	UFUNCTION(BlueprintPure, Category = "Companion|Combat")
+	bool IsPurpleFrenzyActive() const;
+	/** 全队友来源伤害只由Health消费一次；借队友射线的本体Nova不享受。 */
+	UFUNCTION(BlueprintPure, Category = "Companion|Combat")
+	float GetFrenzyDamageMultiplier() const { return IsPurpleFrenzyActive() ? 2.f : 1.f; }
 	UFUNCTION(BlueprintCallable, Category = "Debug|Relics")
 	void DebugFireAt(AActor* Target);
 	UFUNCTION(BlueprintPure, Category = "Debug|Relics")
@@ -289,14 +303,22 @@ private:
 	float LastShotActualDamage = 0.f;
 	float LastShotDisplayedDamage = 0.f;
 	float LastShotModeMultiplier = 1.f;
+	float LastShotFrenzyMultiplier = 1.f;
 	TWeakObjectPtr<AActor> LastShotVictim;
 	/** 狂怒恢复回调：系数回 1；节拍活着则按基线重挂（FireTimer 与 Engage 状态严格同生命周期，重挂前须判活） */
 	void RestoreFireRate();
+	void StopFrenzy(bool bResumeFire);
+	void RefreshFrenzyVisual();
+	UFUNCTION() void HandleFrenzyPlayerDeath(UHealthComponent* Health);
+	TWeakObjectPtr<UHealthComponent> BoundPlayerHealth;
+	UPROPERTY(Transient) TObjectPtr<UEnemyEnrageVisual> PurpleFrenzyVisual;
+	ECompanionFrenzySource FrenzySource = ECompanionFrenzySource::None;
+	int32 PurpleFrenzyActivations = 0;
 
 	/** E5 开火间隔临时系数：1=常态、0.5=狂怒（纯运行时暂态，不进反射） */
 	float FrenzyCooldownFactor = 1.f;
 
-	/** 狂怒到期定时器（重复拾取刷新，ApplySlow 同范式） */
+	/** 唯一狂暴持续时间；同源普通刷新取长，异源重叠强制5秒。 */
 	FTimerHandle FrenzyTimerHandle;
 
 private:

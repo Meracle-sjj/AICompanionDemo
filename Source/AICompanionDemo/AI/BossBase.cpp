@@ -1,6 +1,6 @@
 /**
  * [INPUT]: BossBase组件契约、Health OnDeath/ApplyCombatDamage、玩家查询、GameMode击杀上报；中央上方血条由CompanionHud读取身份/Health
- * [OUTPUT]: 大胶囊/Manny/慢速追击/死亡订阅与谢幕；旧WidgetComponent仅作猎印/子类锚点且永不显示，三Boss共用屏幕HUD血条
+ * [OUTPUT]: 大胶囊/Manny/追击/死亡与稳定头顶伤害锚点；旧WidgetComponent提供真实世界锚点且永不显示，三Boss共用屏幕HUD血条。
  * [POS]: AI/ Boss 家族基类实现：占位近战行为波 2-4 由三 Boss 特色逻辑替换（召唤师护盾轮/巨像地刺/蠕虫钻地）
  *  猎印统一叠层/消费与UPROPERTY世界数字组件，免伤时不新叠，死亡只隐藏以保留当次主伤害后的消费。
  *  BeginPlay/死亡/EndPlay通知玩家刷新世界活Boss远景，存活判断与镜头计时仍归宿主Character。
@@ -105,6 +105,13 @@ void ABossBase::BeginPlay()
 		: IsA<ABossColossus>() ? EGameSFX::Voice_BossGolemAppear
 		: IsA<ABossWurm>() ? EGameSFX::Voice_BossWurmAppear : EGameSFX::None;
 	if (Voice != EGameSFX::None) USFXLibrary::PlaySFX(GetWorld(), Voice);
+}
+
+FVector ABossBase::GetDamageFeedbackAnchor() const
+{
+	if (IsValid(HealthBarComp)) return HealthBarComp->GetComponentLocation() + FVector(0.f, 0.f, 12.f);
+	const float Height = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 160.f;
+	return GetActorLocation() + FVector(0.f, 0.f, Height + 12.f);
 }
 
 void ABossBase::EndPlay(const EEndPlayReason::Type EndPlayReason)

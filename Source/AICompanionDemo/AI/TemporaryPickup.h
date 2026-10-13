@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Engine 的 AActor/UStaticMeshComponent（/Engine 基础几何 Cube/Cylinder/Sphere + BasicShapeMaterial "Color" 染色管线——XpPickup 实证）与 Kismet 的 GameplayStatics/GetPlayerPawn、本模块 XpPickup（磁吸风暴全图征集）、本模块 CompanionAIController（狂怒攻速）、本模块 HealthComponent（圣盾无敌）
- * [OUTPUT]: 对外提供 ATemporaryPickup 与 ERushType——暂态掉落道具 rush 三件套（M3.75 E5，用户 09-13 裁决 Megabonk 借鉴"掉落物太单调"）：磁吸风暴（全图经验晶体 2s 强制飞向玩家）/狂怒攻速（队友开火间隔×0.5 持续 8s 弹道变紫）/圣盾无敌（玩家 5s 伤害早退）；EnemyGrunt 概率掉落（标准/猎犬 2%、蛮兵 20%），种类由掉落方随机定型
+ * [OUTPUT]: TemporaryPickup/ERushType三系道具：磁吸经验2s、队友普通药剂狂暴基础8s、圣盾5s；药剂延长或与遗物重叠5s紫炎由Controller唯一裁决，显示读取真实状态。
  * [POS]: AI/ 拾取物家族第三系（经验青蓝/金币金/蛋糕黄白/宝箱宝蓝四色之外的短时刺激节拍）；即时作用不经 WaveDirector 账本（HealthPickup 蛋糕先例）；碰撞全关纯距离判定 + 磁吸三段式（XpPickup 同族铁律）；效果生命期定时器自恢复（ApplySlow/bark 冷却同范式）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */

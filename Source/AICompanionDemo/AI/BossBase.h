@@ -1,7 +1,7 @@
 /**
  * [INPUT]: Engine的ACharacter/CharacterMovementComponent/WidgetComponent（保留定位锚点）/死亡动画、Health唯一伤害口、GameMode Boss击杀上报通道
  * [OUTPUT]: 对外提供 ABossBase——Boss 基类骨架（波 1，09-30 用户立项"三 Boss 终局"）：
- *   大体型载体+HealthComponent+屏幕HUD血条身份只读口+ 近战占位行为（贴脸节拍 ApplyDamage+直指追击）；
+ *   大体型载体+HealthComponent+屏幕HUD血条身份/稳定头顶伤害锚点只读口+近战占位行为；锚点由子类按真实形体覆写；
  *   BossIndex 标识三 Boss 身份（3min 召唤师/6min 巨像/9min 蠕虫的占位实现波 2-4 各自填充特色行为）；
  *   死亡经 HandleDeath 上报 WaveDirector 计数+死亡表现（DeathPresentationAnim 优先，ragdoll 兜底——站尸 3s 观感案根治）
  *   共享猎杀印记状态与世界数字徽记：ICombatant玩家叠层/队友消费，1–2金黄、3+红；无敌不叠，死亡隐藏但保留同击消费顺序
@@ -49,6 +49,9 @@ public:
 	void SetBossIdentity(const FString& InName, int32 InIndex);
 	int32 GetBossIndex() const { return BossIndex; }
 	const FString& GetBossName() const { return BossName; }
+	/** 与命中点无关的稳定头顶锚点；蠕虫按实际头半径覆写。 */
+	UFUNCTION(BlueprintPure, Category = "Combat|Feedback")
+	virtual FVector GetDamageFeedbackAnchor() const;
 
 protected:
 	/** 死亡回调（动态委托签名）：UFUNCTION 必须显式——AddDynamic 运行时 FindUFunction，

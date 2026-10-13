@@ -1,6 +1,6 @@
 ﻿/**
  * [INPUT]: UpgradeCardPresentation.h、32成长展示ID/9遗物的独立标题/短说明；已有UpgradeCards/BossRelics纹理路径；Flip无外部纹理
- * [OUTPUT]: 选择页/HUD共用41项稳定ID；针刺短句同步主攻/弹射30%与50伤/5s流血，动态说明由宿主覆盖静态短句
+ * [OUTPUT]: 选择页/HUD共用41项稳定ID；不灭执念20秒等待/5秒狂暴及重叠紫炎双伤短句，动态说明由宿主覆盖静态短句
  * [POS]: UI/ 无状态展示资料实现；不加载 UObject，不决定卡池稀有度或融合资格
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -45,7 +45,7 @@ namespace
 		{ TEXT("CompanionSwiftMove"), TEXT("陪伴疾行"), TEXT("玩家成长·协作"), TEXT("队友移速提升10%\n最多3次，不快于玩家。"), TEXT("/Game/UI/UpgradeCards/T_Upgrade_SwiftMove_v1.T_Upgrade_SwiftMove_v1") },
 		{ TEXT("Flip"), TEXT("Flip · 转交队友"), TEXT("本次操作"), TEXT("改抽本次AI升级池\n不领取、不改变下次归属。"), nullptr },
 		{ TEXT("BloodLink"), TEXT("血誓共鸣"), TEXT("召唤师遗物"), TEXT("距队友8m内，弹道实际伤害\n的25%转化为你的生命。"), TEXT("/Game/UI/BossRelics/T_Relic_BloodLink_v1.T_Relic_BloodLink_v1") },
-		{ TEXT("SpiritFrenzy"), TEXT("不灭执念"), TEXT("召唤师遗物"), TEXT("队友每20s狂暴5s\n狂暴药剂持续时间+50%。"), TEXT("/Game/UI/BossRelics/T_Relic_SpiritFrenzy_v1.T_Relic_SpiritFrenzy_v1") },
+		{ TEXT("SpiritFrenzy"), TEXT("不灭执念"), TEXT("召唤师遗物"), TEXT("等待20s→狂暴5s，期间计时冻结\n药剂重叠：5s紫炎，队友全伤×2\n普通狂暴药剂持续时间+50%。"), TEXT("/Game/UI/BossRelics/T_Relic_SpiritFrenzy_v1.T_Relic_SpiritFrenzy_v1") },
 		{ TEXT("MovingFireball"), TEXT("逐焰灵核"), TEXT("召唤师遗物"), TEXT("行走15m一球，闪烁3必中球\n直击30／范围20，互斥。"), TEXT("/Game/UI/BossRelics/T_Relic_MovingFireball_v1.T_Relic_MovingFireball_v1") },
 		{ TEXT("StoneSpikes"), TEXT("裂地獠牙"), TEXT("巨像遗物"), TEXT("主攻/弹射30%地刺：50伤\n附5s流血，每0.5s10伤。"), TEXT("/Game/UI/BossRelics/T_Relic_StoneSpikes_v1.T_Relic_StoneSpikes_v1") },
 		{ TEXT("SeismicStrike"), TEXT("撼岳重击"), TEXT("巨像遗物"), TEXT("每6s主攻震爆：35伤\n震退命中点4.5m内敌人。"), TEXT("/Game/UI/BossRelics/T_Relic_SeismicStrike_v1.T_Relic_SeismicStrike_v1") },

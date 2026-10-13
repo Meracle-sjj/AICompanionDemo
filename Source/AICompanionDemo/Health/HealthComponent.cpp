@@ -2,8 +2,8 @@
  * [INPUT]: HealthComponent/CombatDamageFeedback、真实AI归属与遗物减伤、既有UI/CombatFeedbackSubsystem、圣盾Timer。
  * [OUTPUT]: 对外提供 UHealthComponent 的实现——伤害/治疗钳制与三委托广播时序（先受击带凶手 → 血量事件 → 死亡事件；Heal 只走血量事件且死者无效）；E5 增补圣盾无敌（ApplyDamage 全额早退 + 定时自恢复）；LastDamageTaken 快照（09-30 受击阈值入口数据源）
  *  玩家遗物减伤在扣血/致死判定前统一乘算，LastDamageTaken保存实际扣血供反伤；无敌早退不触发遗物反伤。
- *  Q歼灭模式对实际AI来源伤害统一乘当前模式系数；护卫模式仅增强玩家收到的治疗，钳制与治疗意图均使用增强后的值。
- * [POS]: Health唯一生命结算；模式/减伤结算后先保存HP截断前的完整伤害供UI，实际扣血/LastDamageTaken与原委托死亡时序保持；反馈不参与账本。
+ *  Q歼灭模式与紫炎对实际AI来源分别统一乘当前模式系数和2；护卫模式仅增强玩家收到的治疗，钳制与治疗意图均使用增强后的值。
+ * [POS]: Health唯一生命结算；模式/紫炎/减伤后保存HP截断前的完整伤害与击中时紫炎快照，目标交UI弱锚定；实际扣血与原死亡时序保持。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
@@ -94,8 +94,10 @@ void UHealthComponent::ApplyCombatDamage(float Damage, AActor* Instigator, const
 	const float OldHealth = CurrentHealth;
 	const ACompanionAIController* Controller = ResolveDamageCompanion(Instigator);
 	const ECombatDamageSource SourceSnapshot = ResolveFeedbackSource(Instigator, Controller, UGameplayStatics::GetPlayerPawn(this, 0));
+	FCombatDamageContext FeedbackContext = Context;
+	FeedbackContext.bPurpleFrenzy = Controller && Controller->IsPurpleFrenzyActive();
 	if (Controller)
-		Damage *= Controller->GetModeDamageMultiplier();
+		Damage *= Controller->GetModeDamageMultiplier() * (FeedbackContext.bPurpleFrenzy ? 2.f : 1.f);
 	if (const UBossRelicComponent* Relics = GetOwner()->FindComponentByClass<UBossRelicComponent>())
 	{ Damage = Relics->ModifyIncomingDamage(Damage); }
 	const float ResolvedDamage = Damage;
@@ -110,7 +112,7 @@ void UHealthComponent::ApplyCombatDamage(float Damage, AActor* Instigator, const
 	const bool bLethal = CurrentHealth <= 0.f;
 	// 完整伤害体现本次攻击强度，HP只决定实际扣血；免伤/未扣血仍静默，反伤/死亡继续读原生命账本。
 	if (LastDamageTaken > 0.f)
-		UCombatFeedbackSubsystem::ShowDamage(GetWorld(), Context, ResolvedDamage, SourceSnapshot);
+		UCombatFeedbackSubsystem::ShowDamage(GetWorld(), FeedbackContext, ResolvedDamage, SourceSnapshot, GetOwner());
 	OnDamaged.Broadcast(this, Instigator);
 	OnHealthChanged.Broadcast(this, CurrentHealth, Delta);
 

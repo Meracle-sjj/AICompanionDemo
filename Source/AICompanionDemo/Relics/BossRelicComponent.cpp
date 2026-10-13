@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 本组件数据契约、ICombatant/Health统一实际扣血反馈、EnemyGrunt 普通减速、CombatElementalDamage异人独立融化与灼烧表现、CompanionAIController 狂怒、
  *  BossOrb::LaunchFriendly、Vfx/SFX及Niagara组件回传、Engine Cone/BasicShapeMaterial、Character::LaunchCharacter。
- * [OUTPUT]: 九遗物结算；针刺默认30%，主攻与去重弹射/闪现轰击命中共享概率口；成功地刺一次短砍音，50与5s/0.5s每跳10流血保持。
+ * [OUTPUT]: 九遗物结算；紫魂20秒倒计时后发5秒狂暴，实际遗物/紫炎期冻结冷却20且结束再走；药剂单独不冻结，重叠由Controller强制5秒。
  * [POS]: Relics/运行时实现；玩家火先正常结算，再由统一入口消费队友冰并另结同raw融化；只向Health提交次生伤害类别与落点，不再自行发伤害数值；统一重入闸，死亡/EndPlay清理弱登记Actor/Niagara，友方球命中火浪归本组件而非球的EndPlay。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -86,6 +86,9 @@ void UBossRelicComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	if (!OwnerAlive()) { ClearRuntime(); return; }
 	if (DeltaTime <= 0.f || !CanTrigger()) return;
+	// Controller持唯一狂暴Timer；只补偿本帧实际遗物/紫炎时长，不冻结其他遗物Clock。
+	if (HasRelic(EBossRelicId::SpiritFrenzy))
+		NextFrenzyAt += FMath::Min(DeltaTime, GetSpiritFrenzyActiveRemaining());
 	Clock += DeltaTime;
 	TGuardValue<bool> Guard(bProcessingEffect, true);
 	TickWalking(DeltaTime);
@@ -213,8 +216,7 @@ void UBossRelicComponent::TickPeriodic()
 	if (HasRelic(EBossRelicId::SpiritFrenzy) && Clock >= NextFrenzyAt)
 	{
 		ActivatePeriodicFrenzy();
-		const double Interval = FMath::Max(FrenzyInterval, .1f);
-		NextFrenzyAt += (FMath::FloorToDouble((Clock - NextFrenzyAt) / Interval) + 1) * Interval;
+		NextFrenzyAt = Clock + FMath::Max(FrenzyInterval, .1f);
 	}
 	if (!HasRelic(EBossRelicId::FlameWard)) return;
 	auto DamageWardTicks = [this]()
@@ -271,9 +273,17 @@ float UBossRelicComponent::GetSpiritFrenzyActiveRemaining() const
 	float Remaining = 0.f;
 	for (TActorIterator<ACompanionAIController> It(GetWorld()); It; ++It)
 	{
-		Remaining = FMath::Max(Remaining, It->GetFrenzyRemaining());
+		Remaining = FMath::Max(Remaining, It->GetRelicFrenzyRemaining());
 	}
 	return Remaining;
+}
+
+bool UBossRelicComponent::IsSpiritPurpleFrenzyActive() const
+{
+	if (!OwnerAlive() || !HasRelic(EBossRelicId::SpiritFrenzy) || !GetWorld()) return false;
+	for (TActorIterator<ACompanionAIController> It(GetWorld()); It; ++It)
+		if (It->IsPurpleFrenzyActive()) return true;
+	return false;
 }
 
 float UBossRelicComponent::GetPotionFrenzyDurationMultiplier() const
@@ -653,7 +663,7 @@ FString UBossRelicComponent::DescribeRelic(EBossRelicId Id) const
 	switch (Id)
 	{
 	case EBossRelicId::BloodLink: return FString::Printf(TEXT("队友距你 %.0f 米内时，直击实际伤害的 %.0f%% 恢复你的生命。"), BloodLinkRange / 100.f, BloodLinkHealingRatio * 100.f);
-	case EBossRelicId::SpiritFrenzy: return FString::Printf(TEXT("每 %.0f 秒使队友紫色狂暴 %.0f 秒；狂暴药剂持续时间增加 %.0f%%。"), FrenzyInterval, FrenzyDuration, (PotionFrenzyMultiplier - 1.f) * 100.f);
+	case EBossRelicId::SpiritFrenzy: return FString::Printf(TEXT("倒计时 %.0f 秒后队友狂暴 %.0f 秒，期间冷却冻结，结束后重新倒计时；狂暴药剂持续时间增加 %.0f%%。药剂与遗物狂暴重叠时强制变为5秒紫炎，所有队友伤害翻倍；紫炎再拾药刷新5秒。"), FrenzyInterval, FrenzyDuration, (PotionFrenzyMultiplier - 1.f) * 100.f);
 	case EBossRelicId::MovingFireball: return FString::Printf(TEXT("累计行走 %.0f 米发射一颗爆炸火球，造成 %.0f 范围伤害；闪烁落点生成三颗追踪必中火球，直击 %.0f、周围 %.0f 伤害，二者不叠加。爆炸半径 %.1f 米；闪烁不计行走距离。"), FireballTravelDistance / 100.f, FireballDamage, FireballDamage, BlinkFireballSplashDamage, FireballRadius / 100.f);
 	case EBossRelicId::StoneSpikes: return FString::Printf(TEXT("主攻、弹射与闪现轰击命中各有 %.0f%% 概率唤出地刺，半径 %.1f 米造成 %.0f 伤害，并使存活敌人流血 %.0f 秒，每 %.1f 秒造成 %.0f 伤害；重复地刺刷新流血，不叠层。普通敌人速度降至 %.0f%%，持续 %.0f 秒。"), SpikeChance * 100.f, SpikeRadius / 100.f, SpikeDamage, SpikeBleedDuration, SpikeBleedInterval, SpikeBleedDamage, SpikeSpeedFactor * 100.f, SpikeSlowDuration);
 	case EBossRelicId::SeismicStrike: return FString::Printf(TEXT("每 %.0f 秒准备一次震爆；下一次主攻命中时，半径 %.1f 米造成 %.0f 伤害并击飞普通敌人。"), SeismicInterval, SeismicRadius / 100.f, SeismicDamage);
@@ -680,9 +690,9 @@ FString UBossRelicComponent::DebugState() const
 	int32 LiveActors = 0, LiveNiagara = 0;
 	for (const TWeakObjectPtr<AActor>& Fx : TransientVfx) if (Fx.IsValid()) ++LiveActors;
 	for (const TWeakObjectPtr<UNiagaraComponent>& Fx : TransientNiagaraVfx) if (Fx.IsValid()) ++LiveNiagara;
-	return FString::Printf(TEXT("{\"ownedIDs\":[%s],\"ownedMask\":%d,\"clock\":%.3f,\"stopped\":%s,\"distanceAccumulatedCm\":%.3f,\"fireballsSpawned\":%d,\"blinkFireballsSpawned\":%d,\"liveFireballs\":%d,\"liveTrackedVfx\":%d,\"liveTrackedVfxActors\":%d,\"liveTrackedVfxNiagara\":%d,\"frenzyActivations\":%d,\"frenzyDuration\":%.3f,\"potionDurationMultiplier\":%.3f,\"frenzyNextIn\":%.3f,\"frenzyActiveRemaining\":%.3f,\"wardActivations\":%d,\"wardActive\":%s,\"wardRemaining\":%.3f,\"wardDamageTicks\":%d,\"pyreCount\":%d,\"pyreDamageTicks\":%d,\"spikeActivations\":%d,\"liveSpikeMeshes\":%d,\"seismicActivations\":%d,\"seismicReadyIn\":%.3f,\"volcanicActivations\":%d,\"thornsActivations\":%d,\"meltReactions\":%d,\"latestBloodDamage\":%.3f,\"latestHealAttempted\":%.3f,\"latestHealActual\":%.3f}"),
+	return FString::Printf(TEXT("{\"ownedIDs\":[%s],\"ownedMask\":%d,\"clock\":%.3f,\"stopped\":%s,\"distanceAccumulatedCm\":%.3f,\"fireballsSpawned\":%d,\"blinkFireballsSpawned\":%d,\"liveFireballs\":%d,\"liveTrackedVfx\":%d,\"liveTrackedVfxActors\":%d,\"liveTrackedVfxNiagara\":%d,\"frenzyActivations\":%d,\"frenzyDuration\":%.3f,\"potionDurationMultiplier\":%.3f,\"frenzyNextIn\":%.3f,\"frenzyActiveRemaining\":%.3f,\"frenzyPurple\":%s,\"wardActivations\":%d,\"wardActive\":%s,\"wardRemaining\":%.3f,\"wardDamageTicks\":%d,\"pyreCount\":%d,\"pyreDamageTicks\":%d,\"spikeActivations\":%d,\"liveSpikeMeshes\":%d,\"seismicActivations\":%d,\"seismicReadyIn\":%.3f,\"volcanicActivations\":%d,\"thornsActivations\":%d,\"meltReactions\":%d,\"latestBloodDamage\":%.3f,\"latestHealAttempted\":%.3f,\"latestHealActual\":%.3f}"),
 		*IDs, OwnedMask, Clock, bStopped ? TEXT("true") : TEXT("false"), TravelAccumulated, FireballsSpawned, BlinkFireballsSpawned, LiveOrbs, LiveActors + LiveNiagara, LiveActors, LiveNiagara,
-		FrenzyActivations, FrenzyDuration, GetPotionFrenzyDurationMultiplier(), GetSpiritFrenzyCooldownRemaining(), GetSpiritFrenzyActiveRemaining(),
+		FrenzyActivations, FrenzyDuration, GetPotionFrenzyDurationMultiplier(), GetSpiritFrenzyCooldownRemaining(), GetSpiritFrenzyActiveRemaining(), IsSpiritPurpleFrenzyActive() ? TEXT("true") : TEXT("false"),
 		WardActivations, IsFlameWardActive() ? TEXT("true") : TEXT("false"), FMath::Max(WardEndsAt - Clock, 0.), WardDamageTicks, Pyres.Num(), PyreDamageTicks,
 		SpikeActivations, Spikes.Num(), SeismicActivations, HasRelic(EBossRelicId::SeismicStrike) ? FMath::Max(SeismicReadyAt - Clock, 0.) : 0.,
 		VolcanicActivations, ThornsActivations, MeltReactions, LatestBloodDamage, LatestHealAttempted, LatestHealActual);

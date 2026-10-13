@@ -1,9 +1,9 @@
 /**
- * [INPUT]: BossBase死亡/探地/免伤契约、球形命中代理、WurmBodyVisual岩甲外观、同资产岩甲落火、Vfx/SFX、导演的有效杂兵死亡通知
+ * [INPUT]: BossBase死亡/探地/免伤与伤害锚点契约、球形命中代理、WurmBodyVisual岩甲外观、同资产岩甲落火、Vfx/SFX、导演的有效杂兵死亡通知。
  * [OUTPUT]: 对外提供 ABossWurm——Boss3「沙狱蠕虫」v2 岩浆飞天蠕虫（2026-10-06 用户裁决重做，替代 09-30 钻地瞬移初版）：
  *   Sky 盘旋（节链全露空中绕玩家转圈+周期掉火球自由落体→落地留火区 3s）→ Dive 俯冲扎地（头节直冲玩家，链式依次没入）
  *   → Burrow 潜行3s（地下快移2s+定点红圈1s，循环钻岩隆隆声随头迫近；暂停静音、离土/死亡/EndPlay立即清理）→ Erupt 破土跃天（范围爆炸600cm/25伤）；
- *   七节球形代理共享7000总血，默认头半径325cm、整体较原130cm放大2.5倍；每节Visibility Block命中，自制岩甲/熔核继承代理比例，缺资产保留原球。潜行按半径埋深；死亡随尸节移动并显式清理
+ *   七节球形代理共享7000总血，默认头半径325cm；伤害锚点按真实头半径+12，避免继承的人形胶囊把数字放进身体；潜行按半径埋深，死亡随尸节移动。
  *   有效杂兵死亡默认反馈35伤；潜地/暂停只累计，易伤后经Health统一结算；存活/死亡每帧推进碎屑寿命，最多64件，死亡清空火系威胁
  *   BeginPlay/死亡/EndPlay同步限额/远景；入土/破土每事件只播一次1.8s首爆采样、0.55s强震；火区自有Niagara与爆闪硬寿命，专用UV炭黑贴花最多4件无伤焦痕6s退场/后2s渐淡。
  * [POS]: AI/ Boss 家族成员三（波 4 终章）：最终 Boss——"天上盘旋轰炸、破土瞬爆"的垂直威胁体；死亡演节链失引坠落（覆写 PerformDeathPresentation）
@@ -114,6 +114,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual FVector GetDamageFeedbackAnchor() const override;
 
 	/** 仅编辑器只读验收；不驱动Boss状态或攻击。非编辑器返回空对象。 */
 	UFUNCTION(BlueprintPure, Category = "Debug|WurmVisual")

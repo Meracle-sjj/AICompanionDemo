@@ -2,11 +2,38 @@
 
 > 当前实机视频展示的是 **v1.3.1** 版本；后续将继续更新。
 
+<!-- V135_FORMAL_20261013 -->
+# AICompanionDemo · v1.3.5 正式版
+
+**[下载 v1.3.5 正式版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5)** · 玩家附件：`Player-Win64-v1.3.5.zip`。
+
+伤害数字以被击目标头顶为锚点，移动时跟随，死亡/销毁后冻结最近位置。同目标按每条数字、机制图标和描边的实际边界紧凑竖排，约2单位间隔；取消命中点散布及全屏最大行距。局部最多240单位高/横偏24单位，放不下时暂缓旧条绘制，事件仍按原64条/0.85秒寿命保留；不合并或改写伤害。原20–32pt档位、正常密度最多50%透明及完整结算值保持。
+
+Boss1「不灭执念」：等待20秒→狂暴5秒（周期冻结20）→结束后从20重新等待。普通狂暴药剂持续时间+50%，单独药剂不冻结周期；药剂与遗物任一顺序重叠，原剩余无论多长均强制5秒紫炎，再拾药刷新5秒。紫炎复用14分钟后的现役两股火焰；队友来源全部伤害在Health唯一入口×2、数字紫色并标记×2，玩家射击/本体Nova不加倍。
+
+本轮完成完整 Win64 BuildCookRun（169.97 秒）、官方 Cook/资源与配置核验，两次新包独立冷启正常退出；150%缩放下960×540窗口与2560×1600无边框客户端物理尺寸核同。34项受控PIE范围包含默认20＋5＋20周期、真实药剂两种重叠顺序/刷新、暂停恢复/死亡清理、15项真实来源伤害与目标数字绘制。受控靶位/HP及部分伤害专项的临时首CD不代表自然完整一局；默认周期另用未改20/5参数验证。自然整局、持续实体键鼠、OBS实际录制、人耳混音和异机仍未验。
+
+[反馈与修复记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/8)。本轮复用现有资源，没有新增第三方素材。
+
+> 以下预览说明按当时时点保留；当前正式入口、规则和验收范围以上文v1.3.5为准。
+
+<!-- V135_FINAL_CANDIDATE -->
+
+**正式 v1.3.5 候选验证中。**
+
+伤害数字围绕被攻击目标头顶紧凑排列，存活时跟随目标，死亡后停在最后位置；相邻完整字图只留 2 个界面单位，拥挤时优先显示新数字。
+
+不灭执念按“等待 20 秒 → 狂暴 5 秒，同时冻结 20 秒倒计时 → 重新等待 20 秒”循环。单独狂暴药剂持续时间仍增加 50%；药剂与遗物狂暴任一顺序重叠时，统一转为 5 秒紫炎，不保留更长的普通狂暴剩余。紫炎期间全部队友来源伤害翻倍，数字变紫并带 ×2 标记；玩家伤害保持原值，紫炎中再拾药刷新 5 秒。
+
+Editor 编译已于 5.98 秒通过。本轮受控 PIE、完整 Win64／Cook、两次新包冷启及正式发行正在验证；旧预览包的运行结果按历史范围保留。 [本轮反馈与先行预期](https://github.com/Meracle-sjj/AICompanionDemo/issues/8#issuecomment-6140165793)。
+
+<!-- V135_FINAL_CANDIDATE_END -->
+
 # AI队友协作生存原型 · AICompanionDemo
 
-**[下载 v1.3.5-preview 试玩版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5-preview)** · 玩家附件：`Player-Win64-v1.3.5-preview.zip`。本轮修复150%缩放下的无边框像素尺寸，并调整伤害数字的透明度、错层和字号；[v1.3.3 正式版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)继续作为稳定版。
+**历史预览：** [下载 v1.3.5-preview 试玩版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.5-preview)** · 玩家附件：`Player-Win64-v1.3.5-preview.zip`。该预览修复150%缩放下的无边框像素尺寸，并调整伤害数字的透明度、错层和字号；[v1.3.3 正式版](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)继续作为稳定版。
 
-伤害字号由20pt按十点档递增至32pt，100以上封顶；数字增多时最多50%拥挤透明，寿命末消失另计。图标和数字一起错层排布，空间不足时暂缓旧行展示。新包已核150%缩放下960×540窗口和2560×1600无边框物理尺寸；OBS实际采集仍待反馈。妖术师沿用v1.3.4恢复的原版蓄力／发射声和距离、叠响限制。[v1.3.5反馈与实装记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/8)。
+**v1.3.5-preview 历史规则与验收：** 伤害字号由20pt按十点档递增至32pt，100以上封顶；数字增多时最多50%拥挤透明，寿命末消失另计。图标和数字一起错层排布，空间不足时暂缓旧行展示。旧预览包已核150%缩放下960×540窗口和2560×1600无边框物理尺寸；OBS实际采集仍待反馈。妖术师沿用v1.3.4恢复的原版蓄力／发射声和距离、叠响限制。[v1.3.5反馈与实装记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/8)。
 
 **v1.3.3 稳定版历史：完整构建与限定验证已完成。** [v1.3.3 正式交付入口](https://github.com/Meracle-sjj/AICompanionDemo/releases/tag/v1.3.3)；玩家附件为 `Player-Win64-v1.3.3.zip`。[该版本修订记录](https://github.com/Meracle-sjj/AICompanionDemo/issues/6)。旧版本标签、附件与反馈继续保留。
 

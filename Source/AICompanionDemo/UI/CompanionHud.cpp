@@ -1,6 +1,6 @@
 /**
  * [INPUT]: CompanionHud.h、导演快照、共享图卡、Slate与Health/Character只读口；队友控制器当前模式、世界活Boss血条局部实现
- * [OUTPUT]: 六列图标/紫魂秒数、四操作槽/血量/XP/小图与仅缩小时显示的共用TAB键帽；右下Q模式与中央上方Boss真血条，0.15s轮询不拥有效果账本
+ * [OUTPUT]: 六列图标/不灭执念等待与普通或紫炎剩余秒数、四操作槽/血量/XP/小图；Q模式与中央Boss血条，0.15s只读轮询
  * [POS]: UI/ 三件套实现之一：常驻层（Z 序默认，菜单与死亡屏盖其上）；HUD v2——圆角面板统一视觉语言，配色沿用拾取物家族（金=账本、青=成长、红=血）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -640,17 +640,21 @@ void UCompanionHud::RefreshValues()
 		if (!FrenzyRelicIcon.IsValid() || !FrenzyRelicCountdownText.IsValid()) break;
 		const bool bRunning = Card.CooldownTotal > 0.f;
 		const bool bActive = bRunning && Card.ActiveRemaining > 0.f;
-		const FLinearColor Color = bActive ? FLinearColor(.95f, .30f, 1.f)
+		const FLinearColor Color = bActive ? (Card.bPurpleFrenzyActive
+			? FLinearColor(.72f, .25f, 1.f) : FLinearColor(1.f, .55f, .18f))
 			: UpgradeCardPresentation::GetRarityColor(EUpgradeCardRarity::UniqueRelic);
 		FrenzyRelicIcon->SetAppearance(Color, bRunning ? 1.f : .35f);
 		FrenzyRelicCountdownText->SetColorAndOpacity(FSlateColor(bRunning ? Color : kHudDimWhite));
 		const FString State = !bRunning ? TEXT("已停止") : bActive
-			? FString::Printf(TEXT("狂暴%ds"), FMath::CeilToInt(Card.ActiveRemaining))
+			? (Card.bPurpleFrenzyActive ? FString::Printf(TEXT("紫炎%ds"), FMath::CeilToInt(Card.ActiveRemaining))
+				: FString::Printf(TEXT("狂暴%ds"), FMath::CeilToInt(Card.ActiveRemaining)))
 			: FString::Printf(TEXT("%ds"), FMath::CeilToInt(Card.CooldownRemaining));
 		FrenzyRelicCountdownText->SetText(FText::FromString(State));
-		FrenzyRelicCountdownText->SetToolTipText(FText::FromString(FString::Printf(
-			TEXT("不灭执念 · 距下次狂暴 %.1f 秒；当前狂暴剩余 %.1f 秒。"),
-			Card.CooldownRemaining, Card.ActiveRemaining)));
+		FrenzyRelicCountdownText->SetToolTipText(FText::FromString(bActive
+			? (Card.bPurpleFrenzyActive
+				? FString::Printf(TEXT("不灭执念 · 紫炎狂暴剩余 %.1f 秒，队友全部伤害×2。周期冻结20秒，结束后重新倒计时。"), Card.ActiveRemaining)
+				: FString::Printf(TEXT("不灭执念 · 狂暴剩余 %.1f 秒。周期冻结20秒；拾取狂暴药剂转为5秒紫炎，队友全部伤害×2。"), Card.ActiveRemaining))
+			: FString::Printf(TEXT("不灭执念 · 距下次5秒狂暴 %.1f 秒；结束后重新等待20秒。"), Card.CooldownRemaining)));
 		break;
 	}
 }

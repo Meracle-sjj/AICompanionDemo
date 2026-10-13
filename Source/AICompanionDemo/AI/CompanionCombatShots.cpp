@@ -1,6 +1,6 @@
 /** [INPUT]: Controller火力参数、ICombatant活敌、Health伤害根入口、CombatElementalDamage独立异人融化与感电显示。
  * [OUTPUT]: 队友冰保持2秒/40%减速、无传播资格；本体Nova借射线实现但伤害/附冰仍归本体，零伤载荷不授传播源；原火力/猎印/感电/地刺节拍保持。
- * [POS]: Companion火力局部实现；本文件提交原始伤害、落点和处决层数，Health只乘一次模式并统一发漫画反馈。
+ * [POS]: Companion火力局部实现；直击/折射/爆炸/Melt/处决/传导均交原始伤害，Health统一一次模式与紫炎倍率；只读射击审计固化两倍率，本体Nova不借队友增伤。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md */
 #include "AI/CompanionAIController.h"
 #include "AI/Combatant.h"
@@ -190,13 +190,15 @@ void ACompanionAIController::FireShot(AActor* InstigatorPawn, const FVector& Ori
 		if (!IsValid(Health)) continue;
 		const float BeforeShotHealth = Health->GetCurrentHealth();
 		const float ShotModeMultiplier = SourceController ? SourceController->GetModeDamageMultiplier() : 1.f;
+		const float ShotFrenzyMultiplier = SourceController ? SourceController->GetFrenzyDamageMultiplier() : 1.f;
 		Health->ApplyCombatDamage(AttackDamage * Scale, InstigatorPawn, {ECombatDamageKind::Projectile, HitPoint + FVector(0.f, 0.f, 28.f)});
 		if (!IsValid(Health)||!IsValid(Victim)) continue;
 		const float ActualShotDamage = FMath::Max(BeforeShotHealth - Health->GetCurrentHealth(), 0.f);
 		LastShotRawDamage = AttackDamage * Scale;
 		LastShotActualDamage = ActualShotDamage;
-		LastShotDisplayedDamage = FMath::RoundToFloat(ActualShotDamage * 100.f) / 100.f;
+		LastShotDisplayedDamage = FMath::RoundToFloat(AttackDamage * Scale * ShotModeMultiplier * ShotFrenzyMultiplier * 100.f) / 100.f;
 		LastShotModeMultiplier = ShotModeMultiplier;
+		LastShotFrenzyMultiplier = ShotFrenzyMultiplier;
 		LastShotVictim = Victim;
 		if (const APawn* Hero = SourceController ? UGameplayStatics::GetPlayerPawn(this, 0) : nullptr)
 		{

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: ActorComponent/HealthComponent与统一异人火反应入口；主攻、队友直击、真实受击与成功闪烁由共享宿主接线。
- * [OUTPUT]: 九遗物参数/效果与只读JSON；针刺默认30%，主攻与去重弹射/闪现轰击命中共享独立概率；地刺50与每跳10可刷新流血，次生不递归主攻。
+ * [OUTPUT]: 九遗物参数/效果与只读JSON；紫魂倒计时20秒后狂暴5秒，遗物/紫炎期间冻结20，药剂单独仍推进；针刺/流血次生不递归主攻。
  * [POS]: Relics/唯一玩法所有者；次生向Health提交明确类别与命中前落点，反馈只取账本实际扣血；死亡/EndPlay幂等销毁球/火圈/石刺及两种临时VFX，不延长正常寿命。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -51,10 +51,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="BossRelics") FString DescribeRelic(EBossRelicId Id) const;
 	UFUNCTION(BlueprintPure, Category="BossRelics") FString DebugState() const;
 	UFUNCTION(BlueprintPure, Category="BossRelics") bool IsFlameWardActive() const;
-	/** 周期计时只读Clock/NextFrenzyAt；持续时间读队友实际FrenzyTimer，药剂延长也实时反映。 */
+	/** 周期只读Clock/NextFrenzyAt；只据队友遗物/紫炎实际Timer冻结冷却，药剂单独不作遗物激活。 */
 	UFUNCTION(BlueprintPure, Category="BossRelics") float GetSpiritFrenzyCooldownRemaining() const;
 	UFUNCTION(BlueprintPure, Category="BossRelics") float GetSpiritFrenzyCooldownTotal() const;
 	UFUNCTION(BlueprintPure, Category="BossRelics") float GetSpiritFrenzyActiveRemaining() const;
+	UFUNCTION(BlueprintPure, Category="BossRelics") bool IsSpiritPurpleFrenzyActive() const;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="BossRelics") int32 OwnedMask = 0;
 	UPROPERTY(EditAnywhere, Category="BossRelics|BloodLink", meta=(ClampMin="0")) float BloodLinkRange = 800.f;

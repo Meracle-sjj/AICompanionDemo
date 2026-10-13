@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 AIModule 的 MoveToActor/PathFollowingComponent/AIPerceptionComponent/AISenseConfig_Sight/AISense_Sight、NavigationSystem 的 FNavigationPath（路点读取）、Engine 的 GEngine 屏幕消息/DrawDebugLine/LineTrace、Kismet 的 GetPlayerPawn、TimerManager 的节流定时器、本模块 HealthComponent（玩家血量行与残血分）、本模块 Audio/SFXLibrary（Shot_Companion/Hit_Enemy/Explosion 事件音效）
  * [OUTPUT]: 对外提供 M3 行为实现——UpdateBrain 决策体（状态迁移 + ENTER/SWITCH 审计日志 + 走射行动：FireTimer 与寻路并行，站桩已废）、EvaluateTargets 三维评分器（威胁 = 距离近似 + 咬人仇恨覆盖，修复贴脸混战时距离分满格失明的退化）、DrawScoreboard 屏幕评分板、HandlePerceptionUpdated 感知回调、FireAtTarget 射击节拍、FeedMovementInput当前路径段馈送与同目标MoveTo去重（1.1）；M3.75 增补 Bark 台词播报（六类事件钩点——09-27 换目标播报退役，击杀播报挂连杀闸 5s/10 杀；全局+分类双冷却；09-26 换装头顶 3D 气泡、09-27 配音经 PlayVoice 空间化在队友身上）；E5 增补 ActivateFrenzy/RestoreFireRate（暂态狂怒攻速：开火间隔系数槽 + 弹道紫，定时自恢复——TemporaryPickup 触发）；**火力结算层候选集一律 CollectAliveCombatants 契约收集**（走廊命中/溅射/折射弹跳——09-30 召唤师案定罪 TActorIterator<AEnemyGrunt> 类型扫描把 ABossBase 排除在命中集外=弹道穿体不掉血；冰/电残留仍限定EnemyGrunt；猎印按ICombatant叠层/消费，覆盖Boss家族）
- *  火力/感电配对已抽到CompanionCombatShots；本文件保留Q护卫/歼灭切换与决策。伤害/治疗加成由Health唯一入口消费helper，弹路不重复乘算。
+ *  火力/感电配对归CompanionCombatShots，来源狂暴/紫炎生命周期归CompanionFrenzy；本文件保留Q护卫/歼灭切换与决策，伤害系数由Health唯一入口消费。
  *  Tick推进持续传导；Bark常规双冷却，紧急受伤/恢复绕过入口闸门交队列即时抢占，真实起播才产生同录音字幕/历史。
  * [POS]: Source/AICompanionDemo/AI 的决策核心实现；驱动CompanionCharacter、经ICombatant感知与攻击；2026-10-08移除常驻AI目标/状态调试行；1.2五秒巡检记录真实MoveTo结果、导航/路径/移动状态，不代替玩家输入或绕过导航失败。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -130,7 +130,9 @@ void ACompanionAIController::BeginPlay()
 	{
 		if (UHealthComponent* PlayerHealth = PlayerPawn->FindComponentByClass<UHealthComponent>())
 		{
+			BoundPlayerHealth = PlayerHealth;
 			PlayerHealth->OnDamaged.AddDynamic(this, &ACompanionAIController::HandlePlayerDamaged);
+			PlayerHealth->OnDeath.AddDynamic(this, &ACompanionAIController::HandleFrenzyPlayerDeath);
 		}
 	}
 }
@@ -445,55 +447,6 @@ void ACompanionAIController::UpdateBrain()
 				*GetNameSafe(PlayerAnim));
 		}
 	}
-}
-
-// ---------- E5 暂态狂怒攻速（TemporaryPickup 收集触发） ----------
-
-void ACompanionAIController::ActivateFrenzy(float Duration, bool bFromPotion)
-{
-	if (bFromPotion)
-	{
-		const APawn* Hero = UGameplayStatics::GetPlayerPawn(this, 0);
-		if (const UBossRelicComponent* Relics = Hero ? Hero->FindComponentByClass<UBossRelicComponent>() : nullptr)
-		{ Duration *= Relics->GetPotionFrenzyDurationMultiplier(); }
-	}
-	Duration = FMath::Max(Duration, GetWorldTimerManager().GetTimerRemaining(FrenzyTimerHandle));
-	FrenzyCooldownFactor = 0.5f;
-	// 节拍活着才重挂（未接敌时 FireTimer 不存在，等下次 EnterEngage 自然用新系数——与状态同生命周期）
-	if (FireTimerHandle.IsValid())
-	{
-		GetWorldTimerManager().SetTimer(FireTimerHandle, this, &ACompanionAIController::FireAtTarget,
-			AttackInterval * FrenzyCooldownFactor, true);
-	}
-	// 攻速期特效：队友染紫（Paint Tint 真名管线，EnemyGrunt 同款）——状态肉眼可见（用户 09-18"AI 身上应该有点特效"）
-	if (const APawn* MyPawn = GetPawn())
-	{
-		if (USkeletalMeshComponent* Skel = MyPawn->FindComponentByClass<USkeletalMeshComponent>())
-		{
-			Skel->SetVectorParameterValueOnMaterials(TEXT("Paint Tint"), FVector(0.35f, 0.08f, 0.55f));
-		}
-	}
-	GetWorldTimerManager().SetTimer(FrenzyTimerHandle, this, &ACompanionAIController::RestoreFireRate, Duration, /*bLoop*/ false);
-	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Combat] 狂怒攻速激活 %.0fs（开火间隔 %.2f -> %.2f）"),
-		Duration, AttackInterval, AttackInterval * FrenzyCooldownFactor);
-}
-
-void ACompanionAIController::RestoreFireRate()
-{
-	FrenzyCooldownFactor = 1.f;
-	if (FireTimerHandle.IsValid())
-	{
-		GetWorldTimerManager().SetTimer(FireTimerHandle, this, &ACompanionAIController::FireAtTarget, AttackInterval, true);
-	}
-	// 还原队友染色（白 = 无色调）
-	if (const APawn* MyPawn = GetPawn())
-	{
-		if (USkeletalMeshComponent* Skel = MyPawn->FindComponentByClass<USkeletalMeshComponent>())
-		{
-			Skel->SetVectorParameterValueOnMaterials(TEXT("Paint Tint"), FVector::OneVector);
-		}
-	}
-	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Combat] 狂怒攻速结束，开火间隔恢复 %.2f"), AttackInterval);
 }
 
 void ACompanionAIController::FireAtTarget()

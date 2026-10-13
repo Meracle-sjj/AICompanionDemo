@@ -3,7 +3,7 @@
  * [OUTPUT]: 对外提供 AWaveDirector——L4D 导演式节奏中枢（M3.75 B2）：波次表驱动的 Break→Spawning→WaveActive→…→Finished/Failed 相位机（环形刷怪、同屏上限节流补刷、全灭晋级）+ VS 成长账本（AddXp 收集口/等级曲线，普通横排三选一/锁箱2×3六选二的图文面板接入）+ 屏幕 HUD 行（key=4：波数/活敌/击杀/等级）与事件横幅（key=5：开波/升级/胜负）+ **妖术师饱和换算（10-07 用户裁决：CountAliveWarlocks 存活计数 ≥WarlockAliveLimit(5) 时，妖术师配额整批换算为随机杂兵批次 猎犬×8/标准兵×5/蛮兵×3——后期堆积死局治理）**；升级图文卡面的候选/选择槽位/暂停状态与编辑器验收口
  *  成长契约：奖励保留来源/发生等级，Lv.9玩家/Lv.10 AI交替；玩家抽满三张强化，Flip独立按钮/F键只转换当前玩家等级奖励，不占数字槽。奖励输入统一由GameMode仲裁并恢复测试F1偏好。
  *  元素契约：冰/电/猎印三线只准一线，候选与领取复验共用当前玩家状态；六选二首领路线后将冲突未领槽改为金币袋，保留第二次领取。
- *  同批契约：64²连续探索场/33²真实地形显示；Boss死亡加入串行选择队列，九遗物由Relics组件结算；辉耀5/0.5s、每张+10，过载翻倍已有伤害；HUD稳定ID追加独特遗物与真实周期/狂暴剩余秒数。
+ *  同批契约：64²连续探索场/33²真实地形显示；Boss奖励串行选择，九遗物归Relics；HUD复制遗物冷却/真实遗物狂暴剩余及紫炎布尔值，展示层不猜药剂来源。
  *  活蠕虫期间共享世界杂兵限额10/妖术师3，导演及召唤师逐只准入；超员直接退场无死亡/掉落/反馈伤害，导演自有活敌账本由OnDestroyed校正。
  *  v1.2公开只读IsRunTerminated供初始箱金焰清理；相位写入仍由导演持有。
  * [POS]: AI/ 的玩法节奏中枢；被 GameMode 代码生成，敌人类经 SetEnemyClass 注入；升级账本按稳定枚举ID计数，显式映射UI稀有度/融合标志与HUD图标快照，不让UI解析玩法描述。
@@ -165,7 +165,8 @@ public:
 		EUpgradeCardRarity Rarity = EUpgradeCardRarity::Common;
 		float CooldownRemaining = 0.f;
 		float CooldownTotal = 0.f;   /**< 仅周期遗物使用；0表示未运行（例如玩家死亡）。 */
-		float ActiveRemaining = 0.f;   /**< 实际效果Timer剩余时间，包含药剂延长。 */
+		float ActiveRemaining = 0.f;   /**< 实际遗物/紫炎Timer剩余，不包含单独药剂。 */
+		bool bPurpleFrenzyActive = false;
 	};
 
 	/** HUD 展示数据一包带走：HUD 不认识导演内部、导演不认识 HUD——快照即两相的全部交集 */

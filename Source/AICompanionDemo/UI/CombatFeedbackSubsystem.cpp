@@ -1,19 +1,24 @@
 /**
- * [INPUT]: Health提交的模式/减伤结算后完整伤害/语义/内部归属快照，既有金币口，Slate真实字体尺寸、视口DPI与世界投影。
- * [OUTPUT]: 原精度数值/十族图样，20–32pt伤害档、12至40条的1至0.5拥挤不透明度、有界无重叠梯子及只读绘制快照；金币样式与寿命末淡出保留。
- * [POS]: 唯一正式数值层的屏幕排布、渲染与生命周期；只在Slate单位内放位，空间不足优先保留新数字，不移动世界落点、不聚合/改写Health账本。
+ * [INPUT]: Health完整伤害/类别/紫炎快照与受害Actor，Boss稳定锚点或Character胶囊，Slate真实字体尺寸、视口DPI和世界投影。
+ * [OUTPUT]: 原精度数值/十族图样与紫炎×2标记；每目标240单位内按字图描边边界留2单位紧凑竖排、真实锚点/绘制快照，金币弹跳保留。
+ * [POS]: 唯一正式数值层的目标跟随、屏幕排布与生命周期；死亡/销毁冻结最近头顶，拥挤优先新条，暂停/终局规则不变，不聚合或改写Health账本。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "CombatFeedbackSubsystem.h"
 #include "AICompanionDemoGameMode.h"
+#include "AI/BossBase.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
+#include "Health/HealthComponent.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
 #include "Styling/CoreStyle.h"
@@ -29,8 +34,12 @@ namespace
 	constexpr int32 CrowdFadeFull = 40;
 	constexpr float CrowdOpacityMinimum = .5f;
 	constexpr float LayoutMargin = 8.f;
-	constexpr float LayoutGap = 4.f;
-	constexpr float LadderStagger = 12.f;
+	constexpr float LayoutGap = 2.f;
+	constexpr float TargetStackHeight = 240.f;
+	constexpr float TargetSideStep = 12.f;
+	constexpr float TargetSideLimit = 24.f;
+	constexpr float DamageDrift = 8.f;
+	constexpr float HeadAnchorOffset = 12.f;
 	constexpr int32 LayoutAttemptLimit = 96;
 	const FLinearColor Ink(.045f, .025f, .025f);
 	const FLinearColor CoinGold(1.f, .76f, .16f);
@@ -41,6 +50,21 @@ namespace
 	const FLinearColor MeltTint = FMath::Lerp(FrostBlue, FireRed, .5f);
 	const FLinearColor BloodRed(.58f, .025f, .065f);
 	const FLinearColor ShockPurple(.77f, .36f, 1.f);
+	const FLinearColor FrenzyPurple(.87f, .40f, 1.f);
+
+	// ---------- 世界锚点：只读稳定身体，不把火焰/光柱等附属特效纳入边界 ----------
+	FVector DamageAnchor(const AActor* Victim)
+	{
+		if (const ABossBase* Boss = Cast<ABossBase>(Victim)) return Boss->GetDamageFeedbackAnchor();
+		if (const ACharacter* Character = Cast<ACharacter>(Victim))
+		{
+			const UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
+			return Capsule->GetComponentLocation() + FVector(0.f, 0.f, Capsule->GetScaledCapsuleHalfHeight() + HeadAnchorOffset);
+		}
+		if (const UPrimitiveComponent* Body = Cast<UPrimitiveComponent>(Victim->GetRootComponent()))
+			return Body->Bounds.Origin + FVector(0.f, 0.f, Body->Bounds.BoxExtent.Z + HeadAnchorOffset);
+		return Victim->GetActorLocation() + FVector(0.f, 0.f, HeadAnchorOffset);
+	}
 
 	const TCHAR* KindName(ECombatDamageKind Kind)
 	{
@@ -123,6 +147,9 @@ namespace
 		FString Text;
 		FSlateFontInfo Font;
 		FVector2f Position = FVector2f::ZeroVector;
+		FVector2f Anchor = FVector2f::ZeroVector;
+		FVector2f IconOffset = FVector2f::ZeroVector;
+		int32 GroupKey = INDEX_NONE;
 		FVector2f TextOffset = FVector2f::ZeroVector;
 		FVector2f TextSize = FVector2f::ZeroVector;
 		FSlateRect RelativeBounds;
@@ -141,41 +168,62 @@ namespace
 			&& A.Top < B.Bottom + LayoutGap && A.Bottom + LayoutGap > B.Top;
 	}
 
-	bool PlaceFeedback(FPaintFeedback& Item, const TArray<FPaintFeedback>& Placed,
-		FVector2f Viewport, float RowHeight, float ColumnWidth)
+	bool PlaceFeedback(FPaintFeedback& Item, const TArray<FPaintFeedback>& Placed, FVector2f Viewport)
 	{
 		const FSlateRect& Local = Item.RelativeBounds;
 		const float MinX = LayoutMargin - Local.Left;
 		const float MaxX = Viewport.X - LayoutMargin - Local.Right;
-		const float MinY = LayoutMargin - Local.Top;
-		const float MaxY = Viewport.Y - LayoutMargin - Local.Bottom;
+		const float StackHeight = FMath::Min(TargetStackHeight, Viewport.Y - 2.f * LayoutMargin);
+		const float StackTop = FMath::Clamp(Item.Anchor.Y - StackHeight, LayoutMargin, Viewport.Y - LayoutMargin - StackHeight);
+		const float MinY = StackTop - Local.Top;
+		const float MaxY = StackTop + StackHeight - Local.Bottom;
 		if (MinX > MaxX || MinY > MaxY) return false;
-		const FVector2f Anchor(FMath::Clamp(Item.Position.X, MinX, MaxX), FMath::Clamp(Item.Position.Y, MinY, MaxY));
-		const int32 Rows = FMath::Min(FeedbackLimit, FMath::CeilToInt(Viewport.Y / RowHeight) + 1);
-		// 先向上搭梯；顶边无空间则向下，再向左右邻列借位。最多96次，绝不强行叠画。
-		for (int32 Column = 0; Column < 5 && Item.Attempts < LayoutAttemptLimit; ++Column)
+		const FVector2f Base(FMath::Clamp(Item.Anchor.X, MinX, MaxX), FMath::Clamp(Item.Position.Y, MinY, MaxY));
+		// 每次碰撞直接贴到那条的上边界；行高由相邻两条真实边界决定，不借全屏最大字号撑开。
+		for (int32 Side = 0; Side < 5 && Item.Attempts < LayoutAttemptLimit; ++Side)
 		{
-			const int32 ColumnIndex = Column == 0 ? 0 : (Column + 1) / 2 * (Column % 2 ? -1 : 1);
-			for (int32 Direction = 0; Direction < 2 && Item.Attempts < LayoutAttemptLimit; ++Direction)
+			const float OffsetX = Side == 0 ? 0.f : (Side + 1) / 2 * TargetSideStep * (Side % 2 ? -1.f : 1.f);
+			FVector2f Candidate(Base.X + OffsetX, Base.Y);
+			if (Candidate.X < MinX || Candidate.X > MaxX || FMath::Abs(OffsetX) > TargetSideLimit) continue;
+			while (Candidate.Y >= MinY && Candidate.Y <= MaxY && Item.Attempts < LayoutAttemptLimit)
 			{
-				for (int32 Row = Direction == 0 ? 0 : 1; Row < Rows && Item.Attempts < LayoutAttemptLimit; ++Row)
+				++Item.Attempts;
+				const FSlateRect Bounds = OffsetBounds(Local, Candidate);
+				bool bBlocked = false;
+				float NextY = Candidate.Y;
+				for (const FPaintFeedback& Existing : Placed)
 				{
-					++Item.Attempts;
-					const float Y = Anchor.Y + Row * RowHeight * (Direction == 0 ? -1.f : 1.f);
-					if (Y < MinY || Y > MaxY) break;
-					const float Stagger = Row == 0 ? 0.f : (Row % 2 ? -LadderStagger : LadderStagger);
-					const FVector2f Candidate(FMath::Clamp(Anchor.X + ColumnIndex * ColumnWidth + Stagger, MinX, MaxX), Y);
-					const FSlateRect Bounds = OffsetBounds(Local, Candidate);
-					bool bBlocked = false;
-					for (const FPaintFeedback& Existing : Placed)
+					if (Conflicts(Bounds, Existing.Bounds))
 					{
-						if (Conflicts(Bounds, Existing.Bounds)) { bBlocked = true; break; }
+						bBlocked = true;
+						NextY = FMath::Min(NextY, Existing.Bounds.Top - LayoutGap - .01f - Local.Bottom);
 					}
-					if (!bBlocked) { Item.Position = Candidate; Item.Bounds = Bounds; return true; }
 				}
+				if (!bBlocked) { Item.Position = Candidate; Item.Bounds = Bounds; return true; }
+				Candidate.Y = NextY;
 			}
 		}
 		return false;
+	}
+
+	FSlateRect IconBounds(ECombatFeedbackIcon Icon, float Scale)
+	{
+		FSlateRect Bounds(-20.f, -22.f, 20.f, 22.f);
+		switch (Icon)
+		{
+		case ECombatFeedbackIcon::Coin: Bounds = FSlateRect(-18.5f, -18.5f, 20.5f, 20.5f); break;
+		case ECombatFeedbackIcon::Cleaver: Bounds = FSlateRect(-16.f, -19.5f, 22.5f, 13.f); break;
+		case ECombatFeedbackIcon::Sword: Bounds = FSlateRect(-18.f, -21.5f, 17.5f, 21.f); break;
+		case ECombatFeedbackIcon::Frost: Bounds = FSlateRect(-18.5f, -16.5f, 18.5f, 16.5f); break;
+		case ECombatFeedbackIcon::Drop: Bounds = FSlateRect(-17.f, -22.f, 16.f, 20.f); break;
+		case ECombatFeedbackIcon::Flame: Bounds = FSlateRect(-19.f, -24.f, 17.f, 22.f); break;
+		case ECombatFeedbackIcon::Lightning: Bounds = FSlateRect(-14.f, -21.f, 16.f, 21.f); break;
+		case ECombatFeedbackIcon::Spikes: Bounds = FSlateRect(-20.5f, -20.5f, 20.5f, 16.5f); break;
+		case ECombatFeedbackIcon::Ray: Bounds = FSlateRect(-21.f, -21.f, 21.f, 21.f); break;
+		case ECombatFeedbackIcon::Impact: Bounds = FSlateRect(-20.5f, -20.5f, 20.5f, 20.5f); break;
+		case ECombatFeedbackIcon::Melt: Bounds = FSlateRect(-23.95f, -16.8f, 21.9f, 15.4f); break;
+		}
+		return FSlateRect(Bounds.Left * Scale, Bounds.Top * Scale, Bounds.Right * Scale, Bounds.Bottom * Scale);
 	}
 
 	void Stroke(FSlateWindowElementList& Elements, int32 LayerId, const FGeometry& Geometry,
@@ -317,7 +365,6 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 	const TArray<FCombatFeedbackEntry>& Entries = State->GetEntries();
 	TArray<FPaintFeedback> Projected;
 	Projected.Reserve(Entries.Num());
-	float RowHeight = 1.f, ColumnWidth = 1.f;
 	const TSharedRef<FSlateFontMeasure> FontMeasure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
 	// 最新伤害先占位；旧条仍保留实际数值和寿命，只在画面拥挤到无位时暂缓显示。
 	for (int32 Index = Entries.Num() - 1; Index >= 0; --Index)
@@ -337,19 +384,34 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 		Item.Font = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), Item.FontPoints);
 		Item.Font.OutlineSettings.OutlineSize = Item.FontPoints < 26 ? 2 : 3;
 		Item.Text = FormatCombatFeedbackAmount(Entry);
+		if (Entry.bPurpleFrenzy) Item.Text += TEXT(" ×2");
 		Item.TextSize = FVector2f(FontMeasure->Measure(Item.Text, Item.Font));
-		Item.TextOffset = FVector2f((Entry.Icon == ECombatFeedbackIcon::Melt ? 32.f : 20.f) * Item.Scale,
-			-Item.TextSize.Y * .5f);
-		const float ReactionLift = Entry.Icon == ECombatFeedbackIcon::Melt ? 54.f * Item.Scale : 0.f;
-		Item.Position = Screen - FVector2f(0.f, Ratio * 52.f + ReactionLift);
-		const float Outline = Item.Font.OutlineSettings.OutlineSize + 2.f;
-		// 图标所有线宽/双元素偏移与文字描边都占位，避免只测数字却让两侧图标相撞。
-		Item.RelativeBounds = FSlateRect(-27.f * Item.Scale - 2.f,
-			-FMath::Max(26.f * Item.Scale + 2.f, Item.TextSize.Y * .5f + Outline),
-			FMath::Max(27.f * Item.Scale + 2.f, Item.TextOffset.X + Item.TextSize.X + Outline),
-			FMath::Max(26.f * Item.Scale + 2.f, Item.TextSize.Y * .5f + Outline));
-		RowHeight = FMath::Max(RowHeight, Item.RelativeBounds.GetSize2f().Y + LayoutGap);
-		ColumnWidth = FMath::Max(ColumnWidth, Item.RelativeBounds.GetSize2f().X + LayoutGap + 2.f * LadderStagger);
+		const float Outline = Item.Font.OutlineSettings.OutlineSize;
+		const FSlateRect Icon = IconBounds(Entry.Icon, Item.Scale);
+		Item.TextOffset = FVector2f(Icon.Right + LayoutGap + Outline, -Item.TextSize.Y * .5f);
+		Item.RelativeBounds = FSlateRect(Icon.Left, FMath::Min(Icon.Top, Item.TextOffset.Y - Outline),
+			Item.TextOffset.X + Item.TextSize.X + Outline, FMath::Max(Icon.Bottom, Item.TextSize.Y * .5f + Outline));
+		// 完整字图居中到目标，避免数字越大就越向右偏离头顶。
+		const float CenterX = (Item.RelativeBounds.Left + Item.RelativeBounds.Right) * .5f;
+		Item.IconOffset.X = -CenterX;
+		Item.TextOffset.X -= CenterX;
+		Item.RelativeBounds = OffsetBounds(Item.RelativeBounds, FVector2f(-CenterX, 0.f));
+		Item.GroupKey = Index;
+		Item.Anchor = Screen - FVector2f(0.f, Ratio * (bCoin ? 52.f : DamageDrift));
+		if (!bCoin)
+		{
+			for (const FPaintFeedback& Existing : Projected)
+			{
+				const FCombatFeedbackEntry& Prior = Entries[Existing.EntryIndex];
+				const bool bSameTarget = Entry.TargetId != INDEX_NONE ? Entry.TargetId == Prior.TargetId
+					: Prior.TargetId == INDEX_NONE && Entry.Location.Equals(Prior.Location, .1f);
+				if (Prior.Icon != ECombatFeedbackIcon::Coin && bSameTarget)
+				{
+					Item.GroupKey = Existing.GroupKey; Item.Anchor = Existing.Anchor; break;
+				}
+			}
+		}
+		Item.Position = Item.Anchor - FVector2f(0.f, Item.RelativeBounds.Bottom + LayoutGap);
 		Projected.Add(MoveTemp(Item));
 	}
 	LastProjected = Projected.Num();
@@ -358,7 +420,7 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 	int32 VisibleDamageCount = 0;
 	for (FPaintFeedback& Item : Projected)
 	{
-		if (!PlaceFeedback(Item, Placed, LastViewport, RowHeight, ColumnWidth)) { ++LastSuppressed; continue; }
+		if (!PlaceFeedback(Item, Placed, LastViewport)) { ++LastSuppressed; continue; }
 		if (Entries[Item.EntryIndex].Icon != ECombatFeedbackIcon::Coin) ++VisibleDamageCount;
 		Placed.Add(MoveTemp(Item));
 	}
@@ -372,13 +434,19 @@ int32 UCombatFeedbackLayer::NativePaint(const FPaintArgs& Args, const FGeometry&
 		const float Alpha = LifetimeOpacity * (bCoin ? 1.f : LastCrowdOpacity);
 		Item.Font.OutlineSettings.OutlineColor = FLinearColor(Ink.R, Ink.G, Ink.B, Alpha);
 		const FVector2f TextOrigin = Item.Position + Item.TextOffset;
-		DrawIcon(Elements, Base + 1, Geometry, Item.Position, Item.Scale, Entry.Icon, Entry.Tint, Alpha);
+		FLinearColor IconTint = Entry.Tint;
+		if (Entry.bPurpleFrenzy)
+		{
+			ECombatFeedbackIcon TypeIcon; DamageStyle(Entry.Kind, TypeIcon, IconTint);
+		}
+		DrawIcon(Elements, Base + 1, Geometry, Item.Position + Item.IconOffset, Item.Scale, Entry.Icon, IconTint, Alpha);
 		const FLinearColor Color = bCoin
 			? FLinearColor(1.f, .87f, .31f, Alpha) : FLinearColor(Entry.Tint.R, Entry.Tint.G, Entry.Tint.B, Alpha);
 		FSlateDrawElement::MakeText(Elements, Base + 5,
 			Geometry.ToPaintGeometry(Item.TextSize, FSlateLayoutTransform(TextOrigin)), Item.Text, Item.Font,
 			ESlateDrawEffect::None, Color);
-		LastPaint.Add({Entry.Amount, Entry.Age, Item.EntryIndex, Item.FontPoints, Item.Attempts, bCoin, Item.Bounds, Alpha});
+		LastPaint.Add({Entry.Amount, Entry.Age, Item.EntryIndex, Item.FontPoints, Item.Attempts, bCoin, Item.Bounds,
+			Alpha, Item.Anchor, Item.GroupKey, Entry.bPurpleFrenzy, Entry.TargetPath, Item.Text});
 	}
 	return Base + 5;
 }
@@ -389,13 +457,15 @@ FString UCombatFeedbackLayer::DebugPaintState() const
 	for (const FCombatFeedbackPaintSnapshot& Item : LastPaint)
 	{
 		if (!Values.IsEmpty()) Values += TEXT(",");
-		Values += FString::Printf(TEXT("{\"entryIndex\":%d,\"amount\":%.9g,\"age\":%.9g,\"coin\":%s,\"fontPoints\":%.9g,\"attempts\":%d,\"alpha\":%.9g,\"bounds\":[%.9g,%.9g,%.9g,%.9g]}"),
-			Item.EntryIndex, Item.Amount, Item.Age, Item.bCoin ? TEXT("true") : TEXT("false"), Item.FontPoints,
-			Item.LayoutAttempts, Item.Alpha, Item.Bounds.Left, Item.Bounds.Top, Item.Bounds.Right, Item.Bounds.Bottom);
+		const FString Target = Item.TargetPath.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("\""), TEXT("\\\""));
+		Values += FString::Printf(TEXT("{\"entryIndex\":%d,\"amount\":%.9g,\"age\":%.9g,\"coin\":%s,\"bPurple\":%s,\"display\":\"%s\",\"target\":\"%s\",\"group\":%d,\"anchor\":[%.9g,%.9g],\"fontPoints\":%.9g,\"attempts\":%d,\"alpha\":%.9g,\"bounds\":[%.9g,%.9g,%.9g,%.9g]}"),
+			Item.EntryIndex, Item.Amount, Item.Age, Item.bCoin ? TEXT("true") : TEXT("false"),
+			Item.bPurpleFrenzy ? TEXT("true") : TEXT("false"), *Item.Display, *Target, Item.GroupKey, Item.Anchor.X, Item.Anchor.Y,
+			Item.FontPoints, Item.LayoutAttempts, Item.Alpha, Item.Bounds.Left, Item.Bounds.Top, Item.Bounds.Right, Item.Bounds.Bottom);
 	}
-	return FString::Printf(TEXT("{\"projected\":%d,\"drawn\":%d,\"suppressed\":%d,\"viewport\":[%.9g,%.9g],\"dpi\":%.9g,\"crowdOpacity\":%.9g,\"attemptLimit\":%d,\"margin\":%.9g,\"gap\":%.9g,\"values\":[%s]}"),
+	return FString::Printf(TEXT("{\"projected\":%d,\"drawn\":%d,\"suppressed\":%d,\"viewport\":[%.9g,%.9g],\"dpi\":%.9g,\"crowdOpacity\":%.9g,\"attemptLimit\":%d,\"margin\":%.9g,\"gap\":%.9g,\"targetStackHeight\":%.9g,\"targetSideLimit\":%.9g,\"values\":[%s]}"),
 		LastProjected, LastPaint.Num(), LastSuppressed, LastViewport.X, LastViewport.Y, LastDpi, LastCrowdOpacity,
-		LayoutAttemptLimit, LayoutMargin, LayoutGap, *Values);
+		LayoutAttemptLimit, LayoutMargin, LayoutGap, TargetStackHeight, TargetSideLimit, *Values);
 }
 
 void UCombatFeedbackSubsystem::ShowGold(UWorld* World, const FVector& Location, int32 Amount)
@@ -412,7 +482,7 @@ void UCombatFeedbackSubsystem::ShowExecute(UWorld* World, const FVector& Locatio
 	ShowDamage(World, {ECombatDamageKind::Execute, Location, MarkCount}, ResolvedDamage, ECombatDamageSource::Unknown);
 }
 
-void UCombatFeedbackSubsystem::ShowDamage(UWorld* World, const FCombatDamageContext& Context, float ResolvedDamage, ECombatDamageSource Source)
+void UCombatFeedbackSubsystem::ShowDamage(UWorld* World, const FCombatDamageContext& Context, float ResolvedDamage, ECombatDamageSource Source, AActor* Victim)
 {
 	if (!World || !FMath::IsFinite(ResolvedDamage) || ResolvedDamage <= 0.f || Context.Location.ContainsNaN()
 		|| static_cast<uint8>(Context.Kind) > static_cast<uint8>(ECombatDamageKind::MobFeedback)
@@ -423,6 +493,15 @@ void UCombatFeedbackSubsystem::ShowDamage(UWorld* World, const FCombatDamageCont
 		Entry.Location = Context.Location; Entry.Amount = ResolvedDamage; Entry.MarkCount = Context.MarkCount;
 		Entry.Kind = Context.Kind; Entry.Source = Source;
 		DamageStyle(Context.Kind, Entry.Icon, Entry.Tint);
+		Entry.bPurpleFrenzy = Context.bPurpleFrenzy;
+		if (Entry.bPurpleFrenzy) Entry.Tint = FrenzyPurple;
+		if (IsValid(Victim))
+		{
+			Entry.Victim = Victim; Entry.TargetId = Victim->GetUniqueID(); Entry.TargetPath = Victim->GetPathName();
+			Entry.Location = DamageAnchor(Victim);
+			const UHealthComponent* Health = Victim->FindComponentByClass<UHealthComponent>();
+			Entry.bAnchorFrozen = Health && Health->IsDead();
+		}
 		State->Push(Entry);
 	}
 }
@@ -450,7 +529,15 @@ void UCombatFeedbackSubsystem::Push(const FCombatFeedbackEntry& Entry)
 void UCombatFeedbackSubsystem::Tick(float DeltaTime)
 {
 	if (bEndingMuted || GetWorld()->IsPaused() || GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation() < .01f) return;
-	for (FCombatFeedbackEntry& Entry : Entries) Entry.Age += DeltaTime;
+	for (FCombatFeedbackEntry& Entry : Entries)
+	{
+		Entry.Age += DeltaTime;
+		if (Entry.TargetId == INDEX_NONE || Entry.bAnchorFrozen) continue;
+		const AActor* Victim = Entry.Victim.Get();
+		const UHealthComponent* Health = Victim ? Victim->FindComponentByClass<UHealthComponent>() : nullptr;
+		if (!Victim || Victim->IsActorBeingDestroyed() || (Health && Health->IsDead())) Entry.bAnchorFrozen = true;
+		else Entry.Location = DamageAnchor(Victim);
+	}
 	Entries.RemoveAll([](const FCombatFeedbackEntry& Entry) { return Entry.Age >= FeedbackLifetime; });
 	if (Layer) Layer->InvalidateLayoutAndVolatility();
 }
@@ -483,10 +570,13 @@ FString UCombatFeedbackSubsystem::DebugFeedbackState() const
 	{
 		if (!Values.IsEmpty()) Values += TEXT(",");
 		const bool bCoin = Entry.Icon == ECombatFeedbackIcon::Coin;
-		Values += FString::Printf(TEXT("{\"amount\":%.9g,\"kind\":%d,\"kindName\":\"%s\",\"source\":%d,\"sourceName\":\"%s\",\"age\":%.9g,\"marks\":%d,\"icon\":%d,\"display\":\"%s\",\"tint\":[%.9g,%.9g,%.9g],\"location\":[%.9g,%.9g,%.9g]}"),
+		const FString Target = Entry.TargetPath.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("\""), TEXT("\\\""));
+		Values += FString::Printf(TEXT("{\"amount\":%.9g,\"kind\":%d,\"kindName\":\"%s\",\"source\":%d,\"sourceName\":\"%s\",\"age\":%.9g,\"marks\":%d,\"icon\":%d,\"display\":\"%s\",\"bPurple\":%s,\"target\":\"%s\",\"targetId\":%d,\"targetAlive\":%s,\"anchorFrozen\":%s,\"tint\":[%.9g,%.9g,%.9g],\"location\":[%.9g,%.9g,%.9g]}"),
 			static_cast<double>(Entry.Amount), bCoin ? -1 : static_cast<int32>(Entry.Kind), bCoin ? TEXT("gold") : KindName(Entry.Kind),
 			static_cast<int32>(Entry.Source), SourceName(Entry.Source), static_cast<double>(Entry.Age), Entry.MarkCount,
-			static_cast<int32>(Entry.Icon), *FormatCombatFeedbackAmount(Entry), Entry.Tint.R, Entry.Tint.G, Entry.Tint.B,
+			static_cast<int32>(Entry.Icon), *FormatCombatFeedbackAmount(Entry), Entry.bPurpleFrenzy ? TEXT("true") : TEXT("false"),
+			*Target, Entry.TargetId, Entry.Victim.IsValid() && !Entry.bAnchorFrozen ? TEXT("true") : TEXT("false"),
+			Entry.bAnchorFrozen ? TEXT("true") : TEXT("false"), Entry.Tint.R, Entry.Tint.G, Entry.Tint.B,
 			Entry.Location.X, Entry.Location.Y, Entry.Location.Z);
 	}
 	const FString Paint = Layer ? Layer->DebugPaintState() : TEXT("null");
@@ -515,5 +605,15 @@ void UCombatFeedbackSubsystem::DebugEmitDamageFeedback(int32 Kind, float Amount,
 	if (const APawn* Player = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
 		ShowDamage(GetWorld(), {static_cast<ECombatDamageKind>(Kind), Player->GetActorLocation() + FVector(0.f, 0.f, 210.f), Marks},
 			Amount, static_cast<ECombatDamageSource>(Source));
+#endif
+}
+
+void UCombatFeedbackSubsystem::DebugEmitDamageForTarget(AActor* Target, int32 Kind, float Amount, bool bPurpleFrenzy)
+{
+#if WITH_EDITOR
+	if (!IsValid(Target) || Kind < 0 || Kind > static_cast<int32>(ECombatDamageKind::MobFeedback)) return;
+	FCombatDamageContext Context{static_cast<ECombatDamageKind>(Kind), Target->GetActorLocation(), 0};
+	Context.bPurpleFrenzy = bPurpleFrenzy;
+	ShowDamage(GetWorld(), Context, Amount, ECombatDamageSource::Unknown, Target);
 #endif
 }

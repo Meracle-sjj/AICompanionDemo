@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 TemporaryPickup.h 的组件契约、Engine 的 StaticMesh/MaterialInstanceDynamic（/Engine 基础几何 + "Color" 参数染色）、DrawDebugString（拾取飘字）、EngineUtils（TActorIterator 效果征集）、Kismet 的 GetPlayerPawn、本模块 XpPickup/CompanionAIController/CompanionCharacter/HealthComponent（三效果征集目标+台词出口）、本模块 Audio/SFXLibrary（Pickup_Rush 事件音效）
- * [OUTPUT]: 磁吸三段式与三效果分派；三系语音统一入FIFO，起播才显示录音同源字幕/历史；效果和短音立即执行；碰撞全关，45s无人拾取自毁
+ * [OUTPUT]: 磁吸三段式与三效果分派；狂暴飘字读取Controller真实剩余/紫炎，语音保持原槽和起播同源记录；碰撞全关，45s无人拾取自毁。
  * [POS]: AI/ 的暂态刺激节拍实现；掉落方 EnemyGrunt 只管生成与随机定型，效果各自直达作用面——生成与效果职责分离（XpPickup 同款哲学）
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -258,15 +258,22 @@ void ATemporaryPickup::ApplyMagnetStorm()
 
 void ATemporaryPickup::ApplyFrenzy()
 {
+	float Remaining = 0.f;
+	bool bPurple = false;
 	for (TActorIterator<ACompanionAIController> It(GetWorld()); It; ++It)
 	{
 		It->ActivateFrenzy(8.f);
+		Remaining = FMath::Max(Remaining, It->GetFrenzyRemaining());
+		bPurple |= It->IsPurpleFrenzyActive();
 	}
 
-	UE_LOG(LogAICompanionDemo, Warning, TEXT("[Rush] 狂怒攻速：队友开火间隔×0.5 持续 8s"));
+	if (Remaining <= 0.f) return;
+	const FString Label = bPurple ? FString::Printf(TEXT("紫炎狂暴 %.0fs！"), Remaining)
+		: FString::Printf(TEXT("狂怒攻速 %.0fs！"), Remaining);
+	UE_LOG(LogAICompanionDemo, Log, TEXT("[Rush] %s 开火间隔×0.5 damageMultiplier=%.1f"), *Label, bPurple ? 2.f : 1.f);
 	if (APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
 	{
-		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 190.f), TEXT("狂怒攻速 8s！"),
+		DrawDebugString(GetWorld(), FVector(0.f, 0.f, 190.f), Label,
 			PlayerPawn, FColor::Purple, 1.5f, false, 1.4f);
 	}
 }

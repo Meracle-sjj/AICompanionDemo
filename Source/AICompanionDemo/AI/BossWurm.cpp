@@ -1,6 +1,6 @@
 /**
  * [INPUT]: BossBase死亡/探地/免伤契约，球形命中与火系共享MID，WurmBodyVisual独立岩甲外观，落点爆实现见BossWurmEffects.cpp
- * [OUTPUT]: 7000共享血量的七节蠕虫，默认体量2.5倍、头半径325cm；Sky→Dive→Burrow总3s（迫近2s+红圈1s、随头钻岩声）→Erupt；原球为命中代理。
+ * [OUTPUT]: 7000共享血量七节蠕虫/真实头半径+12的稳定伤害锚点；Sky→Dive→Burrow总3s→Erupt；原球为命中代理，伤害数字不按被命中节段分散。
  *  猎印继承BossBase；杂兵死亡反馈经真实Health，潜地先累积；岩甲落火及火区所有权在BossWurmHazards.cpp统一维护。
  *  存活/死亡路径均推进碎屑与地面爆闪硬寿命，死亡/EndPlay清理火系与焦痕；入/出土硬引用专用UV炭黑贴花，6s退场/后2s渐淡，最多4件。活体入场/死亡/EndPlay通过Encounter同步限额与远景。
  * [POS]: AI/蠕虫运动、状态与攻击真源；保持已验收数值/碰撞/时序，岩甲资产缺失退回原球；死亡尸节仍由Debris牵引，外观清理及EndPlay由独立视图负责
@@ -124,6 +124,11 @@ void ABossWurm::BeginPlay()
 	InitializeHazardArtwork();
 	EnterState(EWurmState::Burrow);
 	NotifyEncounterPresence();
+}
+
+FVector ABossWurm::GetDamageFeedbackAnchor() const
+{
+	return GetActorLocation() + FVector(0.f, 0.f, HeadRadius + 12.f);
 }
 
 void ABossWurm::Tick(float DeltaSeconds)

@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 预Cook的NS_ColoredFireMid、User.Flame_Material材质与User.Flame_Color颜色参数、独立MI_EnrageFlame、Niagara组件参数/暂停API。
- * [OUTPUT]: 仅在组件参数中绑定紫红材质，每杂兵两份贴身火焰；14分钟只增Z高度1.8倍，不增加组件/粒子数，幂等清理。
- * [POS]: 身体覆盖层独立于寒霜染色和猎印，显示变化不改移动/碰撞/元素契约。
+ * [OUTPUT]: 实例参数绑定紫红材质，每宿主两份贴身火焰；14分钟敌人和队友紫炎共用Z高度1.8倍，生命来源死亡/失效即清理，暂停冻结。
+ * [POS]: 共享身体覆盖层独立于狂暴来源/伤害与寒霜/猎印；显式外部Health仅提供无Health队友的退场边界，不改变原敌人规则。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "EnemyEnrageVisual.h"
@@ -91,8 +91,8 @@ bool UEnemyEnrageVisual::BuildFlames()
 
 void UEnemyEnrageVisual::SetEnraged(bool bInEnraged)
 {
-	const UHealthComponent* Health = GetOwner() ? GetOwner()->FindComponentByClass<UHealthComponent>() : nullptr;
-	bInEnraged = bInEnraged && Health && !Health->IsDead();
+	const UHealthComponent* Health = GetLifeSource();
+	bInEnraged = bInEnraged && Health && !Health->IsDead() && Health->GetCurrentHealth() > 0.f;
 	if (bInEnraged == bEnraged) return;
 	bEnraged = bInEnraged;
 	if (bEnraged) BuildFlames(); else DestroyFlames();
@@ -102,10 +102,23 @@ void UEnemyEnrageVisual::SetEnraged(bool bInEnraged)
 void UEnemyEnrageVisual::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* TickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, TickFunction);
-	const UHealthComponent* Health = GetOwner() ? GetOwner()->FindComponentByClass<UHealthComponent>() : nullptr;
-	if (!Health || Health->IsDead()) { SetEnraged(false); return; }
+	const UHealthComponent* Health = GetLifeSource();
+	if (!Health || Health->IsDead() || Health->GetCurrentHealth() <= 0.f) { SetEnraged(false); return; }
 	const bool bFreeze = GetWorld()->IsPaused() || GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation() < .01f;
 	for (UNiagaraComponent* Flame : Flames) if (IsValid(Flame)) Flame->SetPaused(bFreeze);
+}
+
+void UEnemyEnrageVisual::SetLifeSource(UHealthComponent* Health)
+{
+	bExternalLifeSource = true;
+	LifeSource = Health;
+	if (!Health || Health->IsDead()) SetEnraged(false);
+}
+
+UHealthComponent* UEnemyEnrageVisual::GetLifeSource() const
+{
+	return bExternalLifeSource ? LifeSource.Get()
+		: GetOwner() ? GetOwner()->FindComponentByClass<UHealthComponent>() : nullptr;
 }
 
 void UEnemyEnrageVisual::SetHeightened(bool bInHeightened)

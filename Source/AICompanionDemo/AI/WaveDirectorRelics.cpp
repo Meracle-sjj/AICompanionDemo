@@ -1,8 +1,8 @@
 /**
  * [INPUT]: WaveDirector choice queue, BossRelicComponent persistent effects, shared card presentation.
- * [OUTPUT]: Source/earned-level preserving reward queue; Boss relic choice entry/completion defer to GameMode input arbitration, retaining test F1 preference and balanced look blocking; component-owned HUD facts and editor audit JSON.
+ * [OUTPUT]: 奖励保留来源/等级并经GameMode仲裁输入；遗物HUD复制真实CD/遗物Timer/紫炎状态与说明，不把单独药剂当遗物激活。
  * [POS]: AI/WaveDirector reward lifecycle; uses the existing viewport/texture GC ownership.
- * [PROTOCOL]: Update module/UI AGENTS when the reward contract changes.
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #include "AI/WaveDirector.h"
 #include "AICompanionDemo.h"
@@ -36,6 +36,7 @@ void AWaveDirector::AppendRelicHudCards(FEndlessHudSnapshot& Snapshot) const
 			Card.CooldownRemaining = Relics->GetSpiritFrenzyCooldownRemaining();
 			Card.CooldownTotal = Relics->GetSpiritFrenzyCooldownTotal();
 			Card.ActiveRemaining = Relics->GetSpiritFrenzyActiveRemaining();
+			Card.bPurpleFrenzyActive = Relics->IsSpiritPurpleFrenzyActive();
 		}
 	}
 }
